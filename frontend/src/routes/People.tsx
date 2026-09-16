@@ -15,6 +15,7 @@ import {
   type UserDetail,
 } from "../lib/api";
 import { useNav } from "../lib/nav";
+import { useBans } from "../lib/bans";
 
 /* Users and their devices, in one place.
  *
@@ -49,6 +50,8 @@ export default function PeopleRoute({
   const [onlyNew, setOnlyNew] = useState(false);
   const [onlyDeleted, setOnlyDeleted] = useState(false);
   const [onlyLive, setOnlyLive] = useState(false);
+  const [onlyBanned, setOnlyBanned] = useState(false);
+  const bans = useBans();
 
   // Opened on someone from elsewhere (a History row, a stream card). Applied
   // then cleared, so coming back to People later does not jump to them again.
@@ -93,6 +96,7 @@ export default function PeopleRoute({
       if (onlyDeleted && !u.deleted_in_tautulli) return false;
       if (onlyLive && !liveUsers.has(u.user_id)) return false;
       if (onlyNew && !own.some((d) => d.is_new_unreviewed)) return false;
+      if (onlyBanned && !own.some((d) => bans.ids.has(d.machine_id))) return false;
       if (!q) return true;
       // A search for a device finds its owner too.
       const hay = [u.username, u.friendly_name, u.email, String(u.user_id), ...own.flatMap((d) => [d.player, d.platform, d.machine_id])];
@@ -109,6 +113,7 @@ export default function PeopleRoute({
   const deviceRows = (devices.data ?? [])
     .filter((d) => {
       if (onlyNew && !d.is_new_unreviewed) return false;
+      if (onlyBanned && !bans.ids.has(d.machine_id)) return false;
       if (onlyLive && !liveDevices.has(d.machine_id)) return false;
       if (onlyDeleted && !(users.data ?? []).find((u) => u.user_id === d.user_id)?.deleted_in_tautulli) return false;
       if (!q) return true;
@@ -171,6 +176,9 @@ export default function PeopleRoute({
             <button className={onlyNew ? "chip on" : "chip"} onClick={() => setOnlyNew(!onlyNew)}>
               New devices {newCount || ""}
             </button>
+            <button className={onlyBanned ? "chip on banned" : "chip banned"} onClick={() => setOnlyBanned(!onlyBanned)}>
+              Banned {bans.ids.size || ""}
+            </button>
             <button className={onlyDeleted ? "chip on" : "chip"} onClick={() => setOnlyDeleted(!onlyDeleted)}>
               Deleted in Tautulli {deletedCount || ""}
             </button>
@@ -186,6 +194,7 @@ export default function PeopleRoute({
               const open = expanded.has(u.user_id);
               const isSel = selected?.kind === "user" && selected.id === u.user_id;
               const newOwn = own.filter((d) => d.is_new_unreviewed).length;
+              const bannedOwn = own.filter((d) => bans.ids.has(d.machine_id)).length;
               return (
                 <div key={u.user_id} className="person">
                   <div className={isSel ? "person-row on" : "person-row"}>
@@ -206,6 +215,7 @@ export default function PeopleRoute({
                         {(u.plays ?? 0).toLocaleString()} plays · {ago(u.last_seen)}
                       </span>
                       <span className="person-pills">
+                        {bannedOwn > 0 && <span className="pill banned">{bannedOwn} banned</span>}
                         {newOwn > 0 && <span className="pill warn">{newOwn} new</span>}
                         {u.deleted_in_tautulli && <span className="pill warn">deleted</span>}
                         {u.is_home_user && <span className="pill">home</span>}
@@ -228,6 +238,7 @@ export default function PeopleRoute({
                           <span className="muted small">
                             {d.play_count.toLocaleString()} · {ago(d.last_seen)}
                           </span>
+                          {bans.ids.has(d.machine_id) && <span className="pill banned">banned</span>}
                           {d.is_new_unreviewed && <span className="pill warn">new</span>}
                         </button>
                       );
@@ -253,6 +264,7 @@ export default function PeopleRoute({
                   <span className="muted small">
                     {d.play_count.toLocaleString()} · {ago(d.last_seen)}
                   </span>
+                  {bans.ids.has(d.machine_id) && <span className="pill banned">banned</span>}
                   {d.is_new_unreviewed && <span className="pill warn">new</span>}
                 </button>
               );
@@ -443,6 +455,7 @@ function DeviceProfile({
   onChanged: () => void;
 }) {
   const nav = useNav();
+  const bans = useBans();
   const detail = useApi<DeviceDetail>(`/devices/${encodeURIComponent(machineId)}`);
   const [tab, setTab] = useState<Tab>("overview");
   const [copied, setCopied] = useState(false);
@@ -482,6 +495,11 @@ function DeviceProfile({
           </h1>
           <p className="muted small">{[d.platform, d.product].filter(Boolean).join(" · ")}</p>
           <div className="row person-pills">
+            {bans.ids.has(machineId) && (
+              <span className="pill banned" title={banInfo(bans.list.find((b) => b.machine_id === machineId))}>
+                banned
+              </span>
+            )}
             {d.is_new_unreviewed && <span className="pill warn">new, not reviewed</span>}
             {d.owners.length > 1 && <span className="pill warn">used by {d.owners.length} accounts</span>}
             <button className="idbtn" title="Copy the device id" onClick={copy}>
@@ -506,9 +524,14 @@ function DeviceProfile({
               Mark reviewed
             </button>
           )}
-          {nav.blockDevice && (
+          {nav.blockDevice && !bans.ids.has(machineId) && (
             <button className="btn danger" onClick={() => nav.blockDevice?.(machineId, label)}>
               Ban device
+            </button>
+          )}
+          {nav.unbanDevice && bans.ids.has(machineId) && (
+            <button className="btn" onClick={() => nav.unbanDevice?.(machineId, label)}>
+              Unban device
             </button>
           )}
         </div>
@@ -826,6 +849,14 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function banInfo(b: { banned_by: string | null; banned_at: string | null; reason: string | null; attempts: number } | undefined): string {
+  if (!b) return "Banned";
+  const at = b.banned_at ? new Date(b.banned_at.endsWith("Z") ? b.banned_at : `${b.banned_at}Z`).toLocaleString() : "";
+  return [`Banned ${at}`.trim(), b.banned_by ? `by ${b.banned_by}` : "", b.reason ? `: ${b.reason}` : "", `, ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`]
+    .join("")
+    .trim();
 }
 
 /* "3 hours ago", which scans faster in a list than a full timestamp. */

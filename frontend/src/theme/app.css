@@ -2140,3 +2140,15 @@ label.locked .pill {
   border-color: var(--vpn);
   color: var(--vpn-ink);
 }
+.chip.banned.on {
+  background: var(--banned);
+  border-color: var(--banned);
+  color: var(--banned-ink);
+}
+.ms-count.banned {
+  background: var(--banned);
+  color: var(--banned-ink);
+}
+.rule.system-rule {
+  border-left: 3px solid var(--banned);
+}

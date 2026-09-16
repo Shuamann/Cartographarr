@@ -15,7 +15,9 @@ export type Nav = {
   openUser?: (userId: number) => void;
   openDevice?: (machineId: string) => void;
   showOnMap?: (session: LiveSession) => void;
-  blockDevice?: (machineId: string, label: string) => void;
+  /* Ask, then add to the ban list. Resolves true if it was banned. */
+  blockDevice?: (machineId: string, label: string) => Promise<boolean>;
+  unbanDevice?: (machineId: string, label: string) => Promise<boolean>;
   /* Open Map or History with the filters narrowed, for example to one user. */
   filterTo?: (tab: "Map" | "History", patch: Partial<FilterState>) => void;
 };

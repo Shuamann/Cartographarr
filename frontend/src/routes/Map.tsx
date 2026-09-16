@@ -14,6 +14,8 @@ import { toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
 import StreamDetail from "../components/StreamDetail";
+import { useNav } from "../lib/nav";
+import { useBans } from "../lib/bans";
 import TimeScrubber from "../components/TimeScrubber";
 import type { HistoryPage, LocationDetail } from "../lib/api";
 
@@ -79,6 +81,11 @@ export default function MapRoute({
     const saved = localStorage.getItem("layer.heatMetric");
     return saved === "devices" || saved === "users" ? saved : "plays";
   });
+
+  const [showBanned, setShowBanned] = useState(() => localStorage.getItem("layer.banned") !== "off");
+  const bans = useBans();
+  // Refetched when the ban list changes, so a ban made elsewhere appears.
+  const bannedPoints = useApi<GeoJSON.FeatureCollection>(bans.ids.size ? "/map/banned" : null, [bans.ids.size]);
 
   const live = useApi<Activity>("/activity");
   useEffect(() => {
@@ -191,6 +198,15 @@ export default function MapRoute({
                 ))}
               </div>
             )}
+            <label className="check" title="Where banned devices played from, and where they tried to stream after the ban">
+              <input
+                type="checkbox"
+                checked={showBanned}
+                onChange={(e) => toggleLayer("banned", e.target.checked, setShowBanned)}
+              />
+              Banned
+              {bans.ids.size > 0 && <span className="ms-count banned">{bans.ids.size}</span>}
+            </label>
             <label className="check">
               <input
                 type="checkbox"
@@ -235,6 +251,7 @@ export default function MapRoute({
             onFocusUsed={onFocusUsed}
             showHeat={showHeat}
             heatMetric={heatMetric}
+            banned={showBanned ? bannedPoints.data ?? null : null}
           />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
@@ -330,6 +347,7 @@ function MapCanvas({
   onFocusUsed,
   showHeat,
   heatMetric,
+  banned,
 }: {
   features: MapPoint[];
   onSelect: (feature: MapPoint) => void;
@@ -342,7 +360,11 @@ function MapCanvas({
   onFocusUsed?: () => void;
   showHeat: boolean;
   heatMetric: HeatMetric;
+  banned: GeoJSON.FeatureCollection | null;
 }) {
+  const nav = useNav();
+  const openDeviceRef = useRef(nav.openDevice);
+  openDeviceRef.current = nav.openDevice;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -651,6 +673,57 @@ function MapCanvas({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, focusSession]);
+
+  // ---- banned devices ----------------------------------------------------
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    const data = banned ?? { type: "FeatureCollection" as const, features: [] };
+
+    const existing = m.getSource("banned") as maplibregl.GeoJSONSource | undefined;
+    if (existing) {
+      existing.setData(data);
+      return;
+    }
+    m.addSource("banned", { type: "geojson", data });
+
+    const red = css("--banned", "#f85149");
+    // Where it played from: a ring, since it is history, not an event.
+    m.addLayer({
+      id: "banned-seen",
+      type: "circle",
+      source: "banned",
+      filter: ["==", ["get", "kind"], "seen"],
+      paint: {
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-color": red,
+        "circle-stroke-width": 2,
+        "circle-radius": ["interpolate", ["linear"], ["get", "count"], 1, 7, 100, 12, 1000, 18],
+      },
+    });
+    // Where it tried after the ban: a solid dot, the thing worth noticing.
+    m.addLayer({
+      id: "banned-attempt",
+      type: "circle",
+      source: "banned",
+      filter: ["==", ["get", "kind"], "attempt"],
+      paint: {
+        "circle-color": red,
+        "circle-stroke-color": css("--surface", "#fff"),
+        "circle-stroke-width": 2,
+        "circle-radius": ["interpolate", ["linear"], ["get", "count"], 1, 6, 20, 10, 200, 14],
+      },
+    });
+
+    for (const layer of ["banned-seen", "banned-attempt"]) {
+      m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
+      m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
+      m.on("click", layer, (e) => {
+        const id = e.features?.[0]?.properties?.machine_id;
+        if (id) openDeviceRef.current?.(String(id));
+      });
+    }
+  }, [ready, banned]);
 
   // ---- live streams ------------------------------------------------------
   useEffect(() => {

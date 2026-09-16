@@ -249,6 +249,25 @@ class Rule(Base):
     created_at: Mapped[datetime | None] = mapped_column()
 
 
+class BannedDevice(Base):
+    """A device that may not stream.
+
+    One list rather than a rule per device: the enforcer treats the whole list
+    as a single built-in rule that runs before the others. The label and owner
+    are copied at ban time, so the list still reads sensibly if the device is
+    renamed or its history ages out.
+    """
+
+    __tablename__ = "banned_devices"
+
+    machine_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(255))
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    reason: Mapped[str | None] = mapped_column(Text)
+    banned_by: Mapped[str | None] = mapped_column(String(64))
+    banned_at: Mapped[datetime | None] = mapped_column()
+
+
 class EnforcementLog(Base):
     """What the enforcer did, or would have done in dry run."""
 

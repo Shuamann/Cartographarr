@@ -379,6 +379,171 @@ def combined_log(
     return out[:limit]
 
 
+@router.get("/bans")
+def list_bans(db: Db) -> list[dict]:
+    """Banned devices, with who they belong to, when they were last seen, and
+    how often they have tried to stream since."""
+    from app.models import BannedDevice
+
+    bans = db.execute(select(BannedDevice).order_by(desc(BannedDevice.banned_at))).scalars().all()
+    if not bans:
+        return []
+    ids = [b.machine_id for b in bans]
+    seen = {
+        mid: last
+        for mid, last in db.execute(
+            select(History.machine_id, func.max(History.started)).where(History.machine_id.in_(ids)).group_by(History.machine_id)
+        ).all()
+    }
+    attempts = {
+        mid: (count, last)
+        for mid, count, last in db.execute(
+            select(EnforcementLog.machine_id, func.count(), func.max(EnforcementLog.acted_at))
+            .where(EnforcementLog.machine_id.in_(ids), EnforcementLog.rule_name == enforcer.BAN_RULE_NAME)
+            .group_by(EnforcementLog.machine_id)
+        ).all()
+    }
+    names = {
+        u.user_id: u.friendly_name or u.username
+        for u in db.execute(select(User).where(User.user_id.in_([b.user_id for b in bans if b.user_id]))).scalars()
+    }
+    return [
+        {
+            **{c.name: getattr(b, c.name) for c in BannedDevice.__table__.columns},
+            "user_name": names.get(b.user_id),
+            "last_seen": seen.get(b.machine_id),
+            "attempts": attempts.get(b.machine_id, (0, None))[0],
+            "last_attempt": attempts.get(b.machine_id, (0, None))[1],
+        }
+        for b in bans
+    ]
+
+
+@router.post("/bans")
+def ban_device(
+    admin: AdminUser,
+    machine_id: str = Body(..., embed=True),
+    reason: str = Body("", embed=True),
+) -> dict:
+    from app.models import BannedDevice
+
+    machine_id = machine_id.strip()
+    if not machine_id:
+        raise HTTPException(400, "Which device?")
+    with session_scope() as db:
+        if db.get(BannedDevice, machine_id) is not None:
+            raise HTTPException(409, "That device is already banned")
+        device = db.execute(
+            select(Device).where(Device.machine_id == machine_id).order_by(desc(Device.last_seen)).limit(1)
+        ).scalar_one_or_none()
+        label = (device.player if device else None) or machine_id[:12]
+        db.add(
+            BannedDevice(
+                machine_id=machine_id,
+                label=label,
+                user_id=device.user_id if device else None,
+                reason=reason.strip() or None,
+                banned_by=admin.username,
+                banned_at=datetime.now(UTC),
+            )
+        )
+    audit.record(
+        admin, "device.ban", f"Banned {label}", target=machine_id,
+        detail={"reason": reason.strip() or None},
+    )
+    return {"machine_id": machine_id, "banned": True}
+
+
+@router.delete("/bans/{machine_id}")
+def unban_device(machine_id: str, admin: AdminUser) -> dict:
+    from app.models import BannedDevice
+
+    with session_scope() as db:
+        ban = db.get(BannedDevice, machine_id)
+        if ban is None:
+            raise HTTPException(404, "That device is not banned")
+        label = ban.label or machine_id[:12]
+        db.delete(ban)
+    audit.record(admin, "device.unban", f"Unbanned {label}", target=machine_id)
+    return {"machine_id": machine_id, "banned": False}
+
+
+@router.get("/map/banned")
+def banned_on_map(db: Db) -> dict:
+    """Where banned devices have been seen, and where they were stopped.
+
+    Two kinds of point: places a banned device played from (its history),
+    and places it tried to stream from after the ban, taken from the
+    location recorded when the stream was stopped.
+    """
+    from app.models import BannedDevice
+
+    bans = {b.machine_id: b for b in db.execute(select(BannedDevice)).scalars()}
+    if not bans:
+        return {"type": "FeatureCollection", "features": []}
+
+    features = []
+    for mid, lat, lon, city, plays, last in db.execute(
+        select(
+            History.machine_id,
+            IpLocation.lat,
+            IpLocation.lon,
+            func.max(IpLocation.city),
+            func.count(),
+            func.max(History.started),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(History.machine_id.in_(list(bans)), IpLocation.lat.is_not(None))
+        .group_by(History.machine_id, IpLocation.lat, IpLocation.lon)
+    ).all():
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "kind": "seen",
+                    "machine_id": mid,
+                    "label": bans[mid].label,
+                    "city": city,
+                    "count": plays,
+                    "last": last,
+                },
+            }
+        )
+
+    for mid, lat, lon, city, tries, last in db.execute(
+        select(
+            EnforcementLog.machine_id,
+            EnforcementLog.lat,
+            EnforcementLog.lon,
+            func.max(EnforcementLog.city),
+            func.count(),
+            func.max(EnforcementLog.acted_at),
+        )
+        .where(
+            EnforcementLog.machine_id.in_(list(bans)),
+            EnforcementLog.rule_name == enforcer.BAN_RULE_NAME,
+            EnforcementLog.lat.is_not(None),
+        )
+        .group_by(EnforcementLog.machine_id, EnforcementLog.lat, EnforcementLog.lon)
+    ).all():
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "kind": "attempt",
+                    "machine_id": mid,
+                    "label": bans[mid].label,
+                    "city": city,
+                    "count": tries,
+                    "last": last.isoformat() if last else None,
+                },
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
+
+
 @router.get("/rules/fields")
 def rule_fields(db: Db) -> dict:
     """Everything the rule builder needs to draw its dropdowns."""

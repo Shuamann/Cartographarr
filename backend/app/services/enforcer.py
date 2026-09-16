@@ -20,7 +20,7 @@ from sqlalchemy import select
 
 from app.actions import registry
 from app.db import session_scope
-from app.models import Device, EnforcementLog, IpLocation, Rule, TravelFlag
+from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
 from app.services import conditions
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
@@ -299,6 +299,38 @@ def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
         )
 
 
+BAN_RULE_NAME = "Banned devices"
+
+
+def ban_rule() -> Rule | None:
+    """The ban list as a rule, or None when nothing is banned.
+
+    Never saved. Built fresh each sweep so it can go through exactly the same
+    matching, cooldown, dry run, requirement and logging path as any rule,
+    rather than a second enforcement path that could drift from the first.
+    """
+    with session_scope() as db:
+        ids = [mid for (mid,) in db.execute(select(BannedDevice.machine_id)).all()]
+    if not ids:
+        return None
+    settings = current()
+    return Rule(
+        id=0,
+        name=BAN_RULE_NAME,
+        enabled=True,
+        action="terminate",
+        message=settings.ban_message,
+        conditions=json.dumps(
+            {
+                "type": "group",
+                "op": "and",
+                "items": [{"type": "condition", "field": "device", "op": "any", "value": ids}],
+            }
+        ),
+        actions=json.dumps([{"name": "terminate", "params": {"message": settings.ban_message}}]),
+    )
+
+
 async def run_once() -> dict[str, Any]:
     """Evaluate every enabled rule against current activity."""
     settings = current()
@@ -306,7 +338,13 @@ async def run_once() -> dict[str, Any]:
         return {"checked": 0, "matched": 0, "acted": 0}
 
     with session_scope() as db:
-        rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True))).scalars())
+        rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True)).order_by(Rule.id)).scalars())
+        for rule in rules:
+            db.expunge(rule)
+    # First, so a ban wins over any other rule that would also match.
+    banned = ban_rule()
+    if banned is not None:
+        rules.insert(0, banned)
     if not rules:
         return {"checked": 0, "matched": 0, "acted": 0}
 

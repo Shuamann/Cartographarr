@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
+import { useBans } from "../lib/bans";
 import { useIsAvailable } from "./Gated";
 
 /* Everything about one live stream, and everything you can do to it.
@@ -36,6 +37,8 @@ export default function StreamDetail({
   onMap?: boolean;
 }) {
   const nav = useNav();
+  const bans = useBans();
+  const banned = Boolean(session.machine_id && bans.ids.has(session.machine_id));
   const [stopping, setStopping] = useState(false);
   const [fullSummary, setFullSummary] = useState(false);
 
@@ -129,6 +132,7 @@ export default function StreamDetail({
           </Jump>
         </Spec>
         <Spec label="Player">
+          {banned && <span className="pill banned">banned</span>}
           <Jump
             onClick={session.machine_id && nav.openDevice ? () => nav.openDevice?.(session.machine_id as string) : undefined}
             title="Open this device"
@@ -213,7 +217,7 @@ export default function StreamDetail({
             <button className="btn" onClick={() => setStopping((v) => !v)}>
               {stopping ? "Cancel" : "Stop stream"}
             </button>
-            {nav.blockDevice && session.machine_id && (
+            {nav.blockDevice && session.machine_id && !banned && (
               <button
                 className="btn danger"
                 onClick={() =>
@@ -224,6 +228,19 @@ export default function StreamDetail({
                 }
               >
                 Ban device
+              </button>
+            )}
+            {nav.unbanDevice && session.machine_id && banned && (
+              <button
+                className="btn"
+                onClick={() =>
+                  nav.unbanDevice?.(
+                    session.machine_id as string,
+                    session.player || (session.machine_id as string).slice(0, 8),
+                  )
+                }
+              >
+                Unban device
               </button>
             )}
           </div>

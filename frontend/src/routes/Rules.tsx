@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import MultiSelect from "../components/MultiSelect";
+import { useBans } from "../lib/bans";
+import { useNav } from "../lib/nav";
 import {
   api,
   useApi,
@@ -162,6 +164,8 @@ export default function RulesRoute({
           />
         )}
 
+        <BanListCard />
+
         {rules.data?.length === 0 && !draft && <p className="muted">No rules yet.</p>}
 
         <div className="rule-list">
@@ -206,6 +210,59 @@ export default function RulesRoute({
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* The ban list shown as the rule it is. It always runs first, and it is
+ * managed from People, the map and stream cards rather than edited here. */
+function BanListCard() {
+  const bans = useBans();
+  const nav = useNav();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rule system-rule">
+      <div className="min0">
+        <div className="row">
+          <h2>Banned devices</h2>
+          <span className="pill">built in, runs first</span>
+          <span className={bans.list.length ? "pill banned" : "pill"}>{bans.list.length} banned</span>
+        </div>
+        <p className="small">
+          <span className="muted">When </span>the device is on the ban list
+          <span className="muted"> then </span>stop the stream, with the ban message from Settings.
+        </p>
+        <p className="muted small">Ban or unban a device from People, a stream card, or the map.</p>
+        {open && (
+          <div className="mini-list">
+            {bans.list.length === 0 && <p className="muted">Nothing is banned.</p>}
+            {bans.list.map((b) => (
+              <div key={b.machine_id} className="mini">
+                <div className="min0">
+                  <button className="linkish" onClick={() => nav.openDevice?.(b.machine_id)}>
+                    {b.label ?? b.machine_id}
+                  </button>
+                  <p className="muted small">
+                    {[b.user_name, b.reason, b.banned_by ? `by ${b.banned_by}` : null].filter(Boolean).join(" \u00b7 ")}
+                    {` \u00b7 ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`}
+                  </p>
+                </div>
+                {nav.unbanDevice && (
+                  <button className="tab" onClick={() => nav.unbanDevice?.(b.machine_id, b.label ?? b.machine_id)}>
+                    Unban
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="row">
+        <button className="tab" onClick={() => setOpen(!open)}>
+          {open ? "Hide list" : "Show list"}
+        </button>
       </div>
     </div>
   );

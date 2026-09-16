@@ -869,8 +869,13 @@ def devices(db: Db, user_id: int | None = None, new_only: bool = False) -> list:
         stmt = stmt.where(Device.user_id == user_id)
     if new_only:
         stmt = stmt.where(Device.is_new_unreviewed.is_(True))
-    return [{c.name: getattr(d, c.name) for c in Device.__table__.columns}
-            for d in db.execute(stmt).scalars().all()]
+    from app.models import BannedDevice
+
+    banned = {mid for (mid,) in db.execute(select(BannedDevice.machine_id)).all()}
+    return [
+        {**{c.name: getattr(d, c.name) for c in Device.__table__.columns}, "banned": d.machine_id in banned}
+        for d in db.execute(stmt).scalars().all()
+    ]
 
 
 @router.post("/devices/{machine_id}/review")

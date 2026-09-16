@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     Turning this off is a deliberate act after reading the enforcement log."""
 
     enforce_cooldown_seconds: int = 60
+    ban_message: str = "This device is not permitted to stream. Contact the server owner."
+    """Shown to a banned device when its stream is stopped."""
     """Per rule, per session, to stop a stubborn client from filling the log."""
 
     # ---- Integrations ------------------------------------------------------

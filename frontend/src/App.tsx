@@ -16,9 +16,10 @@ import Rules from "./routes/Rules";
 import Log from "./routes/Log";
 import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
-import type { LiveSession, Rule } from "./lib/api";
+import type { LiveSession } from "./lib/api";
 import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext } from "./lib/nav";
+import { ban, unban } from "./lib/bans";
 
 const TABS = [
   "Dashboard",
@@ -86,7 +87,6 @@ function SignedIn({
   onSignOut: () => void;
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
-  const [prefill, setPrefill] = useState<(Partial<Rule> & { name: string }) | undefined>();
   // Held here rather than inside each route, so the same filters apply
   // wherever you go rather than resetting on every tab change.
   const [filters, setFilters] = useUrlFilters();
@@ -122,13 +122,35 @@ function SignedIn({
     setTab("Map");
   }
 
-  function blockMachine(machineId: string, label: string) {
-    setPrefill({
-      name: `Block ${label}`,
-      match_machine_id: machineId,
-      action: "terminate",
-    });
-    setTab("Rules");
+  // Banning adds the device to one managed list, which the enforcer treats as
+  // a rule of its own. It used to open a new rule per device, which filled the
+  // Rules page with one-device rules.
+  async function banMachine(machineId: string, label: string): Promise<boolean> {
+    const reason = window.prompt(
+      `Ban ${label}?\n\nAny stream from this device will be stopped while rules are on ` +
+        `(and only recorded while dry run is on). You can unban it from People.\n\n` +
+        `Reason, for the log (optional):`,
+      "",
+    );
+    if (reason === null) return false;
+    try {
+      await ban(machineId, reason);
+      return true;
+    } catch (err) {
+      window.alert((err as Error).message);
+      return false;
+    }
+  }
+
+  async function unbanMachine(machineId: string, label: string): Promise<boolean> {
+    if (!window.confirm(`Unban ${label}? It will be able to stream again.`)) return false;
+    try {
+      await unban(machineId);
+      return true;
+    } catch (err) {
+      window.alert((err as Error).message);
+      return false;
+    }
   }
 
   if (setup.loading) return <Splash>Loading…</Splash>;
@@ -153,7 +175,8 @@ function SignedIn({
           openUser,
           openDevice,
           showOnMap,
-          blockDevice: isAdmin ? blockMachine : undefined,
+          blockDevice: isAdmin ? banMachine : undefined,
+          unbanDevice: isAdmin ? unbanMachine : undefined,
           filterTo,
         }}
       >
@@ -199,7 +222,7 @@ function SignedIn({
             {active === "People" && (
               <People initial={focusPerson} onInitialUsed={() => setFocusPerson(null)} />
             )}
-            {active === "Rules" && <Rules prefill={prefill} onPrefillUsed={() => setPrefill(undefined)} />}
+            {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}
