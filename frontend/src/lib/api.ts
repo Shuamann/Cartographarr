@@ -358,6 +358,7 @@ export type PlexUser = {
   is_active: boolean;
   is_home_user: boolean;
   last_seen: number | null;
+  deleted_in_tautulli?: boolean | null;
 };
 
 export type Device = {

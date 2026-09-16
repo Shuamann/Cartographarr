@@ -53,6 +53,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_home_user: Mapped[bool] = mapped_column(Boolean, default=False)
     last_seen: Mapped[int | None] = mapped_column(Integer)
+    # Deleted from Tautulli's user list, which hides them from get_users, while
+    # the Plex account may well still have access and still be streaming.
+    deleted_in_tautulli: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class Device(Base):

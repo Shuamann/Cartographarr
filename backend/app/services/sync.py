@@ -183,12 +183,63 @@ async def sync_users(client: TautulliClient) -> int:
             "is_active": bool(_bool(r.get("is_active")) is not False),
             "is_home_user": bool(_bool(r.get("is_home_user"))),
             "last_seen": _int(r.get("last_seen")),
+            "deleted_in_tautulli": False,
         }
         for r in data.get("data") or []
     ]
     rows = [r for r in rows if r["user_id"] is not None]
     with session_scope() as session:
         _upsert(session, User, rows)
+    return len(rows) + await sync_missing_users(client)
+
+
+async def sync_missing_users(client: TautulliClient) -> int:
+    """Users that history mentions but the user list does not.
+
+    Tautulli leaves a user it has marked deleted out of get_users and
+    get_users_table, yet keeps recording their plays, and the Plex account can
+    still have access and be streaming. Without this they show as a bare
+    number everywhere. get_user still answers for them, so each is looked up
+    by id.
+    """
+    with session_scope() as session:
+        missing = [
+            uid
+            for (uid,) in session.execute(
+                select(History.user_id)
+                .where(History.user_id.is_not(None), ~History.user_id.in_(select(User.user_id)))
+                .distinct()
+            ).all()
+        ]
+    if not missing:
+        return 0
+
+    rows = []
+    for uid in missing:
+        try:
+            r = await client.call("get_user", user_id=uid) or {}
+        except Exception as exc:  # noqa: BLE001 - one unknown user must not stop the sync
+            log.debug("could not look up user %s: %s", uid, exc)
+            continue
+        if not r:
+            continue
+        rows.append(
+            {
+                "user_id": uid,
+                "username": r.get("username") or None,
+                "friendly_name": r.get("friendly_name") or None,
+                "email": r.get("email") or None,
+                "thumb": r.get("user_thumb") or None,
+                "is_active": bool(_bool(r.get("is_active")) is not False),
+                "is_home_user": bool(_bool(r.get("is_home_user"))),
+                "last_seen": None,
+                "deleted_in_tautulli": bool(_bool(r.get("deleted_user"))),
+            }
+        )
+    if rows:
+        with session_scope() as session:
+            _upsert(session, User, rows)
+        log.info("filled in %d user(s) missing from Tautulli's user list", len(rows))
     return len(rows)
 
 
@@ -442,6 +493,9 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
     """One full cycle. Safe to call concurrently with reads."""
     history = await sync_history(client, settings, full=full)
+    # Cheap when nobody is missing, and a new unknown user should get a name
+    # on this sync rather than waiting for the slow one.
+    await sync_missing_users(client)
     metadata = await cache_new_metadata(client, settings)
     devices = refresh_devices()
 

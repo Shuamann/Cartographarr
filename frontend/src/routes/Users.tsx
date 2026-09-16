@@ -16,6 +16,14 @@ export default function UsersRoute({ focusUserId }: { focusUserId?: number | nul
           {u.friendly_name || u.username}
           {u.is_home_user && <span className="pill">home</span>}
           {!u.is_active && <span className="pill warn">inactive</span>}
+          {u.deleted_in_tautulli && (
+            <span
+              className="pill warn"
+              title="Deleted from Tautulli's user list, so Tautulli hides them, but their plays are still recorded and the Plex account may still have access. Check Sharing."
+            >
+              deleted in Tautulli
+            </span>
+          )}
           {u.email && <div className="muted small">{u.email}</div>}
         </>
       ),
