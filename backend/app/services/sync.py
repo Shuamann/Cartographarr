@@ -434,13 +434,36 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # After geocoding, so newly placed addresses are considered straight away.
     flags = travel.find_flags(settings)
 
-    return {
+    result = {
         "history": history,
         "metadata": metadata,
         "devices": devices,
         "ips": ips,
         "travel_flags": flags,
     }
+    await _heartbeat(result)
+    return result
+
+
+async def _heartbeat(result: dict) -> None:
+    """Tell Uptime Kuma the sync ran.
+
+    Monitors the sync rather than the container, because a container that is up
+    but has not synced in six hours looks perfectly healthy to every other kind
+    of check.
+    """
+    url = current_settings().uptime_kuma_push_url
+    if not url:
+        return
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.get(
+                url, params={"status": "up", "msg": f"synced {result['history']} rows"}
+            )
+    except Exception as exc:  # noqa: BLE001 - a missed ping must not fail a sync
+        log.debug("uptime kuma ping failed: %s", exc)
 
 
 async def run_slow_sync(client: TautulliClient) -> dict:

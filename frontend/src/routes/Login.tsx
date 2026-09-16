@@ -1,5 +1,35 @@
-import { useState } from "react";
-import { api, type AuthState } from "../lib/api";
+import { useEffect, useState } from "react";
+import { api, useApi, type AuthState } from "../lib/api";
+
+/* Trending film art, slowly crossfading behind the form.
+ *
+ * Trending rather than this library: the sign-in page is public, so anything
+ * feeding it is too, and serving the server's own artwork would tell a visitor
+ * what is in the library. TMDB's image CDN needs no key and allows direct
+ * loading, so these come straight from it.
+ */
+function Backdrop() {
+  const backdrops = useApi<{ images: string[] }>("/auth/backdrops");
+  const images = backdrops.data?.images ?? [];
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (images.length < 2) return;
+    const timer = setInterval(() => setIndex((i) => (i + 1) % images.length), 9000);
+    return () => clearInterval(timer);
+  }, [images.length]);
+
+  if (images.length === 0) return null;
+
+  return (
+    <div className="backdrop" aria-hidden="true">
+      {images.map((src, i) => (
+        <img key={src} src={src} alt="" className={i === index ? "on" : ""} />
+      ))}
+      <div className="backdrop-veil" />
+    </div>
+  );
+}
 
 /* One screen, two jobs.
  *
@@ -35,7 +65,8 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
   }
 
   return (
-    <div className="setup">
+    <div className="setup login">
+      <Backdrop />
       <form className="setup-card" onSubmit={submit}>
         <header>
           <h1>Cartographarr</h1>

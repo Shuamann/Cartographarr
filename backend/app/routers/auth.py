@@ -83,6 +83,20 @@ def state(request: Request) -> dict:
     }
 
 
+@router.get("/backdrops")
+async def backdrops() -> dict:
+    """Artwork for the sign-in page.
+
+    Public on purpose, because the sign-in page is. It returns only this
+    week's trending films from TMDB, which is global and says nothing about
+    this server. Library artwork must never be served here: it would tell
+    anyone who loads the page what is in the library.
+    """
+    from app.integrations.tmdb import tmdb
+
+    return {"images": await tmdb.trending_backdrops()}
+
+
 @router.post("/claim")
 def claim(
     response: Response,

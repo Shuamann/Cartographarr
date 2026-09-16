@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     sonarr_url: str = ""
     sonarr_api_key: str = ""
 
+    tmdb_api_key: str = ""
+    """Free TMDB key. Used for the sign-in backdrop, and nothing else yet."""
+
+    uptime_kuma_push_url: str = ""
+    """Pinged after every successful sync. Monitors the sync being alive rather
+    than the container being up, which is the thing that actually breaks."""
+
     seerr_url: str = ""
     seerr_api_key: str = ""
     """Seerr, the project Overseerr and Jellyseerr merged into. An older

@@ -36,6 +36,11 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
     keys: ["seerr_url", "seerr_api_key"],
   },
   {
+    title: "Artwork and monitoring",
+    note: "A free TMDB key puts trending film art behind the sign-in page. The Uptime Kuma push URL is pinged after each sync, which monitors the sync being alive rather than just the container.",
+    keys: ["tmdb_api_key", "uptime_kuma_push_url"],
+  },
+  {
     title: "Notifications",
     note: "Optional. One Apprise URL per line or comma separated, which covers Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
     keys: ["apprise_urls", "webhook_url"],
@@ -79,6 +84,8 @@ const LABELS: Record<string, string> = {
   radarr_api_key: "Radarr API key",
   sonarr_url: "Sonarr URL",
   sonarr_api_key: "Sonarr API key",
+  tmdb_api_key: "TMDB API key",
+  uptime_kuma_push_url: "Uptime Kuma push URL",
   seerr_url: "Seerr URL",
   seerr_api_key: "Seerr API key",
   apprise_urls: "Apprise URLs",

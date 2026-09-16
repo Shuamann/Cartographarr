@@ -10,7 +10,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.actions import registry
-from app.integrations import arr, notify, seerr
+from app.integrations import arr, notify, seerr, tmdb
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.models import (
@@ -255,6 +255,7 @@ INTEGRATIONS = {
         arr.radarr,
         arr.sonarr,
         seerr.seerr,
+        tmdb.tmdb,
         notify.apprise_notifier,
         notify.webhook_notifier,
     )
