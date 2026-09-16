@@ -1,21 +1,31 @@
 import { useEffect, useState } from "react";
-import { api, useApi, type AppUser, type IntegrationStatus, type Setting } from "../lib/api";
+import { api, useApi, type AppUser, type Setting } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
 
-type Section = { title: string; note?: string; keys: string[] };
+type Section = {
+  title: string;
+  note?: string;
+  keys: string[];
+  /* Name the backend knows it by, which gives the section a Test button. */
+  test?: string;
+  /* Where it usually listens, so a URL can be guessed from the server the
+   * rest of the stack is already on. */
+  guess?: { key: string; port: number; slug: string; path?: string };
+};
 type Area = { area: string; blurb?: string; sections: Section[] };
 
-/* Grouped into areas rather than one long list, because the page covers four
+/* Grouped into areas rather than one long list, because the page covers
  * unrelated jobs: connecting to things, how it behaves, who gets in, and how
  * it looks. */
 const AREAS: Area[] = [
   {
-    area: "Connections",
-    blurb: "Where Cartographarr gets its data, and what it can link out to.",
+    area: "Plex and Tautulli",
+    blurb: "Required. Where the history, the live streams and the server details come from.",
     sections: [
       {
         title: "Tautulli",
-        note: "Required. Everything except sharing goes through Tautulli.",
+        note: "Everything except sharing goes through Tautulli.",
+        test: "tautulli",
         keys: [
           "tautulli_url",
           "tautulli_local_url",
@@ -27,11 +37,19 @@ const AREAS: Area[] = [
       {
         title: "Plex",
         note: "The server id comes from Tautulli and enables the Plex link. A token is only needed to manage sharing.",
+        test: "plex",
         keys: ["plex_token", "plex_machine_identifier"],
       },
+    ],
+  },
+  {
+    area: "Map locations",
+    blurb: "Turns an IP address into a place. Without it there are no map pins.",
+    sections: [
       {
-        title: "Map locations",
-        note: "A free MaxMind GeoLite2 account. Without it there are no map pins.",
+        title: "MaxMind GeoLite2",
+        note: "A free account. Test downloads the databases, so it takes a few seconds.",
+        test: "maxmind",
         keys: [
           "maxmind_account_id",
           "maxmind_license_key",
@@ -39,25 +57,63 @@ const AREAS: Area[] = [
           "geoip_update_interval_days",
         ],
       },
+    ],
+  },
+  {
+    area: "Media apps",
+    blurb: "Optional. Links a title out to the app that manages it, and shows who asked for it.",
+    sections: [
       {
-        title: "Radarr and Sonarr",
-        note: "Optional. Links a title straight to it. Films go to Radarr, anything episodic to Sonarr.",
-        keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
+        title: "Radarr",
+        note: "Films link straight to their Radarr page.",
+        test: "radarr",
+        guess: { key: "radarr_url", port: 7878, slug: "radarr" },
+        keys: ["radarr_url", "radarr_api_key"],
+      },
+      {
+        title: "Sonarr",
+        note: "Shows and episodes link straight to their Sonarr page.",
+        test: "sonarr",
+        guess: { key: "sonarr_url", port: 8989, slug: "sonarr" },
+        keys: ["sonarr_url", "sonarr_api_key"],
       },
       {
         title: "Seerr",
-        note: "Optional. Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into.",
+        note: "Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into.",
+        test: "seerr",
+        guess: { key: "seerr_url", port: 5055, slug: "seerr" },
         keys: ["seerr_url", "seerr_api_key"],
       },
       {
+        title: "TMDB",
+        note: "Puts trending film art behind the sign-in page.",
+        test: "tmdb",
+        keys: ["tmdb_api_key"],
+      },
+    ],
+  },
+  {
+    area: "Alerts and monitoring",
+    blurb: "Optional. Where rules can send a warning, and what watches the sync.",
+    sections: [
+      {
         title: "Notifications",
-        note: "One Apprise URL per line or comma separated, covering Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
-        keys: ["apprise_urls", "webhook_url"],
+        note: "One Apprise URL per line or comma separated, covering Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Test checks they are understood without sending anything.",
+        test: "apprise",
+        keys: ["apprise_urls"],
       },
       {
-        title: "Artwork and monitoring",
-        note: "A TMDB key puts trending film art behind the sign-in page. The Uptime Kuma URL is pinged after each sync, monitoring the sync rather than just the container.",
-        keys: ["tmdb_api_key", "uptime_kuma_push_url"],
+        title: "Webhook",
+        note: "Receives a JSON post when a rule acts.",
+        test: "webhook",
+        keys: ["webhook_url"],
+      },
+      {
+        title: "Uptime Kuma",
+        note: "A push monitor pinged after each sync, so it watches the sync rather than just the container. Test sends one real ping.",
+        test: "uptime_kuma",
+        guess: { key: "uptime_kuma_push_url", port: 3001, slug: "uptime", path: "/api/push/" },
+        keys: ["uptime_kuma_push_url"],
       },
     ],
   },
@@ -154,6 +210,42 @@ const LABELS: Record<string, string> = {
   session_cookie_secure: "Only send the cookie over HTTPS",
 };
 
+/* Where the rest of the stack probably lives.
+ *
+ * Self-hosted apps nearly always share a box, so whichever URL is already set
+ * says where to look. Two layouts cover almost everyone:
+ *
+ *   http://192.168.1.10:8181      each app on its own port   -> :7878
+ *   https://tautulli.example.com  a proxy, one subdomain each -> radarr.example.com
+ *
+ * An address with a port, an IP, or a bare hostname is the first kind. A
+ * domain name with no port is the second, and its first label is swapped for
+ * the app's name, since the port behind a proxy is not reachable anyway.
+ */
+function isDirect(url: URL): boolean {
+  return (
+    url.port !== "" ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) ||
+    url.hostname.startsWith("[") ||
+    !url.hostname.includes(".")
+  );
+}
+
+function parse(from: string): URL | null {
+  try {
+    return new URL(from);
+  } catch {
+    return null;
+  }
+}
+
+function guessUrl(url: URL, target: { port: number; slug: string; path?: string }): string {
+  const suffix = target.path ?? "";
+  if (isDirect(url)) return `${url.protocol}//${url.hostname}:${target.port}${suffix}`;
+  const [, ...rest] = url.hostname.split(".");
+  return `${url.protocol}//${[target.slug, ...rest].join(".")}${suffix}`;
+}
+
 export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
   if (!isAdmin) {
     return (
@@ -184,6 +276,25 @@ function SettingsForm() {
 
   const byKey = new Map((settings.data ?? []).map((s) => [s.key, s]));
   const dirty = Object.keys(draft).length > 0;
+
+  function valueOf(key: string): string {
+    const v = key in draft ? draft[key] : byKey.get(key)?.value;
+    return typeof v === "string" ? v : "";
+  }
+
+  // A direct address wins over a proxied one when both are set: it is what
+  // the container can most likely reach, and the port guess is the surer one.
+  const candidates = ["tautulli_local_url", "tautulli_url", "radarr_url", "sonarr_url", "seerr_url"]
+    .map((k) => parse(valueOf(k)))
+    .filter((u): u is URL => u !== null && /^https?:$/.test(u.protocol));
+  const base = candidates.find(isDirect) ?? candidates[0] ?? null;
+
+  const guesses = new Map<string, string>();
+  for (const area of AREAS) {
+    for (const section of area.sections) {
+      if (section.guess && base) guesses.set(section.guess.key, guessUrl(base, section.guess));
+    }
+  }
 
   useEffect(() => {
     if (!saved) return;
@@ -252,16 +363,29 @@ function SettingsForm() {
             type={isSecret && revealed !== key ? "password" : "text"}
             onFocus={isSecret ? () => setRevealed(key) : undefined}
             onBlur={isSecret ? () => setRevealed(null) : undefined}
-            placeholder={masked ? "Unchanged" : ""}
+            placeholder={masked ? "Unchanged" : guesses.get(key) ?? ""}
             value={masked && !(key in draft) ? "" : String(Array.isArray(value) ? value.join(", ") : value ?? "")}
             onChange={(e) => {
-              const raw = e.target.value;
-              setDraft({
-                ...draft,
-                [key]: key === "trusted_proxy_ips" ? raw : raw,
-              });
+              const next = { ...draft, [key]: e.target.value };
+              // Typing a key for an app whose address is still blank fills in
+              // the guess, since the key is useless without one.
+              const urlKey = key.replace(/_api_key$/, "_url");
+              if (urlKey !== key && guesses.has(urlKey) && !valueOf(urlKey)) {
+                next[urlKey] = guesses.get(urlKey);
+              }
+              setDraft(next);
             }}
           />
+        )}
+
+        {guesses.has(key) && !valueOf(key) && !locked && (
+          <button
+            type="button"
+            className="linkish small guess"
+            onClick={() => setDraft({ ...draft, [key]: guesses.get(key) })}
+          >
+            Use {guesses.get(key)}
+          </button>
         )}
 
         {locked && (
@@ -297,12 +421,21 @@ function SettingsForm() {
         <Area key={area.area} title={area.area} blurb={area.blurb}>
           {area.sections.map((section) => (
             <section key={section.title} className="card-section">
-              <h3>{section.title}</h3>
+              <div className="row-between">
+                <h3>{section.title}</h3>
+                {section.test && (
+                  <TestButton
+                    name={section.test}
+                    values={Object.fromEntries(
+                      section.keys.filter((k) => k in draft).map((k) => [k, draft[k]]),
+                    )}
+                  />
+                )}
+              </div>
               {section.note && <p className="muted small">{section.note}</p>}
               <div className="grid2">{section.keys.map(field)}</div>
             </section>
           ))}
-          {area.area === "Connections" && <Integrations />}
         </Area>
       ))}
 
@@ -442,49 +575,47 @@ function BrandingImages() {
   );
 }
 
-function Integrations() {
-  const list = useApi<IntegrationStatus[]>("/integrations");
-  const [testing, setTesting] = useState<string | null>(null);
+/* Checks what is typed on the page, not what was last saved, so a new key can
+ * be tried before committing to it. Unchanged fields fall back to the saved
+ * value on the server, which is how a masked key still gets used. */
+function TestButton({ name, values }: { name: string; values: Record<string, unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; detail: string; version?: string | null } | null>(null);
 
-  async function test(name: string) {
-    setTesting(name);
+  // A result describes the values it was run against, so it goes stale the
+  // moment any of them change.
+  const signature = JSON.stringify(values);
+  useEffect(() => setResult(null), [signature]);
+
+  async function run() {
+    setBusy(true);
+    setResult(null);
     try {
-      await api.post(`/integrations/${name}/test`);
+      setResult(await api.post(`/integrations/${name}/test`, { values }));
+    } catch (err) {
+      setResult({ ok: false, detail: (err as Error).message });
     } finally {
-      setTesting(null);
-      list.reload();
+      setBusy(false);
     }
   }
 
   return (
-    <section className="card-section">
-      <h3>Reachability</h3>
-      <div className="mini-list">
-        {list.data?.map((i) => (
-          <div key={i.name} className="mini">
-            <div>
-              <strong>{i.label}</strong>
-              <p className="muted small">
-                {i.detail}
-                {i.version ? ` (${i.version})` : ""}
-              </p>
-            </div>
-            <div className="row">
-              <span className={i.ok ? "pill ok" : i.configured ? "pill warn" : "pill"}>
-                {i.ok ? "connected" : i.configured ? "not reachable" : "not set up"}
-              </span>
-              <button
-                className="tab"
-                disabled={!i.configured || testing === i.name}
-                onClick={() => test(i.name)}
-              >
-                {testing === i.name ? "Testing…" : "Test"}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <div className="row test-result">
+      {result && (
+        <span className={result.ok ? "pill ok" : "pill bad"} title={result.detail}>
+          {result.ok ? "OK" : "Failed"}
+        </span>
+      )}
+      {result && (
+        <span className="muted small clip">
+          {result.detail}
+          {result.version ? ` (${result.version})` : ""}
+        </span>
+      )}
+      <button type="button" className="btn" onClick={run} disabled={busy}>
+        {busy ? "Testing\u2026" : "Test"}
+      </button>
+    </div>
   );
 }
 

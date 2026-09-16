@@ -11,7 +11,9 @@ supplied, which is exactly the set the UI must not touch.
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator
 
 from app.config import Settings
 from app.db import init_db, session_scope
@@ -41,8 +43,33 @@ def load() -> tuple[Settings, frozenset[str]]:
     return Settings(**saved), locked
 
 
+_trial: ContextVar[Settings | None] = ContextVar("settings_trial", default=None)
+
+
+@contextmanager
+def trial(values: dict[str, Any]) -> Iterator[Settings]:
+    """Settings as they would be with these values, for this task only.
+
+    Lets Test check what is typed on the page before it is saved. Scoped to the
+    current task through a ContextVar, so nothing else running at the same
+    time sees the unsaved values, and it carries into asyncio.to_thread.
+    Environment-locked keys are ignored, as they would be on save.
+    """
+    locked = locked_keys()
+    wanted = {k: v for k, v in values.items() if k in Settings.model_fields and k not in locked}
+    merged = Settings(**{**current().model_dump(), **wanted})
+    token = _trial.set(merged)
+    try:
+        yield merged
+    finally:
+        _trial.reset(token)
+
+
 def current() -> Settings:
     global _cache
+    tried = _trial.get()
+    if tried is not None:
+        return tried
     if _cache is None:
         _cache = load()
     return _cache[0]

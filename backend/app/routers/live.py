@@ -10,7 +10,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.actions import registry
-from app.integrations import arr, notify, seerr, tmdb
+from app.integrations import arr, kuma, notify, seerr, tmdb
+from app.integrations.base import Health
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
@@ -25,7 +26,7 @@ from app.models import (
     User,
 )
 from app.services import capabilities, enforcer
-from app.settings_store import current, is_configured
+from app.settings_store import current, is_configured, trial
 from app.tautulli.client import TautulliClient
 
 router = APIRouter(prefix="/api")
@@ -260,7 +261,65 @@ INTEGRATIONS = {
         tmdb.tmdb,
         notify.apprise_notifier,
         notify.webhook_notifier,
+        kuma.uptime_kuma,
     )
+}
+
+
+async def _tautulli_health() -> Health:
+    settings = current()
+    if not (settings.tautulli_url and settings.tautulli_api_key):
+        return Health(False, "Needs a URL and an API key")
+    client = TautulliClient(settings)
+    try:
+        info = await client.call("get_server_info") or {}
+    except Exception as exc:  # noqa: BLE001 - the failure is the answer
+        return Health(False, str(exc))
+    finally:
+        await client.aclose()
+    name = info.get("pms_name")
+    return Health(True, f"Connected to {name}" if name else "Connected", info.get("pms_version"))
+
+
+async def _plex_health() -> Health:
+    import asyncio
+
+    from app.plex import sharing
+
+    if not sharing.configured():
+        return Health(False, "Needs a Plex token")
+    status = await asyncio.to_thread(sharing.status)
+    return Health(bool(status.get("ok")), str(status.get("detail") or ""))
+
+
+async def _maxmind_health() -> Health:
+    import asyncio
+
+    from app.geo.lookup import ensure_databases
+
+    settings = current()
+    if not (settings.maxmind_account_id and settings.maxmind_license_key):
+        return Health(False, "Needs an account ID and a license key")
+    try:
+        await asyncio.to_thread(
+            ensure_databases,
+            settings.geoip_dir,
+            settings.maxmind_account_id,
+            settings.maxmind_license_key,
+            max_age_days=0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return Health(False, str(exc))
+    if not (settings.geoip_dir / "city.mmdb").exists():
+        return Health(False, "Download failed. A new key can take a few minutes to work.")
+    return Health(True, "Databases downloaded")
+
+
+# Not integrations in the optional sense, but they are tested the same way.
+CORE_TESTS = {
+    "tautulli": _tautulli_health,
+    "plex": _plex_health,
+    "maxmind": _maxmind_health,
 }
 
 
@@ -283,11 +342,28 @@ async def list_integrations() -> list[dict]:
 
 
 @router.post("/integrations/{name}/test")
-async def test_integration(name: str, _: AdminUser) -> dict:
-    integration = INTEGRATIONS.get(name)
-    if integration is None:
-        raise HTTPException(404, f"No integration called {name!r}")
-    health = await integration.health()
+async def test_integration(
+    name: str,
+    _: AdminUser,
+    values: dict[str, Any] = Body(default_factory=dict, embed=True),
+) -> dict:
+    """Check a connection, using what is on the page rather than what is saved.
+
+    Anything not sent falls back to the saved value, which is how a masked key
+    that was never retyped still gets used.
+    """
+    check = CORE_TESTS.get(name)
+    if check is None:
+        integration = INTEGRATIONS.get(name)
+        if integration is None:
+            raise HTTPException(404, f"No integration called {name!r}")
+        check = integration.health
+
+    try:
+        with trial(values):
+            health = await check()
+    except ValueError as exc:  # a value on the page that does not parse
+        raise HTTPException(400, str(exc)) from exc
     return {"ok": health.ok, "detail": health.detail, "version": health.version}
 
 

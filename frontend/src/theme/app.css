@@ -1249,6 +1249,29 @@ label.locked .pill {
   background: transparent;
   color: var(--ok);
 }
+.pill.bad {
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+/* ---- settings test buttons and guesses ------------------------------------ */
+
+.card-section > .row-between {
+  gap: 12px;
+}
+.test-result {
+  gap: 8px;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.test-result .clip {
+  max-width: 420px;
+}
+.guess {
+  align-self: flex-start;
+  margin-top: 2px;
+}
 
 .flyout.pinned {
   border-width: 2px;
