@@ -63,3 +63,26 @@ export function activeCount(f: FilterState): number {
     (f.rating_key !== null ? 1 : 0)
   );
 }
+
+/** Rebuild filter state from a query string, ignoring anything unrecognised. */
+export function fromQuery(search: string): FilterState {
+  const p = new URLSearchParams(search);
+  const nums = (key: string) =>
+    p.getAll(key).map(Number).filter((n) => Number.isFinite(n));
+  const bool = (key: string) => (p.has(key) ? p.get(key) === "true" : null);
+
+  return {
+    start: p.get("start") ?? "",
+    end: p.get("end") ?? "",
+    user_id: nums("user_id"),
+    media_type: p.getAll("media_type"),
+    platform: p.getAll("platform"),
+    section_id: nums("section_id"),
+    transcode_decision: p.getAll("transcode_decision"),
+    is_hosting: bool("is_hosting"),
+    search: p.get("search") ?? "",
+    rating_key: p.has("rating_key") ? Number(p.get("rating_key")) : null,
+    // Not in the URL: it is a display label, and the title is refetched anyway.
+    ratingKeyLabel: p.has("rating_key") ? "selected title" : null,
+  };
+}

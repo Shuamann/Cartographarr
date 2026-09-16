@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useApi, useUserNames, type HistoryPage, type HistoryRow } from "../lib/api";
 import FilterBar from "../components/FilterBar";
-import { EMPTY, toQuery, type FilterState } from "../lib/filters";
+import { toQuery, type FilterState } from "../lib/filters";
+import { useUrlFilters } from "../lib/useUrlFilters";
 import { when } from "../components/DataTable";
 
 const SIZE = 100;
@@ -29,7 +30,7 @@ export default function HistoryRoute({
   onOpenUser?: (userId: number) => void;
 }) {
   const names = useUserNames();
-  const [filters, setFilters] = useState<FilterState>(EMPTY);
+  const [filters, setFilters] = useUrlFilters();
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("started");
   const [order, setOrder] = useState<"asc" | "desc">("desc");

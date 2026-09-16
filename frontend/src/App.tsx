@@ -20,7 +20,18 @@ const ADMIN_TABS: Tab[] = ["Rules", "Settings"];
 
 export default function App() {
   const auth = useApi<AuthState>("/auth/state");
-  const [tab, setTab] = useState<Tab>("Dashboard");
+  const [tab, setTab] = useState<Tab>(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    return (TABS as readonly string[]).includes(wanted ?? "") ? (wanted as Tab) : "Dashboard";
+  });
+
+  // Kept in the address bar so a link opens where it was sent from. Filters do
+  // the same from inside whichever route is showing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", tab);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+  }, [tab]);
   const [caps, setCaps] = useState<Capabilities | null>(null);
 
   const user = auth.data?.user ?? null;

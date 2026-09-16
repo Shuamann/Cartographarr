@@ -10,7 +10,8 @@ import {
 } from "../lib/api";
 import { when } from "../components/DataTable";
 import FilterBar from "../components/FilterBar";
-import { EMPTY, toQuery, type FilterState } from "../lib/filters";
+import { toQuery } from "../lib/filters";
+import { useUrlFilters } from "../lib/useUrlFilters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
 import { useIsAvailable } from "../components/Gated";
@@ -42,7 +43,7 @@ export default function MapRoute({
   onOpenUser?: (userId: number) => void;
   onBlockDevice?: (machineId: string, label: string) => void;
 }) {
-  const [filters, setFilters] = useState<FilterState>(EMPTY);
+  const [filters, setFilters] = useUrlFilters();
   const query = useMemo(() => toQuery(filters), [filters]);
 
   const points = useApi<MapPoints>(`/map/points${query}`);
