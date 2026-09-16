@@ -181,3 +181,59 @@ class History(Base):
     location: Mapped[str | None] = mapped_column(String(32))
     secure: Mapped[bool | None] = mapped_column(Boolean)
     relayed: Mapped[bool | None] = mapped_column(Boolean)
+
+
+class Rule(Base):
+    """A governance rule: match live sessions, then run an action.
+
+    Every matcher is nullable and ANDed when set, so one table covers "block
+    this device", "no transcodes", "no remote 4K" and "cap concurrent streams"
+    without a schema per idea. machine_id is the device key because `player`
+    is a user-editable name.
+    """
+
+    __tablename__ = "rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    match_user_id: Mapped[int | None] = mapped_column(Integer)
+    match_machine_id: Mapped[str | None] = mapped_column(String(255))
+    match_player: Mapped[str | None] = mapped_column(String(255))
+    match_platform: Mapped[str | None] = mapped_column(String(255))
+    match_product: Mapped[str | None] = mapped_column(String(255))
+    match_ip_cidr: Mapped[str | None] = mapped_column(String(64))
+    match_transcode_decision: Mapped[str | None] = mapped_column(String(32))
+    match_video_resolution: Mapped[str | None] = mapped_column(String(32))
+    match_location: Mapped[str | None] = mapped_column(String(32))
+    match_is_hosting: Mapped[bool | None] = mapped_column(Boolean)
+    match_concurrent_streams_gt: Mapped[int | None] = mapped_column(Integer)
+    match_paused_minutes_gt: Mapped[int | None] = mapped_column(Integer)
+
+    action: Mapped[str] = mapped_column(String(32), default="terminate")
+    message: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime | None] = mapped_column()
+
+
+class EnforcementLog(Base):
+    """What the enforcer did, or would have done in dry run."""
+
+    __tablename__ = "enforcement_log"
+    __table_args__ = (Index("ix_enforcement_at", "acted_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int | None] = mapped_column(Integer)
+    rule_name: Mapped[str | None] = mapped_column(String(255))
+    action: Mapped[str | None] = mapped_column(String(32))
+    session_key: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    username: Mapped[str | None] = mapped_column(String(255))
+    machine_id: Mapped[str | None] = mapped_column(String(255))
+    player: Mapped[str | None] = mapped_column(String(255))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    full_title: Mapped[str | None] = mapped_column(Text)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
+    result: Mapped[str | None] = mapped_column(Text)
+    acted_at: Mapped[datetime | None] = mapped_column()

@@ -218,6 +218,10 @@ def refresh_devices() -> int:
         known = {
             (m, u) for m, u in session.execute(select(Device.machine_id, Device.user_id)).all()
         }
+        # On a fresh install every device in years of history would flag as
+        # "new", which is noise, not a signal. Only devices that turn up in a
+        # later sync are genuinely new.
+        first_run = not known
         grouped = session.execute(
             select(
                 History.machine_id,
@@ -243,8 +247,12 @@ def refresh_devices() -> int:
                 "first_seen": first_seen,
                 "last_seen": last_seen,
                 "play_count": plays,
-                # Only ever set on first sighting, so reviewing one sticks.
-                **({} if (machine_id, user_id) in known else {"is_new_unreviewed": True}),
+                # Only set on first sighting, so reviewing one sticks.
+                **(
+                    {}
+                    if (machine_id, user_id) in known
+                    else {"is_new_unreviewed": not first_run}
+                ),
             }
             for machine_id, user_id, player, platform, product, first_seen, last_seen, plays
             in grouped

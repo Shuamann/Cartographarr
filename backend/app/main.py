@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
 from app.geo.lookup import ensure_databases
-from app.routers import admin, data
+from app.routers import admin, data, live
+from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
 from app.tautulli.client import TautulliClient
@@ -33,6 +34,20 @@ async def _cycle(full: bool = False) -> None:
         log.exception("sync cycle failed")
     finally:
         await client.aclose()
+
+
+async def _enforce_cycle() -> None:
+    try:
+        await enforcer.run_once()
+    except Exception:
+        log.exception("enforcement sweep failed")
+
+
+async def _capability_cycle() -> None:
+    try:
+        await capabilities.refresh()
+    except Exception:
+        log.exception("capability probe failed")
 
 
 async def _slow_cycle() -> None:
@@ -64,7 +79,15 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         _slow_cycle, "interval", minutes=settings.slow_sync_interval_minutes, id="slow_sync"
     )
+    scheduler.add_job(
+        _enforce_cycle, "interval", seconds=settings.activity_poll_seconds, id="enforce"
+    )
+    scheduler.add_job(_capability_cycle, "interval", minutes=60, id="capabilities")
     scheduler.start()
+
+    # Probe once at boot so the UI knows what to enable before the first hour.
+    if is_configured():
+        await capabilities.refresh()
     app.state.scheduler = scheduler
 
     if is_configured():
@@ -85,6 +108,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Cartographarr", lifespan=lifespan)
 app.include_router(data.router)
 app.include_router(admin.router)
+app.include_router(live.router)
 
 
 @app.get("/health")

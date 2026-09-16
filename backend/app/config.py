@@ -63,6 +63,17 @@ class Settings(BaseSettings):
     slow_sync_interval_minutes: int = 60
     """Users and libraries change rarely; own slower schedule."""
 
+    # ---- Live activity + enforcement --------------------------------------
+    activity_poll_seconds: int = 5
+
+    enforce_enabled: bool = True
+    enforce_dry_run: bool = True
+    """Ships ON. Rules log what they *would* have done without doing it.
+    Turning this off is a deliberate act after reading the enforcement log."""
+
+    enforce_cooldown_seconds: int = 60
+    """Per rule, per session — stops a stubborn client from filling the log."""
+
     # ---- GeoIP -------------------------------------------------------------
     maxmind_account_id: str = ""
     maxmind_license_key: str = ""
