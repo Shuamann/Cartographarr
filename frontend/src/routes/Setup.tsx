@@ -114,6 +114,8 @@ export default function Setup({ status, onDone }: Props) {
               <label>
                 Tautulli URL
                 <input
+                  autoComplete="off"
+                  spellCheck={false}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://tautulli.example.com"
@@ -126,6 +128,7 @@ export default function Setup({ status, onDone }: Props) {
                 API key
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Settings → Web Interface → API"
@@ -177,12 +180,17 @@ export default function Setup({ status, onDone }: Props) {
             <>
               <label>
                 Account ID
-                <input value={accountId} onChange={(e) => setAccountId(e.target.value)} />
+                <input
+                  autoComplete="off"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                />
               </label>
               <label>
                 License key
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={licenseKey}
                   onChange={(e) => setLicenseKey(e.target.value)}
                 />

@@ -17,6 +17,7 @@ export default function DashboardRoute({
   isAdmin,
   onOpenUser,
   onBlockDevice,
+  onShowOnMap,
   filters,
   onFilters,
 }: {
@@ -24,6 +25,7 @@ export default function DashboardRoute({
   isAdmin?: boolean;
   onOpenUser?: (userId: number) => void;
   onBlockDevice?: (machineId: string, label: string) => void;
+  onShowOnMap?: (session: LiveSession) => void;
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
@@ -71,6 +73,7 @@ export default function DashboardRoute({
         onChanged={activity.reload}
         onBlockDevice={onBlockDevice}
         onOpenUser={onOpenUser}
+        onShowOnMap={onShowOnMap}
       />
 
       <section className="cards">
@@ -180,12 +183,14 @@ function NowPlaying({
   onChanged,
   onBlockDevice,
   onOpenUser,
+  onShowOnMap,
 }: {
   sessions: LiveSession[];
   transcoding: number | null;
   onChanged: () => void;
   onBlockDevice?: (machineId: string, label: string) => void;
   onOpenUser?: (userId: number) => void;
+  onShowOnMap?: (session: LiveSession) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -248,6 +253,7 @@ function NowPlaying({
           onChanged={onChanged}
           onBlockDevice={onBlockDevice}
           onOpenUser={onOpenUser}
+          onShowOnMap={onShowOnMap}
         />
       )}
     </section>
@@ -302,12 +308,14 @@ function StreamDetail({
   onChanged,
   onBlockDevice,
   onOpenUser,
+  onShowOnMap,
 }: {
   session: LiveSession;
   onClose: () => void;
   onChanged: () => void;
   onBlockDevice?: (machineId: string, label: string) => void;
   onOpenUser?: (userId: number) => void;
+  onShowOnMap?: (session: LiveSession) => void;
 }) {
   const [stopping, setStopping] = useState(false);
   const who = session.friendly_name || session.username || "Unknown";
@@ -387,9 +395,14 @@ function StreamDetail({
         <button className="btn" onClick={() => setStopping((v) => !v)}>
           {stopping ? "Cancel" : "Stop stream"}
         </button>
+        {onShowOnMap && session.geo?.lat != null && (
+          <button className="btn" onClick={() => onShowOnMap(session)}>
+            Show on map
+          </button>
+        )}
         {onBlockDevice && session.machine_id && (
           <button
-            className="btn"
+            className="btn danger"
             onClick={() =>
               onBlockDevice(
                 session.machine_id as string,

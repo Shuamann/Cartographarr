@@ -16,7 +16,8 @@ import Devices from "./routes/Devices";
 import Rules from "./routes/Rules";
 import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
-import type { Device, Rule } from "./lib/api";
+import type { Device, LiveSession, Rule } from "./lib/api";
+import { EMPTY } from "./lib/filters";
 
 const TABS = [
   "Dashboard",
@@ -86,6 +87,10 @@ function SignedIn({
   // Held here rather than inside each route, so the same filters apply
   // wherever you go rather than resetting on every tab change.
   const [filters, setFilters] = useUrlFilters();
+  // Handed to the map so it can fly to one live stream and open its card.
+  // Cleared once the map has used it, or going back to the tab later would
+  // yank the view somewhere unexpected.
+  const [focusSession, setFocusSession] = useState<LiveSession | null>(null);
   const [focusUser, setFocusUser] = useState<number | null>(null);
 
   function openUser(userId: number) {
@@ -97,6 +102,14 @@ function SignedIn({
   // in, so nobody has to copy a machine_id by hand.
   function blockDevice(device: Device) {
     blockMachine(device.machine_id, device.player || device.machine_id.slice(0, 8));
+  }
+
+  function showOnMap(session: LiveSession) {
+    // Narrowed to whoever is streaming, since a single live session is not
+    // something the history filters can express on their own.
+    setFilters({ ...EMPTY, user_id: session.user_id != null ? [session.user_id] : [] });
+    setFocusSession(session);
+    setTab("Map");
   }
 
   function blockMachine(machineId: string, label: string) {
@@ -147,6 +160,7 @@ function SignedIn({
                 isAdmin={isAdmin}
                 onOpenUser={openUser}
                 onBlockDevice={isAdmin ? blockMachine : undefined}
+                onShowOnMap={showOnMap}
                 filters={filters}
                 onFilters={setFilters}
               />
@@ -156,6 +170,8 @@ function SignedIn({
                 geoipReady={setup.data?.geoip_ready ?? false}
                 onOpenUser={openUser}
                 onBlockDevice={isAdmin ? blockMachine : undefined}
+                focusSession={focusSession}
+                onFocusUsed={() => setFocusSession(null)}
                 filters={filters}
                 onFilters={setFilters}
               />

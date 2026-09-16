@@ -39,12 +39,16 @@ export default function MapRoute({
   geoipReady,
   onOpenUser,
   onBlockDevice,
+  focusSession,
+  onFocusUsed,
   filters,
   onFilters,
 }: {
   geoipReady: boolean;
   onOpenUser?: (userId: number) => void;
   onBlockDevice?: (machineId: string, label: string) => void;
+  focusSession?: LiveSession | null;
+  onFocusUsed?: () => void;
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
@@ -90,6 +94,20 @@ export default function MapRoute({
   const unplaceable = allLive.length - liveSessions.length;
   const [hovered, setHovered] = useState<Hover | null>(null);
   const [pinned, setPinned] = useState(false);
+
+  // Arriving from the dashboard's Show on map button. The list cannot fly
+  // anywhere, so the map has to be the visible half first.
+  useEffect(() => {
+    if (!focusSession) return;
+    if (canDrawMap) choose("map");
+    setShowLive(true);
+    localStorage.setItem("layer.live", "on");
+    // Deliberately not pinning here: the hover handler ignores a new session
+    // while something is already pinned, so pinning first would swallow the
+    // card this was meant to open. MapCanvas pins it once it is placed.
+    setPinned(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSession]);
 
   function toggleLayer(name: string, value: boolean, set: (v: boolean) => void) {
     set(value);
@@ -185,6 +203,8 @@ export default function MapRoute({
               if (!pinned) setHovered(h);
             }}
             onPinLive={() => setPinned(true)}
+            focusSession={focusSession}
+            onFocusUsed={onFocusUsed}
             showHeat={showHeat}
           />
         ) : (
@@ -279,6 +299,8 @@ function MapCanvas({
   liveSessions,
   onHoverLive,
   onPinLive,
+  focusSession,
+  onFocusUsed,
   showHeat,
 }: {
   features: MapPoint[];
@@ -288,6 +310,8 @@ function MapCanvas({
   liveSessions: LiveSession[];
   onHoverLive: (hover: Hover | null) => void;
   onPinLive: () => void;
+  focusSession?: LiveSession | null;
+  onFocusUsed?: () => void;
   showHeat: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -554,6 +578,41 @@ function MapCanvas({
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
   }, [ready, features, onSelect, showHistory, showAccuracy, showHeat]);
+
+  // ---- fly to one stream -------------------------------------------------
+  useEffect(() => {
+    // Not gated on the style having loaded: the camera and the projection both
+    // work before that, and waiting would drop the request if the basemap is
+    // slow or unreachable.
+    const m = map.current;
+    if (!m || !focusSession?.geo?.lat) return;
+
+    const at: [number, number] = [focusSession.geo.lon as number, focusSession.geo.lat as number];
+
+    // The card is placed from the pin's screen position, which is only final
+    // once the camera has stopped.
+    let done = false;
+    const place = () => {
+      if (done) return;
+      done = true;
+      const point = m.project(at);
+      onHoverRef.current({ session: focusSession, x: point.x, y: point.y });
+      onPinRef.current();
+      onFocusUsed?.();
+    };
+
+    // Listener first: a flyTo that has nowhere to go finishes before the call
+    // returns, and the card would never open.
+    m.once("moveend", place);
+    const fallback = setTimeout(place, 1200);
+    m.flyTo({ center: at, zoom: Math.max(m.getZoom(), 7), duration: 900 });
+
+    return () => {
+      clearTimeout(fallback);
+      m.off("moveend", place);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, focusSession]);
 
   // ---- live streams ------------------------------------------------------
   useEffect(() => {
@@ -1078,7 +1137,7 @@ function LiveFlyout({
         </button>
         {onBlockDevice && session.machine_id && (
           <button
-            className="btn"
+            className="btn danger"
             onClick={() =>
               onBlockDevice(session.machine_id as string, session.player || "this device")
             }

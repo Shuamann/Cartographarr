@@ -35,7 +35,7 @@ a {
   color: var(--ink-2);
 }
 .pad {
-  padding: 24px;
+  padding: var(--pad-page);
 }
 
 /* ---- shell ------------------------------------------------------------- */
@@ -499,6 +499,16 @@ input:focus-visible {
 .scroll {
   height: 100%;
   overflow-y: auto;
+}
+/* A sticky table header pins to the scroll container's PADDING edge, not its
+ * top edge, so padding up there leaves a strip that rows slide through on
+ * their way out of view. The space is given back below it instead, where it
+ * cannot get between the header and the top of the page. */
+.pad.scroll {
+  padding-top: 0;
+}
+.pad.scroll > :first-child {
+  margin-top: var(--pad-page);
 }
 .row {
   /* Generic flex utility. Never put this on a <tr>: display:flex destroys
@@ -1078,15 +1088,15 @@ label.locked .pill {
 
 .stream-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 12px;
   margin-top: 8px;
 }
 
 .stream-card {
   display: flex;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1156,8 +1166,8 @@ label.locked .pill {
 }
 
 .stream-poster {
-  width: 48px;
-  height: 72px;
+  width: 76px;
+  height: 114px;
   flex: 0 0 auto;
   border-radius: var(--radius-sm);
   background: var(--surface-3);
@@ -1413,8 +1423,12 @@ label.locked .pill {
 
 /* ---- settings layout --------------------------------------------------- */
 
+/* The width limit sits on an inner column, not the scroll container, so the
+ * page scrolls from the window edge and the column centres in the space. */
 .settings {
   max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .area {

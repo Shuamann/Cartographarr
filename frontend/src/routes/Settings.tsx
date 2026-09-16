@@ -164,8 +164,10 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
     );
   }
   return (
-    <div className="pad scroll settings">
-      <SettingsForm />
+    <div className="pad scroll">
+      <div className="settings">
+        <SettingsForm />
+      </div>
     </div>
   );
 }
@@ -174,6 +176,9 @@ function SettingsForm() {
   const settings = useApi<Setting[]>("/settings");
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
+  // The one secret currently being looked at. Only ever the focused field, so
+  // keys are never left readable on screen.
+  const [revealed, setRevealed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -238,7 +243,15 @@ function SettingsForm() {
         ) : (
           <input
             disabled={locked}
-            type={isSecret && !(key in draft) ? "password" : "text"}
+            name={`cartographarr-${key}`}
+            // Browsers treat a text box next to a password box as a login form
+            // and fill in saved credentials. new-password is the one value they
+            // reliably respect for secrets; off covers the fields around them.
+            autoComplete={isSecret ? "new-password" : "off"}
+            spellCheck={false}
+            type={isSecret && revealed !== key ? "password" : "text"}
+            onFocus={isSecret ? () => setRevealed(key) : undefined}
+            onBlur={isSecret ? () => setRevealed(null) : undefined}
             placeholder={masked ? "Unchanged" : ""}
             value={masked && !(key in draft) ? "" : String(Array.isArray(value) ? value.join(", ") : value ?? "")}
             onChange={(e) => {
