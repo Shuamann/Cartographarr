@@ -42,6 +42,18 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
     localStorage.setItem("view", next);
   }
 
+  const [showHistory, setShowHistory] = useState(
+    () => localStorage.getItem("layer.history") !== "off",
+  );
+  const [showAccuracy, setShowAccuracy] = useState(
+    () => localStorage.getItem("layer.accuracy") !== "off",
+  );
+
+  function toggleLayer(name: string, value: boolean, set: (v: boolean) => void) {
+    set(value);
+    localStorage.setItem(`layer.${name}`, value ? "on" : "off");
+  }
+
   // A place that no longer matches the filters shouldn't keep its panel open.
   useEffect(() => setSelected(null), [query]);
 
@@ -65,6 +77,27 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
             List
           </button>
         </div>
+        {view === "map" && canDrawMap && (
+          <div className="row layer-toggles">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={showHistory}
+                onChange={(e) => toggleLayer("history", e.target.checked, setShowHistory)}
+              />
+              History
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={showAccuracy}
+                onChange={(e) => toggleLayer("accuracy", e.target.checked, setShowAccuracy)}
+              />
+              Accuracy
+            </label>
+          </div>
+        )}
+
         {!canDrawMap && (
           <span className="muted small">
             No WebGL here, so showing the list instead. The map works in a browser with graphics
@@ -75,7 +108,12 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
 
       <div className="view-body">
         {view === "map" ? (
-          <MapCanvas features={features} onSelect={setSelected} />
+          <MapCanvas
+            features={features}
+            onSelect={setSelected}
+            showHistory={showHistory}
+            showAccuracy={showAccuracy}
+          />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
         )}
@@ -109,12 +147,33 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
 
 /* ---- map --------------------------------------------------------------- */
 
+/* A circle on the ground, as a polygon.
+ *
+ * MapLibre's circle-radius is in screen pixels, which would keep a 50 km
+ * uncertainty the same size whether you are looking at a continent or a
+ * street. A real polygon stays true to the ground instead.
+ */
+function groundCircle(lon: number, lat: number, km: number, steps = 64): GeoJSON.Polygon {
+  const latDelta = km / 110.574;
+  const lonDelta = km / (111.32 * Math.cos((lat * Math.PI) / 180) || 1);
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    ring.push([lon + lonDelta * Math.cos(angle), lat + latDelta * Math.sin(angle)]);
+  }
+  return { type: "Polygon", coordinates: [ring] };
+}
+
 function MapCanvas({
   features,
   onSelect,
+  showHistory,
+  showAccuracy,
 }: {
   features: MapPoint[];
   onSelect: (place: Place) => void;
+  showHistory: boolean;
+  showAccuracy: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -180,12 +239,50 @@ function MapCanvas({
     const m = map.current;
     if (!m || !ready) return;
 
-    const data: MapPoints = { type: "FeatureCollection", features };
+    const shown = showHistory ? features : [];
+    const data: MapPoints = { type: "FeatureCollection", features: shown };
+
+    const circles = m.getSource("accuracy") as maplibregl.GeoJSONSource | undefined;
+    if (circles) {
+      circles.setData({
+        type: "FeatureCollection",
+        features:
+          showAccuracy && showHistory
+            ? shown
+                .filter((f) => f.properties.accuracy_km)
+                .map((f) => ({
+                  type: "Feature" as const,
+                  properties: {},
+                  geometry: groundCircle(
+                    f.geometry.coordinates[0],
+                    f.geometry.coordinates[1],
+                    f.properties.accuracy_km as number,
+                  ),
+                }))
+            : [],
+      });
+    }
+
     const existing = m.getSource("plays") as maplibregl.GeoJSONSource | undefined;
     if (existing) {
       existing.setData(data);
       return;
     }
+
+    m.addSource("accuracy", { type: "geojson", data: emptyCollection() });
+    m.addLayer({
+      id: "accuracy-fill",
+      type: "fill",
+      source: "accuracy",
+      paint: {
+        // Opaque on purpose. Translucent circles stack where they overlap and
+        // the darker patches read as "more certain", which is backwards. A
+        // flat tone makes overlapping areas merge into one shape instead.
+        "fill-color": css("--map-accuracy", "#16212c"),
+        "fill-opacity": 1,
+        "fill-outline-color": css("--map-accuracy-edge", "#22303e"),
+      },
+    });
 
     m.addSource("plays", {
       type: "geojson",
@@ -274,7 +371,7 @@ function MapCanvas({
       m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
-  }, [ready, features, onSelect]);
+  }, [ready, features, onSelect, showHistory, showAccuracy]);
 
   return (
     <>
@@ -439,3 +536,7 @@ function Tile({ label, value }: { label: string; value: number }) {
 /* Pin colours come from the same tokens as the basemap. */
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+function emptyCollection(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}

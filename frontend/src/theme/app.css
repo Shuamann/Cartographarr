@@ -954,3 +954,25 @@ label.locked .pill {
 .idbtn code {
   font-size: 12px;
 }
+
+.layer-toggles {
+  margin-left: 14px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.check input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.check:hover {
+  color: var(--ink);
+}
