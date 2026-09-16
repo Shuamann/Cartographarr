@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MultiSelect from "../components/MultiSelect";
 import {
   api,
@@ -78,12 +78,25 @@ function toDraft(rule: Partial<Rule> & { name: string }): Draft {
   };
 }
 
-export default function RulesRoute({ prefill }: { prefill?: Partial<Rule> & { name: string } }) {
+export default function RulesRoute({
+  prefill,
+  onPrefillUsed,
+}: {
+  prefill?: Partial<Rule> & { name: string };
+  onPrefillUsed?: () => void;
+}) {
   const rules = useApi<Rule[]>("/rules");
   const actions = useApi<ActionSpec[]>("/actions");
   const catalogue = useApi<RuleFields>("/rules/fields");
   const settings = useApi<Setting[]>("/settings");
   const [draft, setDraft] = useState<Draft | null>(prefill ? toDraft(prefill) : null);
+
+  // A Ban or Block button hands over a draft to open once. Left in place it
+  // reopened the same draft every time Rules was visited, even after saving.
+  useEffect(() => {
+    if (prefill) onPrefillUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setting = (key: string) => settings.data?.find((s) => s.key === key)?.value;
   const enforcing = setting("enforce_enabled") !== false;

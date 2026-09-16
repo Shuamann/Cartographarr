@@ -96,6 +96,12 @@ export default function MapRoute({
   // anywhere, so the map has to be the visible half first.
   useEffect(() => {
     if (!focusSession) return;
+    // Nothing to fly to without a location, so let it go now rather than
+    // leaving it waiting to fire on some later visit.
+    if (focusSession.geo?.lat == null) {
+      onFocusUsed?.();
+      return;
+    }
     if (canDrawMap) choose("map");
     setShowLive(true);
     localStorage.setItem("layer.live", "on");
@@ -684,9 +690,10 @@ function MapCanvas({
       });
       m.on("mouseleave", layer, () => {
         m.getCanvas().style.cursor = "";
-        // Deliberately left open: the flyout carries buttons, and closing the
-        // instant the pointer leaves the pin would put them out of reach. The
-        // flyout closes itself once the pointer leaves it.
+        // Hovering only previews. The preview closes when the pointer leaves
+        // the pin, so passing over a stream while panning does not leave a
+        // card in the way. Clicking pins it, and a pinned card ignores this.
+        onHoverRef.current(null);
       });
     }
   }, [ready, liveSessions]);
@@ -1041,6 +1048,8 @@ function LiveFlyout({
       }}
       // Once it has been moved it stays put: dragging something away only to
       // have it close when the pointer leaves would be useless.
+      // An unpinned card is a preview: it closes with the pin's hover, and it
+      // lets the pointer through so it never blocks dragging the map.
       onMouseLeave={pinned || moved || dragging ? undefined : onClose}
       onPointerDown={startDrag}
       onPointerMove={moveDrag}

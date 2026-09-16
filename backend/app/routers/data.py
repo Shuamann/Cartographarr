@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from datetime import UTC
+from urllib.parse import quote
 from typing import Annotated, Any
 
 import httpx
@@ -187,11 +188,19 @@ async def history_detail(row_id: int, db: Db) -> dict:
 
 # ---- media -----------------------------------------------------------------
 
-def _deep_links(item: MediaItem, settings) -> dict[str, str]:
+def _deep_links(item: MediaItem, settings, show: MediaItem | None = None) -> dict[str, str]:
     """External links. Only ones we can build with what's cached. A missing
-    id means no button, never a broken one."""
+    id means no button, never a broken one.
+
+    For an episode or season, Plex reports that episode's own TMDB and TVDB
+    ids, and a show page built from those lands on the wrong show or on Not
+    Found. So TMDB and Trakt link to the show, using the show's ids. Plex and
+    IMDb keep the episode itself, since both have real pages for episodes.
+    """
     links: dict[str, str] = {}
-    kind = "tv" if item.media_type in ("show", "season", "episode") else "movie"
+    episodic = item.media_type in ("show", "season", "episode")
+    kind = "tv" if episodic else "movie"
+    title_ids = show if (episodic and show is not None) else item
 
     # Tautulli reports the server id, so the Plex link works without anyone
     # having to find and paste it. An explicit setting still wins.
@@ -205,13 +214,31 @@ def _deep_links(item: MediaItem, settings) -> dict[str, str]:
         )
     if item.imdb_id:
         links["imdb"] = f"https://www.imdb.com/title/{item.imdb_id}/"
-    if item.tmdb_id:
-        links["tmdb"] = f"https://www.themoviedb.org/{kind}/{item.tmdb_id}"
-        links["trakt"] = (
-            f"https://trakt.tv/search/tmdb/{item.tmdb_id}"
-            f"?id_type={'show' if kind == 'tv' else 'movie'}"
-        )
+    # An episode with no cached show gets no TMDB or Trakt button rather than
+    # one that goes somewhere wrong.
+    resolved = not episodic or item.media_type == "show" or show is not None
+    if title_ids.tmdb_id and resolved:
+        links["tmdb"] = f"https://www.themoviedb.org/{kind}/{title_ids.tmdb_id}"
+    # Trakt's new site no longer opens a title from a TMDB or IMDb id (those
+    # routes 404), and its title pages need a slug only its API gives out. Its
+    # search page does work, so the button searches for the title.
+    if title_ids.title and resolved:
+        links["trakt"] = f"https://app.trakt.tv/search?query={quote(title_ids.title)}"
     return links
+
+
+async def _cached(db: Session, rating_key: int | None) -> MediaItem | None:
+    """A media item, fetched from Tautulli first if it is not cached yet."""
+    if rating_key is None:
+        return None
+    item = db.get(MediaItem, rating_key)
+    if item is None and is_configured():
+        from app.services.sync import cache_one
+
+        await cache_one(rating_key)
+        db.expire_all()
+        item = db.get(MediaItem, rating_key)
+    return item if item is not None and item.title is not None else None
 
 
 @router.get("/media/{rating_key}/image")
@@ -320,36 +347,40 @@ def media_search(db: Db, q: str = Query(min_length=1), limit: int = Query(20, le
 
 @router.get("/media/{rating_key}")
 async def media_detail(rating_key: int, db: Db) -> dict:
-    item = db.get(MediaItem, rating_key)
-    if item is None and is_configured():
-        # Something playing right now can be newer than the last sync. Fetch
-        # it once rather than leaving a live stream without its links.
-        from app.services.sync import cache_one
-
-        await cache_one(rating_key)
-        db.expire_all()
-        item = db.get(MediaItem, rating_key)
-    if item is None or item.title is None:
+    # Something playing right now can be newer than the last sync, so a
+    # missing item is fetched once rather than leaving it without links.
+    item = await _cached(db, rating_key)
+    if item is None:
         raise HTTPException(404, "Not cached, or no longer in Plex")
 
-    links = _deep_links(item, current())
+    # The show an episode or season belongs to. Sonarr, Seerr, TMDB and Trakt
+    # all know shows, not episodes, and need the show's ids.
+    show = None
+    if item.media_type == "episode":
+        show = await _cached(db, item.grandparent_rating_key)
+    elif item.media_type == "season":
+        show = await _cached(db, item.parent_rating_key)
+    title_item = show if show is not None else item
+    usable_for_title = item.media_type in ("movie", "show") or show is not None
+
+    links = _deep_links(item, current(), show)
 
     # Radarr and Sonarr link by slug, not by id, so this may need a lookup the
     # first time a title is opened. The result is cached on the item.
     service = arr.for_media_type(item.media_type)
-    if service.configured():
-        link = await service.link_for(item)
+    if service.configured() and usable_for_title:
+        link = await service.link_for(title_item)
         if link:
             links[service.name] = link
 
-    link = seerr.seerr.link_for(item)
+    link = seerr.seerr.link_for(title_item) if usable_for_title else None
     if link:
         links["seerr"] = link
 
     return {
         **{c.name: getattr(item, c.name) for c in MediaItem.__table__.columns},
         "links": links,
-        "request": await seerr.seerr.request_for(item),
+        "request": await seerr.seerr.request_for(title_item) if usable_for_title else None,
     }
 
 

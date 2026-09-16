@@ -197,12 +197,9 @@ function SignedIn({
               <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
             )}
             {active === "People" && (
-              <People
-                initial={focusPerson}
-                key={focusPerson ? `${focusPerson.kind}-${focusPerson.id}` : "people"}
-              />
+              <People initial={focusPerson} onInitialUsed={() => setFocusPerson(null)} />
             )}
-            {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
+            {active === "Rules" && <Rules prefill={prefill} onPrefillUsed={() => setPrefill(undefined)} />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}

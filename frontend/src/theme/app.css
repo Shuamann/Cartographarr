@@ -1225,6 +1225,9 @@ label.locked .pill {
   cursor: grabbing;
   user-select: none;
 }
+.flyout:not(.pinned) {
+  pointer-events: none;
+}
 .flyout.pinned {
   border-width: 2px;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { duration, when } from "../components/DataTable";
 import { StreamEntry } from "../components/EnforcementLog";
 import StreamDetail from "../components/StreamDetail";
@@ -28,7 +28,13 @@ export type Selection = { kind: "user"; id: number } | { kind: "device"; id: str
 type Mode = "users" | "devices";
 type Sort = "last_seen" | "plays" | "name";
 
-export default function PeopleRoute({ initial }: { initial?: Selection | null }) {
+export default function PeopleRoute({
+  initial,
+  onInitialUsed,
+}: {
+  initial?: Selection | null;
+  onInitialUsed?: () => void;
+}) {
   const users = useApi<PlexUser[]>("/users");
   const devices = useApi<Device[]>("/devices");
   const live = useApi<Activity>("/activity");
@@ -43,6 +49,18 @@ export default function PeopleRoute({ initial }: { initial?: Selection | null })
   const [onlyNew, setOnlyNew] = useState(false);
   const [onlyDeleted, setOnlyDeleted] = useState(false);
   const [onlyLive, setOnlyLive] = useState(false);
+
+  // Opened on someone from elsewhere (a History row, a stream card). Applied
+  // then cleared, so coming back to People later does not jump to them again.
+  // Also covers a link followed from inside People itself.
+  useEffect(() => {
+    if (!initial) return;
+    setSelected(initial);
+    setMode(initial.kind === "device" ? "devices" : "users");
+    if (initial.kind === "user") setExpanded((prev) => new Set([...prev, initial.id]));
+    onInitialUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   const liveUsers = useMemo(
     () => new Set((live.data?.sessions ?? []).map((s) => Number(s.user_id))),

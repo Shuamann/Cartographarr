@@ -57,3 +57,31 @@ def test_activity_keeps_its_own_kind(client):
     signal = next(e for e in events if e["kind"] == "signal")
     # The flag's own kind must not overwrite the event kind.
     assert signal["signal_kind"] == "travel"
+
+
+def test_episode_links_point_at_the_show(client):
+    """Plex gives an episode its own TMDB id. A show link built from it opens
+    some other show, or Not Found, so episodes link using the show's ids."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=500, title="The Show", media_type="show", tmdb_id="2316"))
+        db.add(
+            MediaItem(
+                rating_key=501, title="Pilot", media_type="episode", grandparent_rating_key=500,
+                tmdb_id="170315", imdb_id="tt0000001",
+            )
+        )
+        db.add(MediaItem(rating_key=502, title="Orphan Episode", media_type="episode", tmdb_id="999"))
+
+    links = client.get("/api/media/501").json()["links"]
+    assert links["tmdb"].endswith("/tv/2316")
+    assert "The%20Show" in links["trakt"]
+    # IMDb has real episode pages, so that one stays on the episode.
+    assert links["imdb"].endswith("/tt0000001/")
+
+    # No show to link to means no button, never a wrong one.
+    orphan = client.get("/api/media/502").json()["links"]
+    assert "tmdb" not in orphan and "trakt" not in orphan
