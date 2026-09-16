@@ -2413,3 +2413,7 @@ label.locked .pill {
 .play-detail .kv dd .linkish.small {
   margin-left: 6px;
 }
+.access-actions {
+  gap: 8px;
+  margin-top: 12px;
+}

@@ -1055,16 +1055,25 @@ function ActivityList({ query }: { query: string }) {
 
 type Share = { username: string; sections: string[]; home: boolean };
 
+/* Which libraries Plex shares with this person, changeable here, with the
+ * same guard rails as the Sharing tab: libraries are saved and read back
+ * from Plex, and stopping sharing needs the username typed back, since it
+ * cannot be undone from here. */
 function Access({ username }: { username: string | null }) {
   const shares = useApi<{ configured: boolean; users: Share[]; sections: string[] }>("/sharing");
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [confirmName, setConfirmName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   if (shares.error) return <p className="note bad-note">{shares.error}</p>;
   if (!shares.data) return <p className="muted">Asking Plex…</p>;
   if (!shares.data.configured) {
-    return <p className="note warn-note">Add a Plex token in Settings to see which libraries are shared.</p>;
+    return <p className="note warn-note">Add a Plex token in Settings to see and change which libraries are shared.</p>;
   }
-  const share = shares.data.users.find((s) => s.username === username);
-  if (!share) {
+  const share = shares.data.users.find((x) => x.username === username);
+  if (!share || !username) {
     return (
       <p className="note warn-note">
         Plex is not sharing this server with {username ?? "this account"}. They may have been removed, or they
@@ -1072,17 +1081,98 @@ function Access({ username }: { username: string | null }) {
       </p>
     );
   }
+
+  const selected = draft ?? share.sections;
+  const changed = draft !== null && [...draft].sort().join("|") !== [...share.sections].sort().join("|");
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.put(`/sharing/${encodeURIComponent(username as string)}/sections`, { sections: selected });
+      setDraft(null);
+      shares.reload();
+      setMessage("Saved. This is what Plex now reports.");
+    } catch (err) {
+      setMessage((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unshare() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await fetch(`/api/sharing/${encodeURIComponent(username as string)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: confirmName }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail ?? r.statusText);
+      setRemoving(false);
+      shares.reload();
+    } catch (err) {
+      setMessage((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <h3>Shared libraries</h3>
+      <p className="muted small">Click a library to share it or take it away, then save.</p>
       <div className="row wrap chips">
         {shares.data.sections.map((section) => (
-          <span key={section} className={share.sections.includes(section) ? "chip on" : "chip"}>
+          <button
+            key={section}
+            className={selected.includes(section) ? "chip on" : "chip"}
+            disabled={busy}
+            onClick={() =>
+              setDraft(selected.includes(section) ? selected.filter((x) => x !== section) : [...selected, section])
+            }
+          >
             {section}
-          </span>
+          </button>
         ))}
       </div>
-      <p className="muted small">Change libraries or stop sharing on the Sharing tab.</p>
+      {selected.length === 0 && (
+        <p className="muted small">Nothing selected keeps the share with no libraries in it, which is not the same as stopping sharing.</p>
+      )}
+      <div className="row access-actions">
+        <button className="btn primary" onClick={save} disabled={!changed || busy}>
+          {busy && !removing ? "Saving…" : "Save libraries"}
+        </button>
+        {changed && (
+          <button className="btn" onClick={() => setDraft(null)} disabled={busy}>
+            Undo changes
+          </button>
+        )}
+        <button className="btn danger" onClick={() => setRemoving(!removing)} disabled={busy}>
+          {removing ? "Cancel" : "Stop sharing"}
+        </button>
+      </div>
+      {message && <p className="note">{message}</p>}
+
+      {removing && (
+        <div className="editor danger-editor">
+          <h3>Stop sharing with {username}?</h3>
+          <p className="note warn-note">
+            This cannot be undone from here. Getting them back means sending a fresh invitation that they have to
+            accept. Their history stays in Cartographarr either way.
+          </p>
+          <label>
+            Type <strong>{username}</strong> to confirm
+            <input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} autoFocus />
+          </label>
+          <div className="row">
+            <button className="btn danger" onClick={unshare} disabled={busy || confirmName.trim() !== username}>
+              {busy ? "Removing…" : "Stop sharing"}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
