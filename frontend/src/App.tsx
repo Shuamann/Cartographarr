@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
+import { brandingUrl, useBranding } from "./lib/useBranding";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
 import Login from "./routes/Login";
@@ -112,7 +113,7 @@ function SignedIn({
     <CapabilityProvider value={caps}>
       <div className="app">
         <header className="topbar">
-          <div className="brand">Cartographarr</div>
+          <Brand />
           <nav>
             {tabs.map((t) => (
               <button key={t} className={t === active ? "tab active" : "tab"} onClick={() => setTab(t)}>
@@ -153,6 +154,28 @@ function SignedIn({
       </div>
     </CapabilityProvider>
   );
+}
+
+function Brand() {
+  const branding = useBranding();
+  const name = branding.data?.app_name ?? "Cartographarr";
+
+  useEffect(() => {
+    if (!branding.data) return;
+    document.title = name;
+    if (branding.data.images.icon) {
+      // Replaced rather than added, so repeated renders do not stack links.
+      const link =
+        document.querySelector<HTMLLinkElement>("link[rel='icon']") ??
+        document.head.appendChild(Object.assign(document.createElement("link"), { rel: "icon" }));
+      link.href = brandingUrl("icon");
+    }
+  }, [branding.data, name]);
+
+  if (branding.data?.images.logo) {
+    return <img className="brand-mark" src={brandingUrl("logo")} alt={name} />;
+  }
+  return <div className="brand">{name}</div>;
 }
 
 function SignOut({ username, onSignOut }: { username: string; onSignOut: () => void }) {

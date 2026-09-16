@@ -1272,3 +1272,33 @@ label.locked .pill {
   backdrop-filter: blur(14px);
   border-color: color-mix(in srgb, var(--border-strong) 70%, transparent);
 }
+
+/* ---- branding ---------------------------------------------------------- */
+
+.brand-mark {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+.brand-logo {
+  max-width: 260px;
+  max-height: 90px;
+  margin: 0 auto 6px;
+  display: block;
+}
+.brand-preview {
+  width: 56px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+.brand-preview.empty {
+  border: 1px dashed var(--border-strong);
+  background: none;
+}
+.file-button {
+  margin: 0;
+  font-weight: 400;
+  cursor: pointer;
+}

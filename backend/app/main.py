@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
-from app.routers import admin, auth, data, live
+from app.routers import admin, auth, branding, data, live
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
@@ -110,6 +110,10 @@ app = FastAPI(title="Cartographarr", lifespan=lifespan)
 # Auth carries its own guards: /state, /claim and /login have to be reachable
 # before anyone is signed in.
 app.include_router(auth.router)
+
+# Branding is readable without signing in: the sign-in page needs the logo and
+# the browser needs the icon. Writing is guarded inside the router.
+app.include_router(branding.router)
 
 # Reading anything means being signed in. Admin covers configuration and the
 # setup wizard, so the screen that accepts API keys is never open to whoever

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type IntegrationStatus, type Setting } from "../lib/api";
+import { brandingUrl, useBranding } from "../lib/useBranding";
 
 const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
   {
@@ -34,6 +35,11 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
     title: "Seerr",
     note: "Optional. Shows who requested a title and links to it. Seerr is what Overseerr and Jellyseerr merged into; an older Overseerr should work too.",
     keys: ["seerr_url", "seerr_api_key"],
+  },
+  {
+    title: "Branding",
+    note: "The name shown in the top bar, the browser tab and on the sign-in page.",
+    keys: ["app_name"],
   },
   {
     title: "Artwork and monitoring",
@@ -84,6 +90,7 @@ const LABELS: Record<string, string> = {
   radarr_api_key: "Radarr API key",
   sonarr_url: "Sonarr URL",
   sonarr_api_key: "Sonarr API key",
+  app_name: "App name",
   tmdb_api_key: "TMDB API key",
   uptime_kuma_push_url: "Uptime Kuma push URL",
   seerr_url: "Seerr URL",
@@ -106,6 +113,7 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="pad scroll">
       <SettingsForm />
+      <BrandingImages />
       <Integrations />
       <Accounts />
       <ChangePassword />
@@ -231,6 +239,104 @@ function SettingsForm() {
         </section>
       ))}
     </>
+  );
+}
+
+const MARKS: { kind: "login_logo" | "logo" | "icon"; label: string; hint: string }[] = [
+  { kind: "login_logo", label: "Sign-in logo", hint: "Shown large above the sign-in form" },
+  { kind: "logo", label: "Interface logo", hint: "Small, in the top bar. Often a different crop" },
+  { kind: "icon", label: "Icon", hint: "Browser tab and any installed shortcut" },
+];
+
+function BrandingImages() {
+  const branding = useBranding();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Bumped after an upload so the browser refetches rather than showing the
+  // old logo from cache.
+  const [version, setVersion] = useState(0);
+
+  async function upload(kind: string, file: File) {
+    setBusy(kind);
+    setError(null);
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const response = await fetch(`/api/branding/${kind}`, { method: "PUT", body });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.detail ?? response.statusText);
+      }
+      setVersion((v) => v + 1);
+      branding.reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clear(kind: string) {
+    await api.del(`/branding/${kind}`).catch(() => {});
+    setVersion((v) => v + 1);
+    branding.reload();
+  }
+
+  return (
+    <section>
+      <h2 className="section-head">Logos and icon</h2>
+      <p className="muted small">
+        Stored on the server rather than linked, so they keep working without depending on
+        anywhere else. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB.
+      </p>
+      {error && <p className="note bad-note">{error}</p>}
+
+      <div className="mini-list">
+        {MARKS.map((mark) => {
+          const isSet = branding.data?.images[mark.kind];
+          return (
+            <div key={mark.kind} className="mini">
+              <div className="row">
+                {isSet ? (
+                  <img
+                    className="brand-preview"
+                    src={`${brandingUrl(mark.kind)}?v=${version}`}
+                    alt=""
+                  />
+                ) : (
+                  <div className="brand-preview empty" />
+                )}
+                <div>
+                  <strong>{mark.label}</strong>
+                  <p className="muted small">{mark.hint}</p>
+                </div>
+              </div>
+
+              <div className="row">
+                <label className="tab file-button">
+                  {busy === mark.kind ? "Uploading…" : isSet ? "Replace" : "Upload"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) upload(mark.kind, file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {isSet && (
+                  <button className="tab danger-text" onClick={() => clear(mark.kind)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

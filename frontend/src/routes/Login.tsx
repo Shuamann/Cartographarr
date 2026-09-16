@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, useApi, type AuthState } from "../lib/api";
+import { brandingUrl, useBranding } from "../lib/useBranding";
 
 /* Trending film art, slowly crossfading behind the form.
  *
@@ -40,6 +41,9 @@ function Backdrop() {
  */
 export default function Login({ state, onDone }: { state: AuthState; onDone: () => void }) {
   const claiming = state.needs_claim;
+  const branding = useBranding();
+  const name = branding.data?.app_name ?? "Cartographarr";
+  const hasLogo = branding.data?.images.login_logo;
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -69,7 +73,11 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
       <Backdrop />
       <form className="setup-card" onSubmit={submit}>
         <header>
-          <h1>Cartographarr</h1>
+          {hasLogo ? (
+            <img className="brand-logo" src={brandingUrl("login_logo")} alt={name} />
+          ) : (
+            <h1>{name}</h1>
+          )}
           <p className="muted">
             {claiming
               ? "Create the admin account. This is offered once, then the app is locked."
