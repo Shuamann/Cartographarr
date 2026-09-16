@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApi, type Enforcement } from "../lib/api";
 import { StreamEntry, when } from "../components/EnforcementLog";
+import { useNav } from "../lib/nav";
 
 type Change = {
   kind: "change";
@@ -151,7 +152,7 @@ function ChangeEntry({
                 <div>
                   <dt>Target</dt>
                   <dd>
-                    <code className="small">{e.target}</code>
+                    <TargetLink action={e.action} target={e.target} />
                   </dd>
                 </div>
               )}
@@ -166,6 +167,28 @@ function ChangeEntry({
         </div>
       )}
     </article>
+  );
+}
+
+/* What a change was about, as a link to it where there is somewhere to go.
+ * Rules, sharing, settings and branding have no record page, so they open
+ * their tab. */
+function TargetLink({ action, target }: { action: string; target: string }) {
+  const nav = useNav();
+  const area = action.split(".")[0];
+  const text = <code className="small">{target}</code>;
+  let go: (() => void) | undefined;
+  if (area === "device") go = () => nav.openDevice?.(target);
+  else if (area === "user" && /^\d+$/.test(target)) go = () => nav.openUser?.(Number(target));
+  else if (area === "rule") go = () => nav.goTo?.("Rules");
+  else if (area === "sharing") go = () => nav.goTo?.("Sharing");
+  else if (area === "travel") go = () => nav.goTo?.("Dashboard");
+  else if (area === "settings" || area === "branding" || area === "account") go = () => nav.goTo?.("Settings");
+  if (!go) return text;
+  return (
+    <button className="linkish" onClick={go}>
+      {text}
+    </button>
   );
 }
 

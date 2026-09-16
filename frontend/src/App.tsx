@@ -180,6 +180,7 @@ function SignedIn({
           unbanDevice: isAdmin ? unbanMachine : undefined,
           filterTo,
           openPeople,
+          goTo: setTab,
         }}
       >
       <div className="app">

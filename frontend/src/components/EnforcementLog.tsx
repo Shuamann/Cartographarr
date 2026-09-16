@@ -1,5 +1,7 @@
 import { useState } from "react";
-import type { Enforcement } from "../lib/api";
+import { useApi, type Enforcement, type MediaDetail } from "../lib/api";
+import { useNav } from "../lib/nav";
+import BrandIcon from "./BrandIcon";
 
 /* The enforcement log, one expandable record per action.
  *
@@ -83,8 +85,12 @@ function Detail({
   by: string | null;
   onOpenUser?: (userId: number) => void;
 }) {
+  const nav = useNav();
   const where = [e.city, e.region, e.country].filter(Boolean).join(", ");
   const progress = e.progress_percent ?? null;
+  const media = useApi<MediaDetail>(e.rating_key ? `/media/${e.rating_key}` : null, [e.rating_key]);
+  const links = media.data ? LINKS.filter((l) => media.data?.links[l.key]) : [];
+  const openUser = onOpenUser ?? nav.openUser;
 
   return (
     <div className="log-detail">
@@ -98,6 +104,16 @@ function Detail({
       ) : null}
 
       <div className="min0">
+        {links.length > 0 && (
+          <div className="row wrap linkrow">
+            {links.map((l) => (
+              <a key={l.key} className="ms-btn" href={media.data?.links[l.key]} target="_blank" rel="noreferrer">
+                <BrandIcon name={l.key} />
+                {l.label}
+              </a>
+            ))}
+          </div>
+        )}
         <dl className="kv">
           <Field label="Title">
             {e.full_title}
@@ -107,8 +123,8 @@ function Detail({
             {[e.media_type, e.library_name].filter(Boolean).join(" · ") || null}
           </Field>
           <Field label="Who">
-            {e.username && e.user_id && onOpenUser ? (
-              <button className="linkish" onClick={() => onOpenUser(e.user_id as number)}>
+            {e.username && e.user_id && openUser ? (
+              <button className="linkish" onClick={() => openUser(e.user_id as number)}>
                 {e.username}
               </button>
             ) : (
@@ -116,19 +132,41 @@ function Detail({
             )}
           </Field>
           <Field label="Device">
-            {[e.player, e.platform].filter(Boolean).join(" · ") || null}
+            {e.machine_id && nav.openDevice ? (
+              <button className="linkish" onClick={() => nav.openDevice?.(e.machine_id as string)}>
+                {[e.player, e.platform].filter(Boolean).join(" · ") || "Unknown"}
+              </button>
+            ) : (
+              [e.player, e.platform].filter(Boolean).join(" · ") || null
+            )}
           </Field>
           <Field label="App">{e.product}</Field>
           <Field label="Device id">
             {e.machine_id ? <code className="small">{e.machine_id}</code> : null}
           </Field>
           <Field label="Where">
-            {where || null}
+            {where && e.ip_address && nav.filterTo ? (
+              <button
+                className="linkish"
+                title="Show plays from this address on the map"
+                onClick={() => nav.filterTo?.("Map", { ip_address: [e.ip_address as string] })}
+              >
+                {where}
+              </button>
+            ) : (
+              where || null
+            )}
             {e.location && <span className="pill">{e.location}</span>}
             {e.is_hosting && <span className="pill vpn">VPN / hosting</span>}
           </Field>
           <Field label="Address">
-            {e.ip_address}
+            {e.ip_address && nav.openAddress ? (
+              <button className="linkish" onClick={() => nav.openAddress?.(e.ip_address as string)}>
+                <code>{e.ip_address}</code>
+              </button>
+            ) : (
+              e.ip_address
+            )}
             {e.asn_org ? ` · ${e.asn_org}` : ""}
           </Field>
           <Field label="Playback">
@@ -144,7 +182,17 @@ function Detail({
           </Field>
           <Field label="When">{e.acted_at ? when(e.acted_at, true) : null}</Field>
           <Field label="Stopped by">{by}</Field>
-          <Field label="Rule">{e.source === "manual" ? "None, done by hand" : e.rule_name}</Field>
+          <Field label="Rule">
+            {e.source === "manual" ? (
+              "None, done by hand"
+            ) : nav.goTo ? (
+              <button className="linkish" onClick={() => nav.goTo?.("Rules")}>
+                {e.rule_name}
+              </button>
+            ) : (
+              e.rule_name
+            )}
+          </Field>
           <Field label="Action">
             {e.action}
             {e.dry_run ? " (record only, nothing was done)" : ""}
@@ -175,6 +223,16 @@ function Detail({
     </div>
   );
 }
+
+const LINKS: { key: string; label: string }[] = [
+  { key: "plex", label: "Plex" },
+  { key: "imdb", label: "IMDb" },
+  { key: "tmdb", label: "TMDB" },
+  { key: "trakt", label: "Trakt" },
+  { key: "radarr", label: "Radarr" },
+  { key: "sonarr", label: "Sonarr" },
+  { key: "seerr", label: "Seerr" },
+];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const empty =

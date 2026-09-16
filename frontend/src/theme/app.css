@@ -2402,3 +2402,14 @@ label.locked .pill {
   align-items: center;
   gap: 8px;
 }
+
+/* An opened History row. Its own background so it reads as belonging to the
+ * row above it, not as another row. */
+.table.locations tbody .play-detail-row > td {
+  padding: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--accent);
+}
+.play-detail .kv dd .linkish.small {
+  margin-left: 6px;
+}

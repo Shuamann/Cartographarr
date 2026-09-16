@@ -3,6 +3,7 @@ import { useApi, useUserNames, type HistoryPage, type HistoryRow } from "../lib/
 import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
 import { when } from "../components/DataTable";
+import PlayDetail from "../components/PlayDetail";
 
 const SIZE = 100;
 
@@ -36,6 +37,8 @@ export default function HistoryRoute({
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("started");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
+  // One row open at a time, like the Log.
+  const [open, setOpen] = useState<number | null>(null);
 
   const query = useMemo(() => toQuery(filters), [filters]);
   const url = `/history${query}${query ? "&" : "?"}page=${page}&size=${SIZE}&sort=${sort}&order=${order}`;
@@ -100,11 +103,12 @@ export default function HistoryRoute({
               </tr>
             </thead>
             <tbody>
-              {data.data?.items.map((row) => (
+              {data.data?.items.map((row) => [
                 <tr
                   key={row.row_id}
-                  className={onOpenMedia ? "loc-row" : undefined}
-                  onClick={onOpenMedia ? () => onOpenMedia(row) : undefined}
+                  className={open === row.row_id ? "loc-row selected" : "loc-row"}
+                  onClick={() => (onOpenMedia ? onOpenMedia(row) : setOpen(open === row.row_id ? null : row.row_id))}
+                  aria-expanded={open === row.row_id}
                 >
                   <td className="muted">{when(row.started)}</td>
                   <td>{row.full_title}</td>
@@ -133,8 +137,15 @@ export default function HistoryRoute({
                   </td>
                   <td className="num">{row.percent_complete ?? 0}%</td>
                   <td className="muted">{row.ip_address}</td>
-                </tr>
-              ))}
+                </tr>,
+                open === row.row_id && (
+                  <tr key={`${row.row_id}-detail`} className="play-detail-row">
+                    <td colSpan={Object.keys(SORTABLE).length + 1}>
+                      <PlayDetail rowId={row.row_id} />
+                    </td>
+                  </tr>
+                ),
+              ])}
             </tbody>
           </table>
         </div>

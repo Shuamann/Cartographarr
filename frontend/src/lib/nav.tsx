@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { LiveSession } from "./api";
 import type { FilterState } from "./filters";
-import type { PeopleFilter } from "./tabs";
+import type { PeopleFilter, Tab } from "./tabs";
 
 /* Ways to go and look at something, available anywhere.
  *
@@ -24,6 +24,8 @@ export type Nav = {
   filterTo?: (tab: "Map" | "History", patch: Partial<FilterState>) => void;
   /* Open People, optionally with one of its list filters switched on. */
   openPeople?: (filter?: PeopleFilter) => void;
+  /* Switch to a tab, for links to places with no record of their own. */
+  goTo?: (tab: Tab) => void;
 };
 
 export const NavContext = createContext<Nav>({ isAdmin: false });

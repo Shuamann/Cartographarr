@@ -170,6 +170,33 @@ async def history_detail(row_id: int, db: Db) -> dict:
         raise HTTPException(404, "No such history row")
 
     base = {c.name: getattr(row, c.name) for c in History.__table__.columns}
+
+    # Everything the expanded row links to, so the page does not need a
+    # second round of lookups: who, where, which library, whether banned.
+    from app.models import BannedDevice
+
+    user = db.get(User, row.user_id) if row.user_id is not None else None
+    base["user_name"] = (user.friendly_name or user.username) if user else None
+    loc = db.get(IpLocation, row.ip_address) if row.ip_address else None
+    base["place"] = (
+        None
+        if loc is None
+        else {
+            "city": loc.city,
+            "region": loc.region,
+            "country": loc.country,
+            "lat": loc.lat,
+            "lon": loc.lon,
+            "accuracy_km": loc.accuracy_radius,
+            "asn_org": loc.asn_org,
+            "is_hosting": loc.is_hosting,
+            "is_private": loc.is_private,
+        }
+    )
+    library = db.get(Library, row.section_id) if row.section_id is not None else None
+    base["library_name"] = library.name if library else None
+    base["device_banned"] = bool(row.machine_id and db.get(BannedDevice, row.machine_id))
+
     if not is_configured():
         base["stream"] = None
         base["stream_error"] = "Tautulli is not configured"
