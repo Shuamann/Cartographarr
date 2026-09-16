@@ -237,3 +237,38 @@ class EnforcementLog(Base):
     dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
     result: Mapped[str | None] = mapped_column(Text)
     acted_at: Mapped[datetime | None] = mapped_column()
+
+
+class AppUser(Base):
+    """Someone who can log in. Separate from `users`, which are Plex viewers."""
+
+    __tablename__ = "app_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    email: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(16), default="viewer")
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    """Null for accounts created by the reverse proxy, which never have a
+    local password."""
+    auth_source: Mapped[str] = mapped_column(String(16), default="local")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime | None] = mapped_column()
+    last_login: Mapped[datetime | None] = mapped_column()
+
+
+class AppSession(Base):
+    """A login session.
+
+    Opaque random token, stored hashed. Keeping sessions in the database means
+    logging someone out actually ends their access, which a stateless token
+    cannot do without extra machinery.
+    """
+
+    __tablename__ = "app_sessions"
+    __table_args__ = (Index("ix_sessions_user", "app_user_id"),)
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    app_user_id: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime | None] = mapped_column()
+    expires_at: Mapped[datetime | None] = mapped_column()

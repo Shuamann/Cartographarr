@@ -242,3 +242,20 @@ export type Dashboard = {
   recent_enforcement: Enforcement[];
   integrations: Record<string, unknown>;
 };
+
+export type AppUser = {
+  id: number;
+  username: string;
+  email: string | null;
+  role: "admin" | "viewer";
+  auth_source: string;
+  is_active: boolean;
+  last_login: string | null;
+};
+
+export type AuthState = {
+  needs_claim: boolean;
+  authenticated: boolean;
+  user: AppUser | null;
+  proxy_enabled: boolean;
+};

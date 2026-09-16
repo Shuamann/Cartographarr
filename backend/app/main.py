@@ -7,12 +7,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
 from app.geo.lookup import ensure_databases
-from app.routers import admin, data, live
+from app.auth.deps import require_admin, require_user
+from app.routers import admin, auth, data, live
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
@@ -106,9 +107,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Cartographarr", lifespan=lifespan)
-app.include_router(data.router)
-app.include_router(admin.router)
-app.include_router(live.router)
+# Auth carries its own guards: /state, /claim and /login have to be reachable
+# before anyone is signed in.
+app.include_router(auth.router)
+
+# Reading anything means being signed in. Admin covers configuration and the
+# setup wizard, so the screen that accepts API keys is never open to whoever
+# finds the URL first: the admin account is claimed before setup runs.
+app.include_router(data.router, dependencies=[Depends(require_user)])
+app.include_router(live.router, dependencies=[Depends(require_user)])
+app.include_router(admin.router, dependencies=[Depends(require_admin)])
 
 
 @app.get("/health")

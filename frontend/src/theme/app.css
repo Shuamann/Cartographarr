@@ -899,3 +899,37 @@ code {
 .table.locations tbody .loc-row.selected td:first-child {
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
+/* ---- settings ---------------------------------------------------------- */
+
+select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 11px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+select:disabled,
+input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+label.locked {
+  opacity: 0.85;
+}
+label.locked .pill {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.table select {
+  width: auto;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+}

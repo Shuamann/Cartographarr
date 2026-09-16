@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,11 +75,41 @@ class Settings(BaseSettings):
     enforce_cooldown_seconds: int = 60
     """Per rule, per session, to stop a stubborn client from filling the log."""
 
+    # ---- Auth --------------------------------------------------------------
+    session_ttl_hours: int = 720
+    session_cookie_name: str = "cartographarr_session"
+    session_cookie_secure: bool = False
+    """Set true once served over HTTPS. Left false by default because a LAN
+    install on plain http would otherwise never receive the cookie."""
+
+    auth_proxy_enabled: bool = False
+    """Trust an authenticating reverse proxy (Authelia, Authentik, Cloudflare
+    Access). Off until you have one in front, or anyone could send the header."""
+
+    proxy_user_header: str = "X-Forwarded-User"
+    proxy_email_header: str = "X-Forwarded-Email"
+
+    trusted_proxy_ips: list[str] = []
+    """Addresses or CIDRs allowed to send the proxy auth header. Empty means
+    nothing is trusted, so proxy auth stays off however it is configured."""
+
+    proxy_default_role: Literal["admin", "viewer"] = "viewer"
+    """Role given to someone the proxy vouches for who has no account yet."""
+
     # ---- GeoIP -------------------------------------------------------------
     maxmind_account_id: str = ""
     maxmind_license_key: str = ""
     geoip_auto_update: bool = True
     geoip_update_interval_days: int = 7
+
+    @field_validator("trusted_proxy_ips", mode="before")
+    @classmethod
+    def _split_csv(cls, value: object) -> object:
+        # Env vars arrive as a single string; a comma separated list is what
+        # anyone would type into an Unraid template.
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
 
     @property
     def db_path(self) -> Path:

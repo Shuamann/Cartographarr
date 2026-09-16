@@ -1,32 +1,73 @@
 import { useEffect, useState } from "react";
-import { api, useApi, type Capabilities, type SetupStatus } from "./lib/api";
+import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
+import Login from "./routes/Login";
 import Setup from "./routes/Setup";
 import Map from "./routes/Map";
 import Activity from "./routes/Activity";
 import Rules from "./routes/Rules";
+import Settings from "./routes/Settings";
 
 const TABS = ["Dashboard", "Map", "Activity", "Rules", "Settings"] as const;
 type Tab = (typeof TABS)[number];
+const ADMIN_TABS: Tab[] = ["Rules", "Settings"];
 
 export default function App() {
-  const setup = useApi<SetupStatus>("/setup");
+  const auth = useApi<AuthState>("/auth/state");
   const [tab, setTab] = useState<Tab>("Dashboard");
   const [caps, setCaps] = useState<Capabilities | null>(null);
 
-  const configured = setup.data?.configured ?? false;
+  const user = auth.data?.user ?? null;
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
-    if (!configured) return;
+    if (!user) return;
     api.get<Capabilities>("/capabilities").then(setCaps).catch(() => setCaps(null));
-  }, [configured]);
+  }, [user?.id]);
 
-  if (setup.loading) return <Splash>Starting…</Splash>;
-  if (setup.error) return <Splash error>Can't reach the server: {setup.error}</Splash>;
-  if (!setup.data) return <Splash error>No response from the server.</Splash>;
-  if (!setup.data.configured) return <Setup status={setup.data} onDone={setup.reload} />;
+  if (auth.loading) return <Splash>Starting…</Splash>;
+  if (auth.error) return <Splash error>Can't reach the server: {auth.error}</Splash>;
+  if (!auth.data) return <Splash error>No response from the server.</Splash>;
+
+  // Sign in before anything else, so the setup wizard that accepts API keys is
+  // never open to whoever reaches the URL first.
+  if (!auth.data.authenticated) return <Login state={auth.data} onDone={auth.reload} />;
+
+  return <SignedIn isAdmin={isAdmin} tab={tab} setTab={setTab} caps={caps} user={user} onSignOut={auth.reload} />;
+}
+
+function SignedIn({
+  isAdmin,
+  tab,
+  setTab,
+  caps,
+  user,
+  onSignOut,
+}: {
+  isAdmin: boolean;
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  caps: Capabilities | null;
+  user: AuthState["user"];
+  onSignOut: () => void;
+}) {
+  const setup = useApi<SetupStatus>("/setup", [isAdmin]);
+
+  if (setup.loading) return <Splash>Loading…</Splash>;
+
+  // Only an admin can run setup. A viewer arriving at an unconfigured install
+  // gets told who to ask rather than an error.
+  if (setup.data && !setup.data.configured) {
+    if (!isAdmin) {
+      return <Splash>Cartographarr isn't set up yet. An admin needs to finish setup.</Splash>;
+    }
+    return <Setup status={setup.data} onDone={setup.reload} />;
+  }
+
+  const tabs = TABS.filter((t) => isAdmin || !ADMIN_TABS.includes(t));
+  const active = tabs.includes(tab) ? tab : "Dashboard";
 
   return (
     <CapabilityProvider value={caps}>
@@ -34,26 +75,39 @@ export default function App() {
         <header className="topbar">
           <div className="brand">Cartographarr</div>
           <nav>
-            {TABS.map((t) => (
-              <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => setTab(t)}>
+            {tabs.map((t) => (
+              <button key={t} className={t === active ? "tab active" : "tab"} onClick={() => setTab(t)}>
                 {t}
               </button>
             ))}
           </nav>
           <ThemeToggle />
+          <SignOut username={user?.username ?? ""} onSignOut={onSignOut} />
         </header>
 
         <main>
-          <ErrorBoundary name={tab} key={tab}>
-            {tab === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
-            {tab === "Map" && <Map geoipReady={setup.data.geoip_ready} />}
-            {tab === "Activity" && <Activity />}
-            {tab === "Rules" && <Rules />}
-            {tab === "Settings" && <SettingsStub />}
+          <ErrorBoundary name={active} key={active}>
+            {active === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
+            {active === "Map" && <Map geoipReady={setup.data?.geoip_ready ?? false} />}
+            {active === "Activity" && <Activity />}
+            {active === "Rules" && <Rules />}
+            {active === "Settings" && <Settings isAdmin={isAdmin} />}
           </ErrorBoundary>
         </main>
       </div>
     </CapabilityProvider>
+  );
+}
+
+function SignOut({ username, onSignOut }: { username: string; onSignOut: () => void }) {
+  async function go() {
+    await api.post("/auth/logout").catch(() => {});
+    onSignOut();
+  }
+  return (
+    <button className="tab" onClick={go} title={`Signed in as ${username}`}>
+      Sign out
+    </button>
   );
 }
 
@@ -70,10 +124,6 @@ function ThemeToggle() {
       {theme === "dark" ? "Light" : "Dark"}
     </button>
   );
-}
-
-function SettingsStub() {
-  return <div className="pad muted">Settings coming next.</div>;
 }
 
 function Splash({ children, error }: { children: React.ReactNode; error?: boolean }) {

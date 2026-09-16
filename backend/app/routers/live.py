@@ -10,6 +10,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.actions import registry
+from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.models import Device, EnforcementLog, History, IpLocation, MediaItem, Rule, User
 from app.services import capabilities, enforcer
@@ -122,7 +123,9 @@ async def activity(db: Db) -> dict:
 
 
 @router.post("/activity/{session_key}/terminate")
-async def terminate(session_key: str, message: str = Body("", embed=True)) -> dict:
+async def terminate(
+    session_key: str, _: AdminUser, message: str = Body("", embed=True)
+) -> dict:
     """Stop one stream. Refused without Plex Pass, whatever the UI showed."""
     action = registry.get("terminate")
     assert action is not None
@@ -165,7 +168,7 @@ def list_rules(db: Db) -> list[dict]:
 
 
 @router.post("/rules")
-def create_rule(values: dict[str, Any] = Body(...)) -> dict:
+def create_rule(_: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
     payload = _validate_rule(values)
     with session_scope() as db:
         rule = Rule(**payload, created_at=datetime.now(UTC))
@@ -175,7 +178,7 @@ def create_rule(values: dict[str, Any] = Body(...)) -> dict:
 
 
 @router.put("/rules/{rule_id}")
-def update_rule(rule_id: int, values: dict[str, Any] = Body(...)) -> dict:
+def update_rule(rule_id: int, _: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
     payload = _validate_rule(values, partial=True)
     with session_scope() as db:
         rule = db.get(Rule, rule_id)
@@ -188,7 +191,7 @@ def update_rule(rule_id: int, values: dict[str, Any] = Body(...)) -> dict:
 
 
 @router.delete("/rules/{rule_id}")
-def delete_rule(rule_id: int) -> dict:
+def delete_rule(rule_id: int, _: AdminUser) -> dict:
     with session_scope() as db:
         rule = db.get(Rule, rule_id)
         if rule is None:
@@ -229,7 +232,7 @@ def enforcement_log(db: Db, limit: int = 100) -> list[dict]:
 
 
 @router.post("/rules/run")
-async def run_rules_now() -> dict:
+async def run_rules_now(_: AdminUser) -> dict:
     """Evaluate rules immediately instead of waiting for the next sweep."""
     return await enforcer.run_once()
 
