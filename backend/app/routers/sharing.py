@@ -31,6 +31,24 @@ def require_plex() -> None:
         )
 
 
+@router.post("/servers")
+async def list_servers(_: AdminUser, values: dict = Body(default_factory=dict, embed=True)) -> dict:
+    """Servers the Plex token can see, using the token typed on the page if
+    there is one, so the server can be picked before saving."""
+    from app.settings_store import trial
+
+    with trial(values):
+        if not sharing.configured():
+            return {"servers": [], "error": "Add a Plex token first"}
+        try:
+            return {"servers": await sharing.run(sharing.servers), "error": None}
+        except Exception as exc:  # noqa: BLE001 - the failure is the answer
+            text = str(exc)
+            if "401" in text or "Unauthorized" in text:
+                text = "Plex rejected that token"
+            return {"servers": [], "error": text}
+
+
 @router.get("/status")
 async def status(_: AdminUser) -> dict:
     return await sharing.run(sharing.status)

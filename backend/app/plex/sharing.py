@@ -138,6 +138,28 @@ def unshare(username: str) -> dict:
     return {"username": username, "removed": True}
 
 
+def servers() -> list[dict]:
+    """Every Plex Media Server the token can see, for picking the right one.
+
+    Owned servers first, since a shared-with-you server is rarely the one to
+    manage. Reads settings through current(), so an unsaved token can be
+    tried from the Settings page.
+    """
+    account = _account()
+    found = [
+        {
+            "id": r.clientIdentifier,
+            "name": r.name,
+            "owned": bool(r.owned),
+            "version": getattr(r, "productVersion", None),
+            "online": getattr(r, "presence", None),
+        }
+        for r in account.resources()
+        if "server" in (r.provides or "")
+    ]
+    return sorted(found, key=lambda x: (not x["owned"], (x["name"] or "").lower()))
+
+
 def run(fn, *args: Any):
     """Run one of these off the event loop, since plexapi blocks."""
     import asyncio

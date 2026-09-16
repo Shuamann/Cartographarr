@@ -377,7 +377,15 @@ function SettingsForm() {
         {LABELS[key] ?? key}
         {locked && <span className="pill">set by environment</span>}
 
-        {isBool ? (
+        {key === "plex_machine_identifier" ? (
+          <PlexServerSelect
+            value={String(value ?? "")}
+            locked={locked}
+            token={"plex_token" in draft ? String(draft.plex_token ?? "") : null}
+            hasSavedToken={Boolean(byKey.get("plex_token")?.value)}
+            onChange={(v) => setDraft({ ...draft, [key]: v })}
+          />
+        ) : isBool ? (
           <select
             disabled={locked}
             value={String(value)}
@@ -688,6 +696,81 @@ function TestButton({ name, values }: { name: string; values: Record<string, unk
 /* Run both syncs now instead of waiting for the timers: users and libraries,
  * then history, metadata, devices and locations. Handy after restoring a user
  * in Tautulli, or after changing a connection. */
+/* The Plex server, picked from the ones the token can see rather than
+ * pasted. Uses the token typed on the page if there is one, so the server can
+ * be chosen before saving. With nothing picked, the id Tautulli reports is
+ * used, which is right for anyone with a single server. */
+function PlexServerSelect({
+  value,
+  locked,
+  token,
+  hasSavedToken,
+  onChange,
+}: {
+  value: string;
+  locked: boolean;
+  token: string | null;
+  hasSavedToken: boolean;
+  onChange: (value: string) => void;
+}) {
+  type Server = { id: string; name: string; owned: boolean; version: string | null; online: string | null };
+  const [servers, setServers] = useState<Server[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const usable = token !== null ? token.trim().length > 0 : hasSavedToken;
+
+  useEffect(() => {
+    if (!usable) {
+      setServers(null);
+      setError(null);
+      return;
+    }
+    // Waits for typing to stop before asking Plex.
+    const timer = setTimeout(async () => {
+      setBusy(true);
+      try {
+        const r = await api.post<{ servers: Server[]; error: string | null }>("/sharing/servers", {
+          values: token !== null ? { plex_token: token } : {},
+        });
+        setServers(r.servers);
+        setError(r.error);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [token, usable]);
+
+  const known = servers?.some((x) => x.id === value);
+
+  return (
+    <>
+      <select disabled={locked || !usable || busy} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{usable ? "The server Tautulli reports (automatic)" : "Add a Plex token to choose"}</option>
+        {servers?.map((x) => (
+          <option key={x.id} value={x.id}>
+            {x.name}
+            {x.owned ? "" : " (shared with you)"}
+            {x.version ? ` · ${x.version}` : ""}
+          </option>
+        ))}
+        {value && !known && <option value={value}>{value}</option>}
+      </select>
+      <small>
+        {busy
+          ? "Asking Plex…"
+          : error
+            ? error
+            : servers
+              ? `${servers.length} server${servers.length === 1 ? "" : "s"} on this Plex account.`
+              : "Pick which server sharing changes apply to."}
+      </small>
+    </>
+  );
+}
+
 function SyncNow() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
