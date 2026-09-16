@@ -80,6 +80,20 @@ def invalidate() -> None:
     _cache = None
 
 
+REQUIRED = ("tautulli_url", "tautulli_api_key")
+
+
+def missing_required() -> list[str]:
+    """Settings with no value yet. Non-empty means the app is unconfigured and
+    should show first-run setup rather than an empty dashboard."""
+    settings = current()
+    return [name for name in REQUIRED if not getattr(settings, name)]
+
+
+def is_configured() -> bool:
+    return not missing_required()
+
+
 def describe() -> list[dict[str, Any]]:
     """Every setting with its value and where it came from — powers the UI."""
     settings, locked = current(), locked_keys()

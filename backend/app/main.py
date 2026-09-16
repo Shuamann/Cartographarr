@@ -12,13 +12,17 @@ from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.routers import admin, data
 from app.services import sync as sync_service
-from app.settings_store import current
+from app.settings_store import current, is_configured, missing_required
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
 
 
 async def _cycle(full: bool = False) -> None:
+    # A fresh install has no credentials until someone completes setup. Skip
+    # quietly rather than logging a stack trace every five minutes.
+    if not is_configured():
+        return
     settings = current()
     client = TautulliClient(settings)
     try:
@@ -30,6 +34,8 @@ async def _cycle(full: bool = False) -> None:
 
 
 async def _slow_cycle() -> None:
+    if not is_configured():
+        return
     client = TautulliClient(current())
     try:
         await sync_service.run_slow_sync(client)
@@ -58,7 +64,15 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     app.state.scheduler = scheduler
-    log.info("%s ready", settings.app_name)
+
+    if is_configured():
+        log.info("%s ready", settings.app_name)
+    else:
+        log.info(
+            "%s started unconfigured (missing: %s) — open the UI to run setup",
+            settings.app_name,
+            ", ".join(missing_required()),
+        )
 
     try:
         yield

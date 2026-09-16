@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
-from app.settings_store import current
+from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 
 router = APIRouter(prefix="/api")
@@ -151,6 +151,11 @@ async def history_detail(row_id: int, db: Db) -> dict:
         raise HTTPException(404, "No such history row")
 
     base = {c.name: getattr(row, c.name) for c in History.__table__.columns}
+    if not is_configured():
+        base["stream"] = None
+        base["stream_error"] = "Tautulli is not configured"
+        return base
+
     client = TautulliClient(current())
     try:
         base["stream"] = await client.call("get_stream_data", row_id=row_id)
