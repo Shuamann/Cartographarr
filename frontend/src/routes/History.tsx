@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useApi, type HistoryPage, type HistoryRow } from "../lib/api";
+import { useApi, useUserNames, type HistoryPage, type HistoryRow } from "../lib/api";
 import FilterBar from "../components/FilterBar";
 import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { when } from "../components/DataTable";
@@ -21,7 +21,14 @@ const SORTABLE: Record<string, string> = {
  * There are tens of thousands of rows, so sorting in the browser would mean
  * shipping all of them first.
  */
-export default function HistoryRoute({ onOpenMedia }: { onOpenMedia?: (row: HistoryRow) => void }) {
+export default function HistoryRoute({
+  onOpenMedia,
+  onOpenUser,
+}: {
+  onOpenMedia?: (row: HistoryRow) => void;
+  onOpenUser?: (userId: number) => void;
+}) {
+  const names = useUserNames();
   const [filters, setFilters] = useState<FilterState>(EMPTY);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("started");
@@ -98,7 +105,21 @@ export default function HistoryRoute({ onOpenMedia }: { onOpenMedia?: (row: Hist
                 >
                   <td className="muted">{when(row.started)}</td>
                   <td>{row.full_title}</td>
-                  <td>{row.user_id}</td>
+                  <td>
+                    {row.user_id !== null && onOpenUser ? (
+                      <button
+                        className="linkish"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenUser(row.user_id as number);
+                        }}
+                      >
+                        {names.get(row.user_id) ?? row.user_id}
+                      </button>
+                    ) : (
+                      names.get(row.user_id ?? -1) ?? row.user_id
+                    )}
+                  </td>
                   <td className="muted">{row.platform}</td>
                   <td className="muted">{row.player}</td>
                   <td>

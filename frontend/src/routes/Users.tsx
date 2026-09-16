@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useApi, type PlexUser, type UserDetail } from "../lib/api";
 import DataTable, { type Column, duration, when } from "../components/DataTable";
 
-export default function UsersRoute() {
+export default function UsersRoute({ focusUserId }: { focusUserId?: number | null }) {
   const users = useApi<PlexUser[]>("/users");
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(focusUserId ?? null);
 
   const columns: Column<PlexUser>[] = [
     {

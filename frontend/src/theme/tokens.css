@@ -35,8 +35,7 @@
   --map-border: #c3ccd8;
   --map-label: #5a6675;
   --map-label-halo: #ffffff;
-  --map-accuracy: #cfe0ec;
-  --map-accuracy-edge: #b4cbdd;
+  --map-accuracy: #3f7fb0;
 
   --radius: 8px;
   --radius-sm: 5px;
@@ -75,8 +74,7 @@
   --map-border: #2d3947;
   --map-label: #8b98a8;
   --map-label-halo: #0a0f14;
-  --map-accuracy: #16212c;
-  --map-accuracy-edge: #22303e;
+  --map-accuracy: #7fb4d8;
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35);
 }

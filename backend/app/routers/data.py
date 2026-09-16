@@ -276,6 +276,113 @@ def media_detail(rating_key: int, db: Db) -> dict:
     }
 
 
+@router.get("/location")
+def location_detail(
+    db: Db,
+    city: str | None = None,
+    country: str | None = None,
+    limit: int = Query(25, le=200),
+) -> dict:
+    """Who watched from a place, on what, from which addresses.
+
+    Matched on city rather than coordinates: the map aggregates by coordinate
+    but history stores only an IP, so the join runs through ip_locations. Two
+    networks in one city therefore land in one result, which the UI says out
+    loud rather than pretending the pin is exact.
+    """
+    where = [IpLocation.city == city] if city else []
+    if country:
+        where.append(IpLocation.country == country)
+    if not where:
+        raise HTTPException(400, "Give at least a city")
+
+    joined = select(History).join(IpLocation, IpLocation.ip == History.ip_address).where(*where)
+
+    users = db.execute(
+        select(
+            History.user_id,
+            func.coalesce(User.friendly_name, User.username).label("name"),
+            func.count().label("plays"),
+            func.max(History.started).label("last_play"),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .join(User, User.user_id == History.user_id, isouter=True)
+        .where(*where)
+        .group_by(History.user_id)
+        .order_by(desc(func.count()))
+        .limit(limit)
+    ).all()
+
+    devices = db.execute(
+        select(
+            History.machine_id,
+            func.max(History.player).label("player"),
+            func.max(History.platform).label("platform"),
+            History.user_id,
+            func.count().label("plays"),
+            func.max(History.started).label("last_play"),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(*where, History.machine_id.is_not(None))
+        .group_by(History.machine_id)
+        .order_by(desc(func.count()))
+        .limit(limit)
+    ).all()
+
+    addresses = db.execute(
+        select(
+            History.ip_address,
+            IpLocation.asn_org,
+            IpLocation.is_hosting,
+            func.count().label("plays"),
+            func.max(History.started).label("last_play"),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(*where)
+        .group_by(History.ip_address)
+        .order_by(desc(func.count()))
+        .limit(limit)
+    ).all()
+
+    total = db.execute(select(func.count()).select_from(joined.subquery())).scalar_one()
+
+    return {
+        "city": city,
+        "country": country,
+        "plays": total,
+        "users": [
+            {
+                "user_id": u.user_id,
+                "name": u.name or (str(u.user_id) if u.user_id else "Unknown"),
+                "plays": u.plays,
+                "last_play": u.last_play,
+            }
+            for u in users
+        ],
+        "devices": [
+            {
+                "machine_id": d.machine_id,
+                "player": d.player,
+                "platform": d.platform,
+                "user_id": d.user_id,
+                "plays": d.plays,
+                "last_play": d.last_play,
+            }
+            for d in devices
+        ],
+        "addresses": [
+            {
+                "ip_address": a.ip_address,
+                "asn_org": a.asn_org,
+                "is_hosting": a.is_hosting,
+                "plays": a.plays,
+                "last_play": a.last_play,
+            }
+            for a in addresses
+        ],
+    }
+
+
 # ---- directories -----------------------------------------------------------
 
 @router.get("/users")

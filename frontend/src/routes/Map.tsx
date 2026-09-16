@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { useApi, type MapPoint, type MapPoints } from "../lib/api";
+import { when } from "../components/DataTable";
 import FilterBar from "../components/FilterBar";
 import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
-import type { HistoryPage } from "../lib/api";
+import type { HistoryPage, LocationDetail } from "../lib/api";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
 type Place = MapPoint["properties"];
@@ -24,7 +25,13 @@ function webglAvailable(): boolean {
   }
 }
 
-export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
+export default function MapRoute({
+  geoipReady,
+  onOpenUser,
+}: {
+  geoipReady: boolean;
+  onOpenUser?: (userId: number) => void;
+}) {
   const [filters, setFilters] = useState<FilterState>(EMPTY);
   const query = useMemo(() => toQuery(filters), [filters]);
 
@@ -145,6 +152,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
           <Drawer
             place={selected}
             onClose={() => setSelected(null)}
+            onOpenUser={onOpenUser}
             onFilterToTitle={(ratingKey, title) => {
               setFilters({ ...filters, rating_key: ratingKey, ratingKeyLabel: title });
               setSelected(null);
@@ -263,7 +271,7 @@ function MapCanvas({
                 .filter((f) => f.properties.accuracy_km)
                 .map((f) => ({
                   type: "Feature" as const,
-                  properties: {},
+                  properties: { accuracy_km: f.properties.accuracy_km },
                   geometry: groundCircle(
                     f.geometry.coordinates[0],
                     f.geometry.coordinates[1],
@@ -281,19 +289,31 @@ function MapCanvas({
     }
 
     m.addSource("accuracy", { type: "geojson", data: emptyCollection() });
-    m.addLayer({
-      id: "accuracy-fill",
-      type: "fill",
-      source: "accuracy",
-      paint: {
-        // Opaque on purpose. Translucent circles stack where they overlap and
-        // the darker patches read as "more certain", which is backwards. A
-        // flat tone makes overlapping areas merge into one shape instead.
-        "fill-color": css("--map-accuracy", "#16212c"),
-        "fill-opacity": 1,
-        "fill-outline-color": css("--map-accuracy-edge", "#22303e"),
+    m.addLayer(
+      {
+        id: "accuracy-fill",
+        type: "fill",
+        source: "accuracy",
+        paint: {
+          "fill-color": css("--map-accuracy", "#7fb4d8"),
+          // Faint, and fainter still the less certain the fix is. A 5 km
+          // circle is a real claim and reads solid; a 1000 km one is barely
+          // a claim at all and should look like it. Overlaps then build up
+          // like a heatmap, which is honest: more plays, more colour.
+          "fill-opacity": [
+            "interpolate",
+            ["linear"],
+            ["get", "accuracy_km"],
+            5, 0.20,
+            50, 0.12,
+            200, 0.07,
+            1000, 0.035,
+          ],
+        },
       },
-    });
+      // Under the labels. On top of them, city names became unreadable.
+      firstSymbolLayer(m),
+    );
 
     m.addSource("plays", {
       type: "geojson",
@@ -496,18 +516,26 @@ function Drawer({
   place,
   onClose,
   onFilterToTitle,
+  onOpenUser,
 }: {
   place: Place;
   onClose: () => void;
   onFilterToTitle?: (ratingKey: number, title: string) => void;
+  onOpenUser?: (userId: number) => void;
 }) {
   const [openMedia, setOpenMedia] = useState<number | null>(null);
+  const [tab, setTab] = useState<"who" | "watched">("who");
 
-  // Matched on city, because the map aggregates by coordinate and history has
-  // no coordinate of its own. Two networks in one city therefore share a list,
-  // which the heading says out loud rather than pretending otherwise.
+  // Matched on city, because the map aggregates by coordinate while history
+  // only stores an IP. Two networks in one city therefore share a result,
+  // which the note below says out loud rather than implying the pin is exact.
+  const detail = useApi<LocationDetail>(
+    place.city ? `/location?city=${encodeURIComponent(place.city)}` : null,
+  );
   const recent = useApi<HistoryPage>(
-    place.city ? `/history?city=${encodeURIComponent(place.city)}&size=8` : null,
+    place.city && tab === "watched"
+      ? `/history?city=${encodeURIComponent(place.city)}&size=12`
+      : null,
   );
 
   return (
@@ -542,7 +570,6 @@ function Drawer({
           centroid, not an address, so treat the pin as an area.
         </p>
       )}
-
       {place.last_play && (
         <p className="muted small">
           Last play {new Date(place.last_play * 1000).toLocaleString()}
@@ -551,34 +578,103 @@ function Drawer({
 
       {place.city && (
         <>
-          <h3>Recently watched in {place.city}</h3>
-          {recent.data?.items.length === 0 && <p className="muted small">Nothing recorded.</p>}
-          <div className="mini-list">
-            {recent.data?.items.map((row) => (
-              <div key={row.row_id}>
-                <button
-                  className="mini as-row"
-                  onClick={() =>
-                    setOpenMedia(openMedia === row.rating_key ? null : row.rating_key)
-                  }
-                >
-                  <span>
-                    {row.full_title}
-                    <span className="muted small block">
-                      {row.player}
-                      {row.transcode_decision === "transcode" ? " · transcode" : ""}
-                    </span>
-                  </span>
-                  <span className="muted small">
-                    {row.started ? new Date(row.started * 1000).toLocaleDateString() : ""}
-                  </span>
-                </button>
-                {openMedia === row.rating_key && row.rating_key !== null && (
-                  <MediaPanel ratingKey={row.rating_key} onFilterToTitle={onFilterToTitle} />
-                )}
-              </div>
-            ))}
+          <div className="segmented drawer-tabs">
+            <button className={tab === "who" ? "seg on" : "seg"} onClick={() => setTab("who")}>
+              Who
+            </button>
+            <button
+              className={tab === "watched" ? "seg on" : "seg"}
+              onClick={() => setTab("watched")}
+            >
+              Watched
+            </button>
           </div>
+
+          {tab === "who" && (
+            <>
+              {detail.error && <p className="note bad-note">{detail.error}</p>}
+
+              <h3>Users</h3>
+              <div className="mini-list">
+                {detail.data?.users.map((u) => (
+                  <div key={u.user_id ?? u.name} className="mini">
+                    <div>
+                      {u.user_id != null && onOpenUser ? (
+                        <button className="linkish" onClick={() => onOpenUser(u.user_id as number)}>
+                          {u.name}
+                        </button>
+                      ) : (
+                        u.name
+                      )}
+                      <p className="muted small">last {when(u.last_play)}</p>
+                    </div>
+                    <span className="muted">{u.plays.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3>Devices</h3>
+              <div className="mini-list">
+                {detail.data?.devices.map((d) => (
+                  <div key={d.machine_id} className="mini">
+                    <div>
+                      {d.player || "Unnamed"}
+                      <p className="muted small">
+                        {d.platform} · <code>{d.machine_id.slice(0, 14)}…</code>
+                      </p>
+                    </div>
+                    <span className="muted">{d.plays.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3>Addresses</h3>
+              <div className="mini-list">
+                {detail.data?.addresses.map((a) => (
+                  <div key={a.ip_address} className="mini">
+                    <div>
+                      <code>{a.ip_address}</code>
+                      {a.is_hosting && <span className="pill warn">VPN</span>}
+                      <p className="muted small">{a.asn_org}</p>
+                    </div>
+                    <span className="muted">{a.plays.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {tab === "watched" && (
+            <>
+              {recent.data?.items.length === 0 && <p className="muted small">Nothing recorded.</p>}
+              <div className="mini-list">
+                {recent.data?.items.map((row) => (
+                  <div key={row.row_id}>
+                    <button
+                      className="mini as-row"
+                      onClick={() =>
+                        setOpenMedia(openMedia === row.rating_key ? null : row.rating_key)
+                      }
+                    >
+                      <span>
+                        {row.full_title}
+                        <span className="muted small block">
+                          {row.player}
+                          {row.transcode_decision === "transcode" ? " · transcode" : ""}
+                        </span>
+                      </span>
+                      <span className="muted small">
+                        {row.started ? new Date(row.started * 1000).toLocaleDateString() : ""}
+                      </span>
+                    </button>
+                    {openMedia === row.rating_key && row.rating_key !== null && (
+                      <MediaPanel ratingKey={row.rating_key} onFilterToTitle={onFilterToTitle} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </aside>
@@ -609,4 +705,10 @@ const css = (name: string, fallback: string) =>
 
 function emptyCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };
+}
+
+/* The first text layer in the style, so overlays can be slipped underneath it
+ * rather than burying the place names. */
+function firstSymbolLayer(map: maplibregl.Map): string | undefined {
+  return map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
 }

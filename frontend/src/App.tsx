@@ -59,6 +59,12 @@ function SignedIn({
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
   const [prefill, setPrefill] = useState<(Partial<Rule> & { name: string }) | undefined>();
+  const [focusUser, setFocusUser] = useState<number | null>(null);
+
+  function openUser(userId: number) {
+    setFocusUser(userId);
+    setTab("Users");
+  }
 
   // Blocking a device from the inventory opens the rule editor already filled
   // in, so nobody has to copy a machine_id by hand.
@@ -104,10 +110,12 @@ function SignedIn({
         <main>
           <ErrorBoundary name={active} key={active}>
             {active === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
-            {active === "Map" && <Map geoipReady={setup.data?.geoip_ready ?? false} />}
+            {active === "Map" && (
+              <Map geoipReady={setup.data?.geoip_ready ?? false} onOpenUser={openUser} />
+            )}
             {active === "Activity" && <Activity />}
-            {active === "History" && <History />}
-            {active === "Users" && <Users />}
+            {active === "History" && <History onOpenUser={openUser} />}
+            {active === "Users" && <Users focusUserId={focusUser} key={focusUser ?? "users"} />}
             {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}

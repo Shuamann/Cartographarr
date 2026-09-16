@@ -1033,3 +1033,27 @@ label.locked .pill {
 .block {
   display: block;
 }
+
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.linkish:hover {
+  text-decoration: underline;
+}
+
+.drawer-tabs {
+  margin: 14px 0 4px;
+  width: 100%;
+}
+.drawer-tabs .seg {
+  flex: 1;
+}
+.drawer h3 {
+  margin: 16px 0 6px;
+}

@@ -49,8 +49,6 @@ export default function MediaPanel({
           {[m.year, m.media_type, m.content_rating].filter(Boolean).join(" · ")}
         </p>
 
-        {m.summary && <p className="summary">{m.summary}</p>}
-
         <div className="row wrap linkrow">
           {links.map((l) => (
             <a key={l.key} className="ms-btn" href={m.links[l.key]} target="_blank" rel="noreferrer">

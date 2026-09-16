@@ -4,7 +4,7 @@
  * polling. Revisit when the live-activity layer needs cache invalidation.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export class ApiError extends Error {
   constructor(
@@ -343,3 +343,37 @@ export type MediaDetail = {
   tvdb_id: string | null;
   links: Record<string, string>;
 };
+
+export type LocationDetail = {
+  city: string | null;
+  country: string | null;
+  plays: number;
+  users: { user_id: number | null; name: string; plays: number; last_play: number | null }[];
+  devices: {
+    machine_id: string;
+    player: string | null;
+    platform: string | null;
+    user_id: number | null;
+    plays: number;
+    last_play: number | null;
+  }[];
+  addresses: {
+    ip_address: string;
+    asn_org: string | null;
+    is_hosting: boolean;
+    plays: number;
+    last_play: number | null;
+  }[];
+};
+
+/** user_id to display name, for tables that only store the id. */
+export function useUserNames(): Map<number, string> {
+  const users = useApi<PlexUser[]>("/users");
+  return useMemo(
+    () =>
+      new Map(
+        (users.data ?? []).map((u) => [u.user_id, u.friendly_name || u.username || String(u.user_id)]),
+      ),
+    [users.data],
+  );
+}
