@@ -28,9 +28,30 @@ SIMPLE_CLASS = re.compile(r"^\.([a-zA-Z][\w-]*)$")
 COMMENTS = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
+def without_media(css: str) -> str:
+    """Drop @media blocks. Restyling a class for a narrow screen is the one
+    legitimate reason to name it twice, and it cannot leak into another
+    component the way a second top level rule does."""
+    out, i = [], 0
+    while (start := css.find("@media", i)) != -1:
+        out.append(css[i:start])
+        depth, j = 0, css.index("{", start)
+        while True:
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        i = j + 1
+    out.append(css[i:])
+    return "".join(out)
+
+
 def selectors(css: str):
     """Yield the selector text of every top level rule."""
-    for chunk in COMMENTS.sub("", css).split("}"):
+    for chunk in without_media(COMMENTS.sub("", css)).split("}"):
         if "{" in chunk:
             yield chunk.rsplit("{", 1)[0].strip()
 
@@ -74,3 +95,9 @@ def test_the_check_leaves_normal_css_alone():
     assert duplicates(".req,\n.opt { margin: 0 }\n.opt { color: grey }") == {}
     assert duplicates(".a .b { color: red } .b { color: blue }") == {}
     assert duplicates("/* .row { } */ .row { color: red }") == {}
+    assert duplicates(".card { gap: 8px } @media (max-width: 600px) { .card { gap: 4px } }") == {}
+
+
+def test_media_blocks_do_not_hide_a_real_duplicate():
+    css = ".card { gap: 8px } @media (max-width: 600px) { .x { color: red } } .card { gap: 2px }"
+    assert duplicates(css) == {"card": 2}

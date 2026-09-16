@@ -7,13 +7,13 @@ and cannot be taken back.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Body, HTTPException
 
 from app.auth.deps import AdminUser
+from app import audit
 from app.db import session_scope
 from app.models import AuditLog
 from app.plex import sharing
@@ -28,20 +28,6 @@ def require_plex() -> None:
     if not sharing.configured():
         raise HTTPException(
             409, "Sharing needs a Plex token. Add one in Settings."
-        )
-
-
-def record(user_id: int, action: str, target: str, payload: dict, result: str) -> None:
-    with session_scope() as db:
-        db.add(
-            AuditLog(
-                app_user_id=user_id,
-                action=action,
-                target=target,
-                payload=json.dumps(payload),
-                result=result,
-                created_at=datetime.now(UTC),
-            )
         )
 
 
@@ -71,15 +57,16 @@ async def set_sections(
     try:
         result = await sharing.run(sharing.set_sections, username, sections)
     except Exception as exc:  # noqa: BLE001
-        record(admin.id, "sharing.sections", username, {"sections": sections}, f"failed: {exc}")
+        audit.record(
+            admin, "sharing.sections", f"Tried to change {username}'s libraries",
+            target=username, detail={"sections": sections}, result=f"failed: {exc}",
+        )
         raise HTTPException(502, f"Plex refused: {exc}") from exc
 
-    record(
-        admin.id,
-        "sharing.sections",
-        username,
-        {"before": before, "after": result["sections"]},
-        "ok",
+    audit.record(
+        admin, "sharing.sections",
+        f"Changed {username}'s libraries to {', '.join(result['sections']) or 'nothing'}",
+        target=username, detail={"before": before, "after": result["sections"]},
     )
     return result
 
@@ -100,10 +87,16 @@ async def unshare(username: str, admin: AdminUser, confirm: str = Body(..., embe
     try:
         result = await sharing.run(sharing.unshare, username)
     except Exception as exc:  # noqa: BLE001
-        record(admin.id, "sharing.unshare", username, {"before": before}, f"failed: {exc}")
+        audit.record(
+            admin, "sharing.unshare", f"Tried to stop sharing with {username}",
+            target=username, detail={"before": before}, result=f"failed: {exc}",
+        )
         raise HTTPException(502, f"Plex refused: {exc}") from exc
 
-    record(admin.id, "sharing.unshare", username, {"before": before}, "removed")
+    audit.record(
+        admin, "sharing.unshare", f"Stopped sharing with {username}",
+        target=username, detail={"before": before}, result="removed",
+    )
     return result
 
 

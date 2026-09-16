@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException
 from sqlalchemy import func, select
 
+from app import audit
+from app.auth.deps import AdminUser
 from app.db import session_scope
 from app.geo.lookup import ensure_databases
 from app.models import History, IpLocation, MediaItem, SyncState
@@ -129,11 +131,27 @@ def get_settings() -> list[dict]:
 
 
 @router.put("/settings")
-def put_settings(values: dict[str, Any] = Body(...)) -> list[dict]:
+def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[dict]:
+    before = {row["key"]: row["value"] for row in describe()}
     try:
         save(values)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+    changes = {
+        key: (
+            {"changed": True}
+            if audit.is_secret(key)
+            else {"before": before.get(key), "after": value}
+        )
+        for key, value in values.items()
+    }
+    audit.record(
+        admin,
+        "settings.save",
+        f"Changed {len(values)} setting{'s' if len(values) != 1 else ''}: {', '.join(sorted(values))}",
+        detail=changes,
+    )
     return get_settings()
 
 
@@ -159,11 +177,12 @@ def sync_status() -> dict:
 
 
 @router.post("/sync/run")
-async def sync_run(full: bool = False) -> dict:
+async def sync_run(admin: AdminUser, full: bool = False) -> dict:
     if not is_configured():
         raise HTTPException(409, f"Not configured yet. Missing: {', '.join(missing_required())}")
     if _sync_lock.locked():
         raise HTTPException(409, "A sync is already running")
+    audit.record(admin, "sync.run", "Started a full resync" if full else "Started a sync")
 
     async with _sync_lock:
         settings = current()

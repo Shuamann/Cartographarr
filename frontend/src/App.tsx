@@ -14,6 +14,7 @@ import History from "./routes/History";
 import Users from "./routes/Users";
 import Devices from "./routes/Devices";
 import Rules from "./routes/Rules";
+import Log from "./routes/Log";
 import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
 import type { Device, LiveSession, Rule } from "./lib/api";
@@ -26,11 +27,12 @@ const TABS = [
   "Users",
   "Devices",
   "Rules",
+  "Log",
   "Sharing",
   "Settings",
 ] as const;
 type Tab = (typeof TABS)[number];
-const ADMIN_TABS: Tab[] = ["Rules", "Sharing", "Settings"];
+const ADMIN_TABS: Tab[] = ["Rules", "Log", "Sharing", "Settings"];
 
 export default function App() {
   const auth = useApi<AuthState>("/auth/state");
@@ -182,6 +184,7 @@ function SignedIn({
             {active === "Users" && <Users focusUserId={focusUser} key={focusUser ?? "users"} />}
             {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
+            {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}
             </Suspense>

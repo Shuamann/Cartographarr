@@ -177,29 +177,7 @@ export default function RulesRoute({ prefill }: { prefill?: Partial<Rule> & { na
         </div>
       )}
 
-      <h2 className="section-head">Enforcement log</h2>
-      {logEntries.data?.length === 0 && <p className="muted">Nothing yet.</p>}
-      <table className="table">
-        <tbody>
-          {logEntries.data?.map((e, i) => (
-            <tr key={i}>
-              <td className="muted small">
-                {e.acted_at ? new Date(e.acted_at).toLocaleString() : ""}
-              </td>
-              <td>{e.rule_name}</td>
-              <td>{e.username}</td>
-              <td className="muted">{e.player}</td>
-              <td className="muted">{e.full_title}</td>
-              <td>
-                <span className={e.dry_run ? "pill" : "pill warn"}>
-                  {e.dry_run ? "dry run" : "acted"}
-                </span>{" "}
-                {e.result}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p className="muted small">What rules have done is in the Log tab.</p>
     </div>
   );
 }

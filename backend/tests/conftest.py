@@ -31,10 +31,28 @@ def client(monkeypatch, tmp_path):
     importlib.reload(app.models)
     app.db.init_db()
 
+    # Reloaded in place, so routers holding a reference to the module see the
+    # session factory for this test's database rather than the last one's.
+    import app.audit
+
+    importlib.reload(app.audit)
+
     import app.auth.deps, app.routers.auth, app.main
+    import app.routers.admin, app.routers.branding, app.routers.data, app.routers.live
+    import app.routers.sharing
 
     importlib.reload(app.auth.deps)
     importlib.reload(app.routers.auth)
+    # Every router that opens a database session, or a test reading through
+    # one of them sees whichever database an earlier test left behind.
+    for router in (
+        app.routers.data,
+        app.routers.live,
+        app.routers.admin,
+        app.routers.branding,
+        app.routers.sharing,
+    ):
+        importlib.reload(router)
     importlib.reload(app.main)
 
     from fastapi.testclient import TestClient

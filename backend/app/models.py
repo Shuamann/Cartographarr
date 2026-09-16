@@ -261,6 +261,36 @@ class EnforcementLog(Base):
     result: Mapped[str | None] = mapped_column(Text)
     acted_at: Mapped[datetime | None] = mapped_column()
 
+    # A snapshot of the stream as it was when acted on. Copied rather than
+    # joined, because the session is gone a moment later and history may not
+    # record a stream that was stopped seconds in.
+    source: Mapped[str | None] = mapped_column(String(16))  # "rule" or "manual"
+    actor: Mapped[str | None] = mapped_column(String(255))  # who pressed it, or the rule
+    message: Mapped[str | None] = mapped_column(Text)
+    platform: Mapped[str | None] = mapped_column(String(64))
+    product: Mapped[str | None] = mapped_column(String(128))
+    media_type: Mapped[str | None] = mapped_column(String(16))
+    rating_key: Mapped[int | None] = mapped_column(Integer)
+    grandparent_rating_key: Mapped[int | None] = mapped_column(Integer)
+    library_name: Mapped[str | None] = mapped_column(String(255))
+    year: Mapped[int | None] = mapped_column(Integer)
+    state: Mapped[str | None] = mapped_column(String(16))
+    progress_percent: Mapped[int | None] = mapped_column(Integer)
+    view_offset: Mapped[int | None] = mapped_column(Integer)  # ms
+    duration: Mapped[int | None] = mapped_column(Integer)  # ms
+    transcode_decision: Mapped[str | None] = mapped_column(String(32))
+    video_resolution: Mapped[str | None] = mapped_column(String(16))
+    quality_profile: Mapped[str | None] = mapped_column(String(64))
+    bandwidth: Mapped[int | None] = mapped_column(Integer)  # kbps
+    location: Mapped[str | None] = mapped_column(String(8))  # lan or wan
+    city: Mapped[str | None] = mapped_column(String(255))
+    region: Mapped[str | None] = mapped_column(String(255))
+    country: Mapped[str | None] = mapped_column(String(255))
+    lat: Mapped[float | None] = mapped_column(Float)
+    lon: Mapped[float | None] = mapped_column(Float)
+    is_hosting: Mapped[bool | None] = mapped_column(Boolean)
+    asn_org: Mapped[str | None] = mapped_column(String(255))
+
 
 class AppUser(Base):
     """Someone who can log in. Separate from `users`, which are Plex viewers."""
@@ -338,7 +368,7 @@ class TravelFlag(Base):
 
 
 class AuditLog(Base):
-    """Every change that reaches outside this app.
+    """Every change someone made through the app, and every sign in.
 
     Sharing changes cannot be undone from here, so what something looked like
     before is worth keeping even when the change went fine.
@@ -354,3 +384,7 @@ class AuditLog(Base):
     payload: Mapped[str | None] = mapped_column(Text)
     result: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime | None] = mapped_column()
+    # Copied rather than joined: an account can be deleted, and the log should
+    # still say who did it.
+    actor: Mapped[str | None] = mapped_column(String(64))
+    summary: Mapped[str | None] = mapped_column(Text)

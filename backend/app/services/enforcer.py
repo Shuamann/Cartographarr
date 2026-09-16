@@ -131,20 +131,70 @@ def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _int(value: Any) -> int | None:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def snapshot(session: Session) -> dict[str, Any]:
+    """Everything worth keeping about a live session, as log columns."""
+    ip = session.get("ip_address")
+    place = None
+    if ip:
+        with session_scope() as db:
+            row = db.get(IpLocation, ip)
+            if row is not None:
+                place = {
+                    "city": row.city,
+                    "region": row.region,
+                    "country": row.country,
+                    "lat": row.lat,
+                    "lon": row.lon,
+                    "is_hosting": row.is_hosting,
+                    "asn_org": row.asn_org,
+                }
+
+    return {
+        "session_key": str(session.get("session_key")),
+        "user_id": _int(session.get("user_id")),
+        "username": session.get("friendly_name") or session.get("username"),
+        "machine_id": session.get("machine_id"),
+        "player": session.get("player"),
+        "platform": session.get("platform"),
+        "product": session.get("product"),
+        "ip_address": ip,
+        "full_title": session.get("full_title"),
+        "media_type": session.get("media_type"),
+        "rating_key": _int(session.get("rating_key")),
+        "grandparent_rating_key": _int(session.get("grandparent_rating_key")),
+        "library_name": session.get("library_name"),
+        "year": _int(session.get("year")),
+        "state": session.get("state"),
+        "progress_percent": _int(session.get("progress_percent")),
+        "view_offset": _int(session.get("view_offset")),
+        "duration": _int(session.get("duration")),
+        "transcode_decision": session.get("transcode_decision"),
+        "video_resolution": session.get("video_full_resolution"),
+        "quality_profile": session.get("quality_profile"),
+        "bandwidth": _int(session.get("bandwidth")),
+        "location": session.get("location"),
+        **(place or {}),
+    }
+
+
 def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
     with session_scope() as db:
         db.add(
             EnforcementLog(
+                **snapshot(session),
                 rule_id=rule.id,
                 rule_name=rule.name,
                 action=rule.action,
-                session_key=str(session.get("session_key")),
-                user_id=session.get("user_id"),
-                username=session.get("friendly_name") or session.get("username"),
-                machine_id=session.get("machine_id"),
-                player=session.get("player"),
-                ip_address=session.get("ip_address"),
-                full_title=session.get("full_title"),
+                source="rule",
+                actor=f"Rule: {rule.name}",
+                message=rule.message,
                 dry_run=dry_run,
                 result=result,
                 acted_at=datetime.now(UTC),

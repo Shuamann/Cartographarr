@@ -1124,6 +1124,7 @@ label.locked .pill {
 /* Everything the old Activity tab showed, opened under the strip rather than
  * on its own screen. */
 .stream-detail {
+  position: relative;
   margin-top: 10px;
   padding: 14px;
   border: 1px solid var(--accent);
@@ -1493,4 +1494,231 @@ label.locked .pill {
 .card-section > p {
   margin: 0 0 12px;
   max-width: 70ch;
+}
+
+/* ---- log ------------------------------------------------------------------ */
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.log-entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.log-entry.open {
+  border-color: var(--accent);
+}
+.log-summary {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) minmax(0, 200px) auto 18px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.log-summary:hover {
+  background: var(--surface-2);
+}
+.log-what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.log-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+.log-caret {
+  color: var(--ink-dim);
+}
+.log-detail {
+  display: flex;
+  gap: 18px;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.log-poster {
+  width: 120px;
+  height: 180px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+.log-detail .kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+.log-detail .kv dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+.log-detail .kv dd {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.log-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.log-progress .progress {
+  flex: 1;
+}
+.log-message {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+.log-message p {
+  margin: 2px 0 0;
+}
+.log-diff {
+  margin-top: 14px;
+}
+.log-diff th {
+  text-align: left;
+  padding: 6px 10px;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--border);
+}
+.log-json {
+  margin: 14px 0 0;
+  padding: 10px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+}
+
+@media (max-width: 760px) {
+  .log-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .log-when,
+  .log-by,
+  .log-caret {
+    display: none;
+  }
+  .log-detail {
+    flex-direction: column;
+  }
+}
+
+/* ---- stream detail ----------------------------------------------------------- */
+
+.stream-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.stream-detail-body {
+  display: flex;
+  gap: 18px;
+}
+.stream-detail-poster {
+  width: 150px;
+  height: 225px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  object-fit: cover;
+}
+.stream-detail-main h3 {
+  margin: 0 36px 2px 0;
+  font-size: 18px;
+}
+.stream-sub {
+  margin: 0 0 2px;
+  color: var(--ink-2);
+}
+.stream-summary {
+  margin: 10px 0 12px;
+  max-width: 80ch;
+  line-height: 1.5;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.stream-summary.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.spec {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.spec dt {
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  align-self: center;
+}
+.spec dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.stream-progress {
+  margin-top: 14px;
+}
+.stream-progress .progress {
+  height: 6px;
+  margin-bottom: 6px;
+}
+.stream-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .spec {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .stream-detail-body {
+    flex-direction: column;
+  }
+  .stream-detail-poster {
+    width: 110px;
+    height: 165px;
+  }
 }

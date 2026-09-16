@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 from sqlalchemy import delete, func, select
 
+from app import audit
 from app.auth.deps import AdminUser, CurrentUser, has_any_user, optional_user
 from app.auth.security import (
     expiry,
@@ -131,6 +132,7 @@ def claim(
         db.flush()
         db.expunge(user)
 
+    audit.record(user, "account.claim", f"Created the first admin account, {user.username}")
     _start_session(response, user)
     return {"user": _public(user)}
 
@@ -148,8 +150,15 @@ def login(
 
     # Same answer either way, so this cannot be used to enumerate accounts.
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
+        # The typed name is recorded, not the password, so repeated guessing
+        # against one account is visible.
+        audit.record(
+            None, "auth.failed", f"Failed sign in as {username.strip()[:64]!r}",
+            actor=username.strip()[:64] or None, result="failed",
+        )
         raise HTTPException(401, "That username and password do not match")
 
+    audit.record(user, "auth.login", f"{user.username} signed in")
     _start_session(response, user)
     return {"user": _public(user)}
 
@@ -190,6 +199,7 @@ def change_password(
         stored.password_hash = hash_password(new_password)
         # Changing a password should end sessions elsewhere.
         db.execute(delete(AppSession).where(AppSession.app_user_id == user.id))
+    audit.record(user, "account.password", f"{user.username} changed their password")
     return {"ok": True, "signed_out_everywhere": True}
 
 
@@ -203,7 +213,7 @@ def list_users(_: AdminUser) -> list[dict]:
 
 @router.post("/users")
 def create_user(
-    _: AdminUser,
+    admin: AdminUser,
     username: str = Body(...),
     password: str = Body(...),
     role: str = Body("viewer"),
@@ -228,6 +238,10 @@ def create_user(
         db.add(user)
         db.flush()
         db.expunge(user)
+    audit.record(
+        admin, "account.create", f"Added account {user.username} as {user.role}",
+        target=str(user.id),
+    )
     return _public(user)
 
 
@@ -266,11 +280,28 @@ def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
                 raise HTTPException(400, problem)
             user.password_hash = hash_password(values["password"])
             db.execute(delete(AppSession).where(AppSession.app_user_id == user.id))
+        before = {f: getattr(user, f) for f in ("role", "email", "is_active")}
         for field in ("role", "email", "is_active"):
             if field in values:
                 setattr(user, field, values[field])
         db.flush()
         db.expunge(user)
+
+    parts = []
+    if "role" in values and values["role"] != before["role"]:
+        parts.append(f"role {before['role']} to {values['role']}")
+    if "is_active" in values and values["is_active"] != before["is_active"]:
+        parts.append("enabled" if values["is_active"] else "disabled")
+    if "email" in values and values["email"] != before["email"]:
+        parts.append("email")
+    if "password" in values:
+        parts.append("reset password")
+    audit.record(
+        admin, "account.update",
+        f"Changed account {user.username}: {', '.join(parts) or 'no changes'}",
+        target=str(user_id),
+        detail={k: {"before": before[k], "after": values[k]} for k in before if k in values},
+    )
     return _public(user)
 
 
@@ -291,6 +322,8 @@ def delete_user(user_id: int, admin: AdminUser) -> dict:
             ).scalar_one()
             if remaining == 0:
                 raise HTTPException(400, "That is the last admin account")
+        name = user.username
         db.execute(delete(AppSession).where(AppSession.app_user_id == user_id))
         db.delete(user)
+    audit.record(admin, "account.delete", f"Deleted account {name}", target=str(user_id))
     return {"deleted": user_id}

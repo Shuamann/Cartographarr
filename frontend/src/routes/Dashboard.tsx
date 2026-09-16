@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
 import { useIsAvailable } from "../components/Gated";
 import TravelFlags from "../components/TravelFlags";
+import EnforcementLog from "../components/EnforcementLog";
 import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
 
@@ -135,29 +136,17 @@ export default function DashboardRoute({
 
       <section>
         <div className="row-between">
-          <h2 className="section-head">Recent rule activity</h2>
-          <button className="tab" onClick={() => onNavigate("Rules")}>All rules</button>
+          <h2 className="section-head">Recent stream actions</h2>
+          {isAdmin && (
+            <button className="tab" onClick={() => onNavigate("Log")}>
+              Full log
+            </button>
+          )}
         </div>
         {d.settings.enforce_dry_run && (
           <p className="muted small">Dry run is on, so rules record but don't act.</p>
         )}
-        {d.recent_enforcement.length === 0 ? (
-          <p className="muted">Nothing yet.</p>
-        ) : (
-          <div className="mini-list">
-            {d.recent_enforcement.map((e, i) => (
-              <div key={i} className="mini">
-                <div>
-                  <strong>{e.rule_name}</strong>
-                  <p className="muted small">
-                    {e.username} · {e.player} · {e.full_title}
-                  </p>
-                </div>
-                <span className={e.dry_run ? "pill" : "pill warn"}>{e.result}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <EnforcementLog entries={d.recent_enforcement} onOpenUser={onOpenUser} />
       </section>
       </div>
     </div>
@@ -318,101 +307,170 @@ function StreamDetail({
   onShowOnMap?: (session: LiveSession) => void;
 }) {
   const [stopping, setStopping] = useState(false);
+  const [fullSummary, setFullSummary] = useState(false);
+
   const who = session.friendly_name || session.username || "Unknown";
   const where = session.geo
     ? [session.geo.city, session.geo.region, session.geo.country].filter(Boolean).join(", ")
-    : session.ip_address;
+    : null;
   const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+  const offset = Number(session.view_offset ?? 0);
+  const duration = Number(session.duration ?? 0);
+
+  // An episode reads as the show on top and the episode beneath, which is how
+  // everyone looks for it, rather than one long "Show - Episode" string.
+  const episodic = session.media_type === "episode";
+  const heading = episodic ? session.grandparent_title : session.title || session.full_title;
+  const subheading = episodic
+    ? [session.parent_title, session.title].filter(Boolean).join(" \u00b7 ")
+    : null;
 
   return (
     <article className="stream-detail">
-      <div className="row-between">
-        <h3>{session.full_title}</h3>
-        <button className="icon-btn" onClick={onClose} aria-label="Close">
-          &times;
-        </button>
-      </div>
+      <button className="icon-btn stream-close" onClick={onClose} aria-label="Close">
+        &times;
+      </button>
 
-      <dl className="kv">
-        <div>
-          <dt>Who</dt>
-          <dd>
-            {session.user_id && onOpenUser ? (
-              <button className="linkish" onClick={() => onOpenUser(session.user_id as number)}>
-                {who}
-              </button>
-            ) : (
-              who
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>Device</dt>
-          <dd>
-            {session.player}
-            {session.platform ? ` (${session.platform})` : ""}
-          </dd>
-        </div>
-        <div>
-          <dt>Where</dt>
-          <dd>
-            {where}
-            {session.location && <span className="pill">{session.location}</span>}
-          </dd>
-        </div>
-        <div>
-          <dt>Playback</dt>
-          <dd>
-            {session.transcode_decision}
-            {session.video_full_resolution ? ` \u00b7 ${session.video_full_resolution}` : ""}
-            {session.state && <span className="pill">{session.state}</span>}
-          </dd>
-        </div>
-        <div>
-          <dt>Progress</dt>
-          <dd>{progress}%</dd>
-        </div>
-        {session.library_name && (
-          <div>
-            <dt>Library</dt>
-            <dd>{session.library_name}</dd>
-          </div>
+      <div className="stream-detail-body">
+        {session.rating_key ? (
+          <img
+            className="stream-detail-poster"
+            src={`/api/media/${session.rating_key}/image?width=300&height=450`}
+            alt=""
+            onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+          />
+        ) : (
+          <div className="stream-detail-poster" />
         )}
-      </dl>
 
-      {session.geo?.is_hosting && (
-        <p className="note warn-note">
-          Coming from {session.geo.asn_org}, which looks like a VPN or a hosting provider rather
-          than a home connection.
-        </p>
-      )}
+        <div className="min0 stream-detail-main">
+          <h3>{heading ?? session.full_title}</h3>
+          {subheading && <p className="stream-sub">{subheading}</p>}
+          <p className="muted small">
+            {[session.year, session.content_rating, session.library_name]
+              .filter(Boolean)
+              .join(" \u00b7 ")}
+          </p>
 
-      <div className="progress">
-        <span className="progress-fill" style={{ width: `${progress}%` }} />
+          {session.summary && (
+            <p
+              className={fullSummary ? "stream-summary" : "stream-summary clamp"}
+              onClick={() => setFullSummary((v) => !v)}
+              title={fullSummary ? "Show less" : "Show more"}
+            >
+              {session.summary}
+            </p>
+          )}
+
+          <dl className="spec">
+            <Spec label="User">
+              {session.user_id && onOpenUser ? (
+                <button className="linkish" onClick={() => onOpenUser(session.user_id as number)}>
+                  {who}
+                </button>
+              ) : (
+                who
+              )}
+            </Spec>
+            <Spec label="Player">
+              {session.player}
+              {session.platform ? ` (${session.platform})` : ""}
+            </Spec>
+            <Spec label="Product">{session.product}</Spec>
+            <Spec label="Quality">
+              {session.quality_profile}
+              {session.stream_bitrate ? ` \u00b7 ${mbps(session.stream_bitrate)}` : ""}
+            </Spec>
+            <Spec label="Stream">{decision(session.transcode_decision)}</Spec>
+            <Spec label="Container">
+              {arrow(session.container, session.stream_container, session.transcode_decision)}
+            </Spec>
+            <Spec label="Video">
+              {decision(session.video_decision)}
+              {" \u00b7 "}
+              {arrow(
+                fmt(session.video_codec, session.video_full_resolution),
+                fmt(session.stream_video_codec, session.stream_video_full_resolution),
+                session.video_decision,
+              )}
+            </Spec>
+            <Spec label="Audio">
+              {decision(session.audio_decision)}
+              {" \u00b7 "}
+              {arrow(
+                fmt(session.audio_codec, session.audio_channel_layout),
+                fmt(session.stream_audio_codec, session.audio_channel_layout),
+                session.audio_decision,
+              )}
+            </Spec>
+            {session.subtitle_decision && (
+              <Spec label="Subtitles">{decision(session.subtitle_decision)}</Spec>
+            )}
+            <Spec label="Location">
+              <span className="pill">{(session.location || "").toUpperCase() || "?"}</span>
+              {session.ip_address}
+              {where ? ` \u00b7 ${where}` : ""}
+              {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
+            </Spec>
+            <Spec label="Network">
+              {session.geo?.asn_org ?? "Unknown"}
+              {session.relayed && Number(session.relayed) ? " \u00b7 relayed" : ""}
+              {session.secure !== null && session.secure !== undefined
+                ? Number(session.secure)
+                  ? " \u00b7 secure"
+                  : " \u00b7 not secure"
+                : ""}
+            </Spec>
+            <Spec label="Bandwidth">{session.bandwidth ? mbps(session.bandwidth) : null}</Spec>
+          </dl>
+        </div>
       </div>
 
-      <div className="row">
-        <button className="btn" onClick={() => setStopping((v) => !v)}>
-          {stopping ? "Cancel" : "Stop stream"}
-        </button>
-        {onShowOnMap && session.geo?.lat != null && (
+      <div className="stream-progress">
+        <div className="progress">
+          <div className="progress-fill" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="row-between small">
+          <span>
+            <span className={session.state === "playing" ? "pill ok" : "pill"}>
+              {session.state ?? "unknown"}
+            </span>{" "}
+            {duration ? `${clock(offset)} / ${clock(duration)}` : `${progress}%`}
+          </span>
+          <span className="muted">
+            {duration ? `${clock(Math.max(duration - offset, 0))} left \u00b7 ${progress}%` : ""}
+          </span>
+        </div>
+      </div>
+
+      {/* Show on map sits apart on the left: it only looks, while the two on
+          the right act on someone's stream. */}
+      <div className="stream-actions">
+        {onShowOnMap && session.geo?.lat != null ? (
           <button className="btn" onClick={() => onShowOnMap(session)}>
             Show on map
           </button>
+        ) : (
+          <span />
         )}
-        {onBlockDevice && session.machine_id && (
-          <button
-            className="btn danger"
-            onClick={() =>
-              onBlockDevice(
-                session.machine_id as string,
-                session.player || (session.machine_id as string).slice(0, 8),
-              )
-            }
-          >
-            Ban device
+        <div className="row">
+          <button className="btn" onClick={() => setStopping((v) => !v)}>
+            {stopping ? "Cancel" : "Stop stream"}
           </button>
-        )}
+          {onBlockDevice && session.machine_id && (
+            <button
+              className="btn danger"
+              onClick={() =>
+                onBlockDevice(
+                  session.machine_id as string,
+                  session.player || (session.machine_id as string).slice(0, 8),
+                )
+              }
+            >
+              Ban device
+            </button>
+          )}
+        </div>
       </div>
 
       {stopping && (
@@ -426,6 +484,48 @@ function StreamDetail({
       )}
     </article>
   );
+}
+
+function Spec({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </>
+  );
+}
+
+function decision(value: string | null | undefined): string {
+  if (!value) return "Unknown";
+  if (value === "copy") return "Direct stream";
+  if (value === "direct play") return "Direct play";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function fmt(codec: string | null | undefined, extra: string | null | undefined): string {
+  return [codec?.toUpperCase(), extra].filter(Boolean).join(" ");
+}
+
+/* "H264 1080 \u2192 HEVC 720" when it is being converted, just the source when not. */
+function arrow(source: string | null | undefined, stream: string | null | undefined, how: string | null | undefined) {
+  const src = (source || "").toString();
+  const out = (stream || "").toString();
+  if (how === "transcode" && out && out.toLowerCase() !== src.toLowerCase()) {
+    return `${src.toUpperCase() || "?"} \u2192 ${out.toUpperCase()}`;
+  }
+  return src.toUpperCase() || "Unknown";
+}
+
+function mbps(kbps: string | number): string {
+  return `${(Number(kbps) / 1000).toFixed(1)} Mbps`;
+}
+
+function clock(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }
 
 const DEFAULT_MESSAGE = "This device is not permitted to stream. Contact the server owner.";

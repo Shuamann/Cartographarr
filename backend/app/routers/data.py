@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from typing import Annotated, Any
 
 import httpx
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
@@ -567,7 +569,7 @@ def devices(db: Db, user_id: int | None = None, new_only: bool = False) -> list:
 
 
 @router.post("/devices/{machine_id}/review")
-def review_device(machine_id: str, _: AdminUser, reviewed: bool = True) -> dict:
+def review_device(machine_id: str, admin: AdminUser, reviewed: bool = True) -> dict:
     """Clear (or restore) the "new device" flag.
 
     Admin only: acknowledging a device is how the alert gets dismissed, and a
@@ -581,6 +583,19 @@ def review_device(machine_id: str, _: AdminUser, reviewed: bool = True) -> dict:
         )
         if not rows.rowcount:
             raise HTTPException(404, "No such device")
+        device = db.execute(
+            select(Device).where(Device.machine_id == machine_id).limit(1)
+        ).scalar_one_or_none()
+        label = (device.player if device else None) or machine_id[:12]
+        owner = device.user_id if device else None
+
+    audit.record(
+        admin,
+        "device.review" if reviewed else "device.unreview",
+        f"Marked {label} as reviewed" if reviewed else f"Marked {label} as new again",
+        target=machine_id,
+        detail={"player": label, "user_id": owner},
+    )
     return {"machine_id": machine_id, "is_new_unreviewed": not reviewed}
 
 

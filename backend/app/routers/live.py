@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.actions import registry
 from app.integrations import arr, kuma, notify, seerr, tmdb
 from app.integrations.base import Health
@@ -41,6 +43,8 @@ def get_session():
 
 
 Db = Annotated[Session, Depends(get_session)]
+log = logging.getLogger(__name__)
+
 Filt = Annotated[Filters, Depends()]
 
 # What the UI needs from a live session. get_activity returns ~250 fields per
@@ -52,7 +56,10 @@ SESSION_FIELDS = (
     "media_type full_title title grandparent_title parent_title year thumb "
     "art rating_key section_id library_name transcode_decision "
     "video_decision audio_decision video_full_resolution stream_video_full_resolution "
-    "quality_profile bandwidth container transcode_speed throttled"
+    "quality_profile bandwidth container transcode_speed throttled "
+    "summary content_rating grandparent_rating_key originally_available_at "
+    "video_codec stream_video_codec audio_codec stream_audio_codec audio_channel_layout "
+    "stream_container stream_bitrate subtitle_decision"
 ).split()
 
 
@@ -137,7 +144,7 @@ async def activity(db: Db) -> dict:
 
 @router.post("/activity/{session_key}/terminate")
 async def terminate(
-    session_key: str, _: AdminUser, message: str = Body("", embed=True)
+    session_key: str, admin: AdminUser, message: str = Body("", embed=True)
 ) -> dict:
     """Stop one stream. Refused without Plex Pass, whatever the UI showed."""
     action = registry.get("terminate")
@@ -145,6 +152,21 @@ async def terminate(
     missing = registry.unmet(action)
     if missing:
         raise HTTPException(409, f"Unavailable: requires {', '.join(missing)}")
+
+    # Read the stream first. Once it is stopped there is nothing left to ask
+    # about, and the log would only know a session key.
+    session: dict[str, Any] = {"session_key": session_key}
+    client = TautulliClient(current())
+    try:
+        activity = await client.call("get_activity") or {}
+        for live in activity.get("sessions") or []:
+            if str(live.get("session_key")) == str(session_key):
+                session = live
+                break
+    except Exception:  # noqa: BLE001 - a thinner log beats refusing to stop it
+        log.debug("could not snapshot session %s before stopping it", session_key)
+    finally:
+        await client.aclose()
 
     try:
         result = await action.execute({"session_key": session_key}, {"message": message})
@@ -154,9 +176,12 @@ async def terminate(
     with session_scope() as db:
         db.add(
             EnforcementLog(
+                **enforcer.snapshot(session),
                 rule_name="(manual)",
                 action="terminate",
-                session_key=session_key,
+                source="manual",
+                actor=admin.username,
+                message=message or None,
                 dry_run=False,
                 result=result,
                 acted_at=datetime.now(UTC),
@@ -181,35 +206,54 @@ def list_rules(db: Db) -> list[dict]:
 
 
 @router.post("/rules")
-def create_rule(_: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
+def create_rule(admin: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
     payload = _validate_rule(values)
     with session_scope() as db:
         rule = Rule(**payload, created_at=datetime.now(UTC))
         db.add(rule)
         db.flush()
-        return _rule_dict(rule)
+        saved = _rule_dict(rule)
+    audit.record(
+        admin, "rule.create", f"Created rule {saved['name']!r}",
+        target=str(saved["id"]), detail={"after": saved},
+    )
+    return saved
 
 
 @router.put("/rules/{rule_id}")
-def update_rule(rule_id: int, _: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
+def update_rule(rule_id: int, admin: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
     payload = _validate_rule(values, partial=True)
     with session_scope() as db:
         rule = db.get(Rule, rule_id)
         if rule is None:
             raise HTTPException(404, "No such rule")
+        before = _rule_dict(rule)
         for key, value in payload.items():
             setattr(rule, key, value)
         db.flush()
-        return _rule_dict(rule)
+        saved = _rule_dict(rule)
+
+    changed = {k: {"before": before.get(k), "after": v} for k, v in saved.items() if before.get(k) != v}
+    if set(changed) == {"enabled"}:
+        summary = f"{'Enabled' if saved['enabled'] else 'Disabled'} rule {saved['name']!r}"
+    else:
+        summary = f"Edited rule {saved['name']!r}: {', '.join(sorted(changed)) or 'no changes'}"
+    audit.record(admin, "rule.update", summary, target=str(rule_id), detail=changed)
+    return saved
 
 
 @router.delete("/rules/{rule_id}")
-def delete_rule(rule_id: int, _: AdminUser) -> dict:
+def delete_rule(rule_id: int, admin: AdminUser) -> dict:
     with session_scope() as db:
         rule = db.get(Rule, rule_id)
         if rule is None:
             raise HTTPException(404, "No such rule")
+        before = _rule_dict(rule)
         db.delete(rule)
+    audit.record(
+        admin, "rule.delete", f"Deleted rule {before['name']!r}",
+        target=str(rule_id), detail={"before": before},
+    )
     return {"deleted": rule_id}
 
 
@@ -244,10 +288,59 @@ def enforcement_log(db: Db, limit: int = 100) -> list[dict]:
     ]
 
 
+@router.get("/log")
+def combined_log(
+    db: Db,
+    _: AdminUser,
+    kind: str = "all",
+    limit: int = 200,
+) -> list[dict]:
+    """Stream actions and admin changes on one timeline.
+
+    Two tables because they record different things: a stream action keeps a
+    snapshot of the stream, a change keeps what it was before. The page wants
+    them in one list, so they are merged here, newest first.
+    """
+    from app.models import AuditLog
+
+    limit = max(1, min(limit, 1000))
+    out: list[dict] = []
+    if kind in ("all", "streams"):
+        rows = db.execute(
+            select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(limit)
+        ).scalars()
+        out += [
+            {
+                "kind": "stream",
+                "at": row.acted_at,
+                **{c.name: getattr(row, c.name) for c in EnforcementLog.__table__.columns},
+            }
+            for row in rows
+        ]
+    if kind in ("all", "changes"):
+        rows = db.execute(select(AuditLog).order_by(desc(AuditLog.created_at)).limit(limit)).scalars()
+        out += [
+            {
+                "kind": "change",
+                "at": row.created_at,
+                **{c.name: getattr(row, c.name) for c in AuditLog.__table__.columns},
+            }
+            for row in rows
+        ]
+    out.sort(key=lambda r: r["at"] or datetime.min, reverse=True)
+    return out[:limit]
+
+
 @router.post("/rules/run")
-async def run_rules_now(_: AdminUser) -> dict:
+async def run_rules_now(admin: AdminUser) -> dict:
     """Evaluate rules immediately instead of waiting for the next sweep."""
-    return await enforcer.run_once()
+    result = await enforcer.run_once()
+    audit.record(
+        admin, "rule.run",
+        f"Ran rules now: {result.get('matched', 0)} matched, {result.get('acted', 0)} acted",
+        detail=result,
+    )
+    return result
 
 
 # ---- integrations ----------------------------------------------------------
@@ -388,14 +481,22 @@ def travel_flags(db: Db, status: str | None = None, limit: int = 100) -> list[di
 
 
 @router.patch("/travel-flags/{flag_id}")
-def review_flag(flag_id: int, _: AdminUser, status: str = Body(..., embed=True)) -> dict:
+def review_flag(flag_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
     if status not in {"new", "reviewed", "ignored"}:
         raise HTTPException(400, "Status must be new, reviewed or ignored")
     with session_scope() as db:
         flag = db.get(TravelFlag, flag_id)
         if flag is None:
             raise HTTPException(404, "No such flag")
+        before = flag.status
         flag.status = status
+        user = db.get(User, flag.user_id)
+        who = (user.friendly_name or user.username) if user else str(flag.user_id)
+    verb = {"reviewed": "Reviewed", "ignored": "Ignored", "new": "Reopened"}[status]
+    audit.record(
+        admin, "travel.review", f"{verb} a sharing signal for {who}",
+        target=str(flag_id), detail={"before": before, "after": status, "user_id": flag.user_id},
+    )
     return {"id": flag_id, "status": status}
 
 
@@ -504,16 +605,7 @@ async def dashboard(db: Db, filters: Filt) -> dict:
             for r in top_users
         ],
         "recent_enforcement": [
-            {
-                "rule_name": e.rule_name,
-                "action": e.action,
-                "username": e.username,
-                "player": e.player,
-                "full_title": e.full_title,
-                "dry_run": e.dry_run,
-                "result": e.result,
-                "acted_at": e.acted_at,
-            }
+            {c.name: getattr(e, c.name) for c in EnforcementLog.__table__.columns}
             for e in last_enforcement
         ],
         # Filled in when integrations land; shape fixed now so the dashboard

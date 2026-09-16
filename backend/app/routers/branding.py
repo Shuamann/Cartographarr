@@ -10,6 +10,7 @@ admin only.
 
 from __future__ import annotations
 
+
 import logging
 import shutil
 from pathlib import Path
@@ -17,6 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app import audit
 from app.auth.deps import AdminUser
 from app.settings_store import current
 
@@ -72,7 +74,7 @@ def get_branding(kind: str):
 
 
 @router.put("/{kind}")
-async def put_branding(kind: str, _: AdminUser, file: UploadFile) -> dict:
+async def put_branding(kind: str, admin: AdminUser, file: UploadFile) -> dict:
     if kind not in KINDS:
         raise HTTPException(404, f"Unknown image. Try one of: {', '.join(sorted(KINDS))}")
 
@@ -93,17 +95,23 @@ async def put_branding(kind: str, _: AdminUser, file: UploadFile) -> dict:
         existing.unlink(missing_ok=True)
 
     (branding_dir() / f"{kind}{suffix}").write_bytes(body)
+    audit.record(
+        admin, "branding.upload", f"Uploaded a new {kind.replace('_', ' ')}",
+        target=kind, detail={"bytes": len(body), "type": file.content_type},
+    )
     return {"kind": kind, "bytes": len(body)}
 
 
 @router.delete("/{kind}")
-def clear_branding(kind: str, _: AdminUser) -> dict:
+def clear_branding(kind: str, admin: AdminUser) -> dict:
     if kind not in KINDS:
         raise HTTPException(404, "Unknown image")
     removed = False
     for existing in branding_dir().glob(f"{kind}.*"):
         existing.unlink(missing_ok=True)
         removed = True
+    if removed:
+        audit.record(admin, "branding.clear", f"Removed the {kind.replace('_', ' ')}", target=kind)
     return {"kind": kind, "removed": removed}
 
 
