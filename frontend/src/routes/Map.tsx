@@ -4,6 +4,8 @@ import { useApi, type MapPoint, type MapPoints } from "../lib/api";
 import FilterBar from "../components/FilterBar";
 import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
+import MediaPanel from "../components/MediaPanel";
+import type { HistoryPage } from "../lib/api";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
 type Place = MapPoint["properties"];
@@ -139,7 +141,16 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
           </div>
         )}
 
-        {selected && <Drawer place={selected} onClose={() => setSelected(null)} />}
+        {selected && (
+          <Drawer
+            place={selected}
+            onClose={() => setSelected(null)}
+            onFilterToTitle={(ratingKey, title) => {
+              setFilters({ ...filters, rating_key: ratingKey, ratingKeyLabel: title });
+              setSelected(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -481,7 +492,24 @@ function placeName(p: Place): string {
   return [p.city, p.region, p.country].filter(Boolean).join(", ") || "Unknown location";
 }
 
-function Drawer({ place, onClose }: { place: Place; onClose: () => void }) {
+function Drawer({
+  place,
+  onClose,
+  onFilterToTitle,
+}: {
+  place: Place;
+  onClose: () => void;
+  onFilterToTitle?: (ratingKey: number, title: string) => void;
+}) {
+  const [openMedia, setOpenMedia] = useState<number | null>(null);
+
+  // Matched on city, because the map aggregates by coordinate and history has
+  // no coordinate of its own. Two networks in one city therefore share a list,
+  // which the heading says out loud rather than pretending otherwise.
+  const recent = useApi<HistoryPage>(
+    place.city ? `/history?city=${encodeURIComponent(place.city)}&size=8` : null,
+  );
+
   return (
     <aside className="drawer">
       <header>
@@ -508,8 +536,50 @@ function Drawer({ place, onClose }: { place: Place; onClose: () => void }) {
         <Stat label="IPs" value={place.ips} />
       </dl>
 
+      {place.accuracy_km != null && (
+        <p className="muted small">
+          Placed within about {place.accuracy_km.toLocaleString()} km. GeoLite2 gives a city
+          centroid, not an address, so treat the pin as an area.
+        </p>
+      )}
+
       {place.last_play && (
-        <p className="muted">Last play {new Date(place.last_play * 1000).toLocaleString()}</p>
+        <p className="muted small">
+          Last play {new Date(place.last_play * 1000).toLocaleString()}
+        </p>
+      )}
+
+      {place.city && (
+        <>
+          <h3>Recently watched in {place.city}</h3>
+          {recent.data?.items.length === 0 && <p className="muted small">Nothing recorded.</p>}
+          <div className="mini-list">
+            {recent.data?.items.map((row) => (
+              <div key={row.row_id}>
+                <button
+                  className="mini as-row"
+                  onClick={() =>
+                    setOpenMedia(openMedia === row.rating_key ? null : row.rating_key)
+                  }
+                >
+                  <span>
+                    {row.full_title}
+                    <span className="muted small block">
+                      {row.player}
+                      {row.transcode_decision === "transcode" ? " · transcode" : ""}
+                    </span>
+                  </span>
+                  <span className="muted small">
+                    {row.started ? new Date(row.started * 1000).toLocaleDateString() : ""}
+                  </span>
+                </button>
+                {openMedia === row.rating_key && row.rating_key !== null && (
+                  <MediaPanel ratingKey={row.rating_key} onFilterToTitle={onFilterToTitle} />
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </aside>
   );

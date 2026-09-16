@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
+from app.services import capabilities
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 
@@ -181,9 +183,14 @@ def _deep_links(item: MediaItem, settings) -> dict[str, str]:
     links: dict[str, str] = {}
     kind = "tv" if item.media_type in ("show", "season", "episode") else "movie"
 
-    if settings.plex_machine_identifier:
+    # Tautulli reports the server id, so the Plex link works without anyone
+    # having to find and paste it. An explicit setting still wins.
+    server_id = settings.plex_machine_identifier or (
+        capabilities.get().get("machine_identifier") or ""
+    )
+    if server_id:
         links["plex"] = (
-            f"https://app.plex.tv/desktop/#!/server/{settings.plex_machine_identifier}"
+            f"https://app.plex.tv/desktop/#!/server/{server_id}"
             f"/details?key=%2Flibrary%2Fmetadata%2F{item.rating_key}"
         )
     if item.imdb_id:
@@ -195,6 +202,49 @@ def _deep_links(item: MediaItem, settings) -> dict[str, str]:
             f"?id_type={'show' if kind == 'tv' else 'movie'}"
         )
     return links
+
+
+@router.get("/media/{rating_key}/image")
+async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 450):
+    """Poster art, proxied through Tautulli.
+
+    Plex image URLs need a token, so the browser cannot fetch them directly and
+    handing the token to the browser would be worse. Tautulli already has one,
+    and pms_image_proxy resizes on the way through.
+    """
+    item = db.get(MediaItem, rating_key)
+    if item is None or not item.thumb:
+        raise HTTPException(404, "No artwork for that item")
+    if not is_configured():
+        raise HTTPException(409, "Tautulli is not configured")
+
+    settings = current()
+    base = (settings.tautulli_url or "").rstrip("/")
+    params = {
+        "apikey": settings.tautulli_api_key,
+        "cmd": "pms_image_proxy",
+        "img": item.thumb,
+        "width": width,
+        "height": height,
+        "fallback": "poster",
+    }
+
+    async with httpx.AsyncClient(
+        timeout=settings.tautulli_timeout, verify=settings.tautulli_verify_ssl
+    ) as client:
+        try:
+            upstream = await client.get(f"{base}/api/v2", params=params)
+            upstream.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"Could not fetch artwork: {exc}") from exc
+
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type", "image/jpeg"),
+        # Artwork for a given rating_key does not change, so let the browser
+        # keep it rather than re-proxying on every panel open.
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.get("/media/search")

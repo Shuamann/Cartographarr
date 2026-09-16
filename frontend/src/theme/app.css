@@ -976,3 +976,60 @@ label.locked .pill {
 .check:hover {
   color: var(--ink);
 }
+
+/* ---- media panel ------------------------------------------------------- */
+
+.media {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.poster {
+  width: 84px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+.media-body {
+  min-width: 0;
+}
+.media-body h3 {
+  margin: 0 0 2px;
+}
+.summary {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.linkrow {
+  gap: 6px;
+}
+.linkrow .ms-btn {
+  padding: 4px 9px;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.mini.as-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.mini.as-row:hover {
+  background: var(--surface-2);
+}
+.block {
+  display: block;
+}
