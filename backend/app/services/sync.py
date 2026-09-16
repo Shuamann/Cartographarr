@@ -12,7 +12,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import update, func, select, text
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
@@ -188,12 +188,21 @@ async def sync_users(client: TautulliClient) -> int:
         for r in data.get("data") or []
     ]
     rows = [r for r in rows if r["user_id"] is not None]
+    listed = {r["user_id"] for r in rows}
     with session_scope() as session:
         _upsert(session, User, rows)
-    return len(rows) + await sync_missing_users(client)
+        # Someone stored before who has dropped off the list since. Rows are
+        # never removed, since their history is still here, but what Tautulli
+        # now says about them is looked up again below.
+        dropped = {
+            uid
+            for (uid,) in session.execute(select(User.user_id)).all()
+            if uid not in listed
+        }
+    return len(rows) + await sync_missing_users(client, also=dropped)
 
 
-async def sync_missing_users(client: TautulliClient) -> int:
+async def sync_missing_users(client: TautulliClient, also: set[int] | None = None) -> int:
     """Users that history mentions but the user list does not.
 
     Tautulli leaves a user it has marked deleted out of get_users and
@@ -201,27 +210,34 @@ async def sync_missing_users(client: TautulliClient) -> int:
     still have access and be streaming. Without this they show as a bare
     number everywhere. get_user still answers for them, so each is looked up
     by id.
+
+    A user Tautulli has no record of at all still gets a row, so their history
+    stays reachable from the Users page rather than vanishing with them.
     """
     with session_scope() as session:
-        missing = [
+        missing = {
             uid
             for (uid,) in session.execute(
                 select(History.user_id)
                 .where(History.user_id.is_not(None), ~History.user_id.in_(select(User.user_id)))
                 .distinct()
             ).all()
-        ]
+        }
+    missing |= also or set()
     if not missing:
         return 0
 
     rows = []
-    for uid in missing:
+    for uid in sorted(missing):
         try:
             r = await client.call("get_user", user_id=uid) or {}
         except Exception as exc:  # noqa: BLE001 - one unknown user must not stop the sync
             log.debug("could not look up user %s: %s", uid, exc)
-            continue
-        if not r:
+            r = {}
+        if r.get("user_id") is None:
+            # Unknown to Tautulli. Only written if there is no row yet, so a
+            # name learned earlier is not overwritten with nothing.
+            rows.append({"user_id": uid, "deleted_in_tautulli": True, "_placeholder": True})
             continue
         rows.append(
             {
@@ -232,14 +248,23 @@ async def sync_missing_users(client: TautulliClient) -> int:
                 "thumb": r.get("user_thumb") or None,
                 "is_active": bool(_bool(r.get("is_active")) is not False),
                 "is_home_user": bool(_bool(r.get("is_home_user"))),
-                "last_seen": None,
                 "deleted_in_tautulli": bool(_bool(r.get("deleted_user"))),
             }
         )
+
+    known = [{k: v for k, v in r.items()} for r in rows if not r.get("_placeholder")]
+    unknown = [r["user_id"] for r in rows if r.get("_placeholder")]
+    with session_scope() as session:
+        if known:
+            _upsert(session, User, known)
+        existing = {uid for (uid,) in session.execute(select(User.user_id).where(User.user_id.in_(unknown))).all()}
+        for uid in unknown:
+            if uid in existing:
+                session.execute(update(User).where(User.user_id == uid).values(deleted_in_tautulli=True))
+            else:
+                session.add(User(user_id=uid, is_active=False, is_home_user=False, deleted_in_tautulli=True))
     if rows:
-        with session_scope() as session:
-            _upsert(session, User, rows)
-        log.info("filled in %d user(s) missing from Tautulli's user list", len(rows))
+        log.info("checked %d user(s) missing from Tautulli's user list", len(rows))
     return len(rows)
 
 

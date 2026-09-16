@@ -84,6 +84,7 @@ const AREA: Record<string, string> = {
   device: "Devices",
   rule: "Rules",
   travel: "Sharing signals",
+  user: "Users",
   account: "Accounts",
   auth: "Sign in",
   branding: "Branding",

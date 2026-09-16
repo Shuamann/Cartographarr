@@ -221,11 +221,20 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
     handing the token to the browser would be worse. Tautulli already has one,
     and pms_image_proxy resizes on the way through.
     """
-    item = db.get(MediaItem, rating_key)
-    if item is None:
-        raise HTTPException(404, "No artwork for that item")
     if not is_configured():
         raise HTTPException(409, "Tautulli is not configured")
+    item = db.get(MediaItem, rating_key)
+    if item is None:
+        # Playing now but newer than the last sync. The poster and the links
+        # load at the same moment, so this cannot rely on the links request
+        # having cached the item first.
+        from app.services.sync import cache_one
+
+        await cache_one(rating_key)
+        db.expire_all()
+        item = db.get(MediaItem, rating_key)
+    if item is None or item.title is None:
+        raise HTTPException(404, "No artwork for that item")
 
     art = item.poster_thumb
     if (
@@ -483,9 +492,69 @@ def location_plays(
 
 @router.get("/users")
 def users(db: Db) -> list:
-    stmt = select(User).order_by(User.friendly_name)
-    return [{c.name: getattr(u, c.name) for c in User.__table__.columns}
-            for u in db.execute(stmt).scalars().all()]
+    """Everyone who has ever had access, deleted or not.
+
+    Plays and the last play come from history here rather than from Tautulli,
+    which stops reporting last seen for anyone it has marked deleted.
+    """
+    stats = (
+        select(
+            History.user_id,
+            func.count().label("plays"),
+            func.max(History.started).label("last_play"),
+        )
+        .group_by(History.user_id)
+        .subquery()
+    )
+    stmt = (
+        select(User, stats.c.plays, stats.c.last_play)
+        .outerjoin(stats, stats.c.user_id == User.user_id)
+        .order_by(User.friendly_name)
+    )
+    return [
+        {
+            **{c.name: getattr(u, c.name) for c in User.__table__.columns},
+            "plays": plays or 0,
+            "last_seen": max(filter(None, (u.last_seen, last_play)), default=None),
+        }
+        for u, plays, last_play in db.execute(stmt).all()
+    ]
+
+
+@router.post("/users/{user_id}/restore-in-tautulli")
+async def restore_in_tautulli(user_id: int, admin: AdminUser, db: Db) -> dict:
+    """Clear Tautulli's deleted flag, which puts someone back in its user
+    list and dropdowns. History Tautulli erased when they were deleted does
+    not come back."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "No such user")
+    if not user.deleted_in_tautulli:
+        raise HTTPException(409, "Tautulli does not have them marked deleted")
+    if not user.username:
+        raise HTTPException(409, "Tautulli has no record of this account left to restore")
+
+    name = user.friendly_name or user.username
+    client = TautulliClient(current())
+    try:
+        await client.call("undelete_user", user_id=user_id, username=user.username)
+        after = await client.call("get_user", user_id=user_id) or {}
+    except Exception as exc:  # noqa: BLE001
+        audit.record(admin, "user.restore", f"Tried to restore {name} in Tautulli",
+                     target=str(user_id), result=f"failed: {exc}")
+        raise HTTPException(502, f"Tautulli refused: {exc}") from exc
+    finally:
+        await client.aclose()
+
+    if str(after.get("deleted_user")) not in ("0", "False", "false"):
+        audit.record(admin, "user.restore", f"Tried to restore {name} in Tautulli",
+                     target=str(user_id), result="failed: still marked deleted")
+        raise HTTPException(502, "Tautulli still has them marked deleted")
+
+    with session_scope() as session:
+        session.execute(update(User).where(User.user_id == user_id).values(deleted_in_tautulli=False))
+    audit.record(admin, "user.restore", f"Restored {name} in Tautulli", target=str(user_id))
+    return {"user_id": user_id, "deleted_in_tautulli": False}
 
 
 @router.get("/users/{user_id}")

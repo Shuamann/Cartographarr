@@ -1,32 +1,71 @@
 import { useState } from "react";
-import { useApi, type PlexUser, type UserDetail } from "../lib/api";
+import { useNav } from "../lib/nav";
+import { api, useApi, type PlexUser, type UserDetail } from "../lib/api";
 import DataTable, { type Column, duration, when } from "../components/DataTable";
 
+type Show = "all" | "current" | "deleted";
+
 export default function UsersRoute({ focusUserId }: { focusUserId?: number | null }) {
+  const nav = useNav();
   const users = useApi<PlexUser[]>("/users");
   const [selected, setSelected] = useState<number | null>(focusUserId ?? null);
+  const [show, setShow] = useState<Show>("all");
+  const [restoring, setRestoring] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function restore(u: PlexUser) {
+    const name = u.friendly_name || u.username;
+    if (!confirm(`Restore ${name} in Tautulli? They go back into Tautulli's user list. History Tautulli erased when they were deleted does not come back.`)) return;
+    setRestoring(u.user_id);
+    setError(null);
+    try {
+      await api.post(`/users/${u.user_id}/restore-in-tautulli`);
+      users.reload();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRestoring(null);
+    }
+  }
+
+  const all = users.data ?? [];
+  const deleted = all.filter((u) => u.deleted_in_tautulli).length;
+  const rows = all.filter((u) =>
+    show === "all" ? true : show === "deleted" ? u.deleted_in_tautulli : !u.deleted_in_tautulli,
+  );
 
   const columns: Column<PlexUser>[] = [
     {
       key: "name",
       label: "User",
-      sort: (u) => (u.friendly_name || u.username || "").toLowerCase(),
+      sort: (u) => (u.friendly_name || u.username || String(u.user_id)).toLowerCase(),
       render: (u) => (
         <>
-          {u.friendly_name || u.username}
+          {u.friendly_name || u.username || <span className="muted">Unknown account {u.user_id}</span>}
           {u.is_home_user && <span className="pill">home</span>}
-          {!u.is_active && <span className="pill warn">inactive</span>}
+          {!u.is_active && !u.deleted_in_tautulli && <span className="pill warn">inactive</span>}
           {u.deleted_in_tautulli && (
             <span
               className="pill warn"
-              title="Deleted from Tautulli's user list, so Tautulli hides them, but their plays are still recorded and the Plex account may still have access. Check Sharing."
+              title={
+                u.username
+                  ? "Deleted from Tautulli's user list, so Tautulli hides them from its lists and dropdowns. Their history here is kept, and the Plex account may still have access."
+                  : "Tautulli has no record of this account any more. Its history here is kept."
+              }
             >
-              deleted in Tautulli
+              {u.username ? "deleted in Tautulli" : "unknown to Tautulli"}
             </span>
           )}
           {u.email && <div className="muted small">{u.email}</div>}
         </>
       ),
+    },
+    {
+      key: "plays",
+      label: "Plays",
+      numeric: true,
+      sort: (u) => u.plays ?? 0,
+      render: (u) => (u.plays ?? 0).toLocaleString(),
     },
     {
       key: "last_seen",
@@ -35,20 +74,58 @@ export default function UsersRoute({ focusUserId }: { focusUserId?: number | nul
       sort: (u) => u.last_seen ?? 0,
       render: (u) => when(u.last_seen),
     },
+    ...(nav.isAdmin
+      ? [
+          {
+            key: "restore",
+            label: "",
+            render: (u: PlexUser) =>
+              u.deleted_in_tautulli && u.username ? (
+                <button
+                  className="tab"
+                  disabled={restoring === u.user_id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    restore(u);
+                  }}
+                >
+                  {restoring === u.user_id ? "Restoring\u2026" : "Restore in Tautulli"}
+                </button>
+              ) : null,
+          } as Column<PlexUser>,
+        ]
+      : []),
   ];
 
   return (
     <div className="pad scroll">
-      <h1>Users</h1>
+      <div className="row-between">
+        <h1>Users</h1>
+        <div className="segmented">
+          {(
+            [
+              ["all", `All ${all.length}`],
+              ["current", `Current ${all.length - deleted}`],
+              ["deleted", `Deleted in Tautulli ${deleted}`],
+            ] as [Show, string][]
+          ).map(([value, label]) => (
+            <button key={value} className={show === value ? "seg on" : "seg"} onClick={() => setShow(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="muted small">
-        People with access to the Plex server, from Tautulli. Separate from the accounts that sign
-        in to Cartographarr.
+        Everyone who has had access to the Plex server, including anyone Tautulli has since
+        deleted, so their history stays reachable. Separate from the accounts that sign in to
+        Cartographarr.
       </p>
 
       {users.error && <p className="note bad-note">{users.error}</p>}
+      {error && <p className="note bad-note">{error}</p>}
 
       <DataTable
-        rows={users.data ?? []}
+        rows={rows}
         columns={columns}
         rowKey={(u) => u.user_id}
         initialSort="last_seen"
