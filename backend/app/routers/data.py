@@ -215,17 +215,25 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
     and pms_image_proxy resizes on the way through.
     """
     item = db.get(MediaItem, rating_key)
-    if item is None or not item.thumb:
+    if item is None:
         raise HTTPException(404, "No artwork for that item")
     if not is_configured():
         raise HTTPException(409, "Tautulli is not configured")
+
+    art = item.poster_thumb
+    if art is None and item.media_type in ("episode", "season"):
+        # Cached before show posters were stored. Fetch the missing field once
+        # rather than making everyone resync years of metadata.
+        art = await _backfill_poster(item)
+    if not art:
+        raise HTTPException(404, "No artwork for that item")
 
     settings = current()
     base = (settings.tautulli_url or "").rstrip("/")
     params = {
         "apikey": settings.tautulli_api_key,
         "cmd": "pms_image_proxy",
-        "img": item.thumb,
+        "img": art,
         "width": width,
         "height": height,
         "fallback": "poster",
@@ -247,6 +255,26 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
         # keep it rather than re-proxying on every panel open.
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+async def _backfill_poster(item: MediaItem) -> str | None:
+    """Fill in the show poster for an episode cached before it was stored."""
+    client = TautulliClient(current())
+    try:
+        meta = await client.call("get_metadata", rating_key=item.rating_key) or {}
+    except Exception:  # noqa: BLE001 - fall back to the episode still
+        return item.thumb
+    finally:
+        await client.aclose()
+
+    art = meta.get("grandparent_thumb") or meta.get("parent_thumb") or None
+    if art:
+        with session_scope() as db:
+            stored = db.get(MediaItem, item.rating_key)
+            if stored is not None:
+                stored.grandparent_thumb = meta.get("grandparent_thumb") or None
+                stored.parent_thumb = meta.get("parent_thumb") or None
+    return art or item.thumb
 
 
 @router.get("/media/search")
@@ -297,22 +325,28 @@ async def media_detail(rating_key: int, db: Db) -> dict:
 @router.get("/location")
 def location_detail(
     db: Db,
+    lat: float | None = None,
+    lon: float | None = None,
     city: str | None = None,
     country: str | None = None,
     limit: int = Query(25, le=200),
 ) -> dict:
     """Who watched from a place, on what, from which addresses.
 
-    Matched on city rather than coordinates: the map aggregates by coordinate
-    but history stores only an IP, so the join runs through ip_locations. Two
-    networks in one city therefore land in one result, which the UI says out
-    loud rather than pretending the pin is exact.
+    Matched on coordinates, which is how the map groups pins. Keying on city
+    was wrong twice over: plenty of addresses resolve to a country with no city
+    at all, leaving the panel empty, and two separate networks in one city
+    would be merged even though they are drawn as one pin anyway.
     """
-    where = [IpLocation.city == city] if city else []
-    if country:
-        where.append(IpLocation.country == country)
+    where = []
+    if lat is not None and lon is not None:
+        where = [IpLocation.lat == lat, IpLocation.lon == lon]
+    elif city:
+        where = [IpLocation.city == city]
+        if country:
+            where.append(IpLocation.country == country)
     if not where:
-        raise HTTPException(400, "Give at least a city")
+        raise HTTPException(400, "Give coordinates, or a city")
 
     joined = select(History).join(IpLocation, IpLocation.ip == History.ip_address).where(*where)
 
@@ -398,6 +432,29 @@ def location_detail(
             }
             for a in addresses
         ],
+    }
+
+
+@router.get("/location/plays")
+def location_plays(
+    db: Db,
+    lat: float,
+    lon: float,
+    size: int = Query(12, le=200),
+) -> dict:
+    """What was watched from one pin, most recent first."""
+    stmt = (
+        select(History)
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(IpLocation.lat == lat, IpLocation.lon == lon)
+        .order_by(desc(History.started))
+        .limit(size)
+    )
+    return {
+        "items": [
+            {c.name: getattr(row, c.name) for c in History.__table__.columns}
+            for row in db.execute(stmt).scalars()
+        ]
     }
 
 

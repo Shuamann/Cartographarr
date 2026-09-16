@@ -45,6 +45,16 @@ export default function FilterBar({ value, onChange }: Props) {
         min={value.start || undefined}
         onChange={(e) => set("end", e.target.value)}
       />
+      {(value.start || value.end) && (
+        <button
+          className="icon-btn"
+          title="Clear the dates"
+          aria-label="Clear the dates"
+          onClick={() => onChange({ ...value, start: "", end: "" })}
+        >
+          ✕
+        </button>
+      )}
 
       <MultiSelect
         label="User"
@@ -99,11 +109,14 @@ export default function FilterBar({ value, onChange }: Props) {
 
       <SearchBox value={value.search} onChange={(v) => set("search", v)} />
 
-      {active > 0 && (
-        <button className="ms-btn clear-all" onClick={() => onChange(EMPTY)}>
-          Clear {active}
-        </button>
-      )}
+      <button
+        className="ms-btn clear-all"
+        onClick={() => onChange(EMPTY)}
+        disabled={active === 0}
+        title={active === 0 ? "No filters set" : "Clear every filter"}
+      >
+        Reset{active > 0 && <span className="ms-count">{active}</span>}
+      </button>
     </div>
   );
 }

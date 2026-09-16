@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApi, type Dashboard, type LiveSession } from "../lib/api";
 import TravelFlags from "../components/TravelFlags";
+import FilterBar from "../components/FilterBar";
+import { toQuery, type FilterState } from "../lib/filters";
 
 /* The landing screen.
  *
@@ -13,12 +15,17 @@ export default function DashboardRoute({
   onNavigate,
   isAdmin,
   onOpenUser,
+  filters,
+  onFilters,
 }: {
   onNavigate: (tab: string) => void;
   isAdmin?: boolean;
   onOpenUser?: (userId: number) => void;
+  filters: FilterState;
+  onFilters: (next: FilterState) => void;
 }) {
-  const data = useApi<Dashboard>("/dashboard");
+  const query = useMemo(() => toQuery(filters), [filters]);
+  const data = useApi<Dashboard>(`/dashboard${query}`);
 
   useEffect(() => {
     const timer = setInterval(data.reload, 15000);
@@ -33,7 +40,10 @@ export default function DashboardRoute({
   const live = d.live;
 
   return (
-    <div className="pad scroll dash">
+    <div className="dash-page">
+      <FilterBar value={filters} onChange={onFilters} />
+
+      <div className="pad scroll dash">
       <div className="row-between">
         <h1>{d.capabilities.server.name ?? "Cartographarr"}</h1>
         <span className="muted small">
@@ -54,7 +64,12 @@ export default function DashboardRoute({
           onClick={() => onNavigate("Activity")}
           accent
         />
-        <Card big={d.totals.plays} label="plays" sub="all time" onClick={() => onNavigate("Map")} />
+        <Card
+          big={d.totals.plays}
+          label="plays"
+          sub={d.filtered ? "matching filters" : "all time"}
+          onClick={() => onNavigate("Map")}
+        />
         <Card big={d.totals.users} label="users" sub={`${d.totals.devices} devices`} />
         <Card
           big={d.totals.hosting_ips}
@@ -125,6 +140,7 @@ export default function DashboardRoute({
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }

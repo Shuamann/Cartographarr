@@ -249,6 +249,8 @@ export type Dashboard = {
   top_users: { user_id: number; name: string; plays: number }[];
   recent_enforcement: Enforcement[];
   integrations: Record<string, unknown>;
+  /** True when the numbers above describe a filtered slice rather than everything. */
+  filtered: boolean;
 };
 
 export type AppUser = {

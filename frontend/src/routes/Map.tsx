@@ -11,8 +11,7 @@ import {
 } from "../lib/api";
 import { when } from "../components/DataTable";
 import FilterBar from "../components/FilterBar";
-import { toQuery } from "../lib/filters";
-import { useUrlFilters } from "../lib/useUrlFilters";
+import { toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
 import TimeScrubber from "../components/TimeScrubber";
@@ -40,17 +39,20 @@ export default function MapRoute({
   geoipReady,
   onOpenUser,
   onBlockDevice,
+  filters,
+  onFilters,
 }: {
   geoipReady: boolean;
   onOpenUser?: (userId: number) => void;
   onBlockDevice?: (machineId: string, label: string) => void;
+  filters: FilterState;
+  onFilters: (next: FilterState) => void;
 }) {
-  const [filters, setFilters] = useUrlFilters();
   const query = useMemo(() => toQuery(filters), [filters]);
 
   const points = useApi<MapPoints>(`/map/points${query}`);
   const summary = useApi<Summary>(`/stats/summary${query}`);
-  const [selected, setSelected] = useState<Place | null>(null);
+  const [selected, setSelected] = useState<MapPoint | null>(null);
 
   const canDrawMap = useMemo(webglAvailable, []);
   const [view, setView] = useState<View>(() => {
@@ -101,7 +103,7 @@ export default function MapRoute({
 
   return (
     <div className="map-page">
-      <FilterBar value={filters} onChange={setFilters} />
+      <FilterBar value={filters} onChange={onFilters} />
 
       <div className="viewbar">
         <div className="segmented">
@@ -228,11 +230,13 @@ export default function MapRoute({
 
         {selected && (
           <Drawer
-            place={selected}
+            place={selected.properties}
+            lat={selected.geometry.coordinates[1]}
+            lon={selected.geometry.coordinates[0]}
             onClose={() => setSelected(null)}
             onOpenUser={onOpenUser}
             onFilterToTitle={(ratingKey, title) => {
-              setFilters({ ...filters, rating_key: ratingKey, ratingKeyLabel: title });
+              onFilters({ ...filters, rating_key: ratingKey, ratingKeyLabel: title });
               setSelected(null);
             }}
           />
@@ -240,7 +244,7 @@ export default function MapRoute({
       </div>
 
       {view === "map" && canDrawMap && (
-        <TimeScrubber filters={filters} onChange={setFilters} />
+        <TimeScrubber filters={filters} onChange={onFilters} />
       )}
     </div>
   );
@@ -278,7 +282,7 @@ function MapCanvas({
   showHeat,
 }: {
   features: MapPoint[];
-  onSelect: (place: Place) => void;
+  onSelect: (feature: MapPoint) => void;
   showHistory: boolean;
   showAccuracy: boolean;
   liveSessions: LiveSession[];
@@ -308,8 +312,8 @@ function MapCanvas({
       m = new maplibregl.Map({
         container: container.current,
         style: buildMapStyle(),
-        center: [-98, 39],
-        zoom: 3,
+        center: lastView().center,
+        zoom: lastView().zoom,
         attributionControl: { compact: true },
       });
     } catch (err) {
@@ -334,6 +338,7 @@ function MapCanvas({
 
     return () => {
       observer.disconnect();
+      rememberView(m);
       m.remove();
       map.current = null;
       setReady(false);
@@ -536,7 +541,12 @@ function MapCanvas({
 
     m.on("click", "points", (e) => {
       const feature = e.features?.[0];
-      if (feature) onSelect(feature.properties as unknown as Place);
+      if (!feature) return;
+      onSelect({
+        type: "Feature",
+        geometry: feature.geometry as GeoJSON.Point,
+        properties: feature.properties as unknown as Place,
+      } as MapPoint);
     });
 
     for (const layer of ["clusters", "points"]) {
@@ -646,8 +656,8 @@ function LocationList({
   onSelect,
 }: {
   features: MapPoint[];
-  selected: Place | null;
-  onSelect: (place: Place) => void;
+  selected: MapPoint | null;
+  onSelect: (feature: MapPoint) => void;
 }) {
   const [sort, setSort] = useState<SortKey>("plays");
   const [asc, setAsc] = useState(false);
@@ -701,13 +711,12 @@ function LocationList({
           {rows.map((f) => {
             const p = f.properties;
             const key = `${f.geometry.coordinates[0]},${f.geometry.coordinates[1]}`;
-            const isSelected =
-              selected !== null && placeName(selected) === placeName(p) && selected.plays === p.plays;
+            const isSelected = selected !== null && selected.properties === p;
             return (
               <tr
                 key={key}
                 className={isSelected ? "loc-row selected" : "loc-row"}
-                onClick={() => onSelect(p)}
+                onClick={() => onSelect(f)}
               >
                 <td>
                   {placeName(p)}
@@ -738,29 +747,39 @@ function placeName(p: Place): string {
 
 function Drawer({
   place,
+  lat,
+  lon,
   onClose,
   onFilterToTitle,
   onOpenUser,
 }: {
   place: Place;
+  lat: number;
+  lon: number;
   onClose: () => void;
   onFilterToTitle?: (ratingKey: number, title: string) => void;
   onOpenUser?: (userId: number) => void;
 }) {
   const [openMedia, setOpenMedia] = useState<number | null>(null);
   const [tab, setTab] = useState<"who" | "watched">("who");
+  const [focus, setFocus] = useState<"users" | "devices" | "addresses" | null>(null);
 
-  // Matched on city, because the map aggregates by coordinate while history
-  // only stores an IP. Two networks in one city therefore share a result,
-  // which the note below says out loud rather than implying the pin is exact.
-  const detail = useApi<LocationDetail>(
-    place.city ? `/location?city=${encodeURIComponent(place.city)}` : null,
-  );
+  // Keyed on coordinates, the same way the map groups pins. Plenty of
+  // addresses resolve to a country with no city at all, and keying on city
+  // left those panels empty.
+  const detail = useApi<LocationDetail>(`/location?lat=${lat}&lon=${lon}`);
   const recent = useApi<HistoryPage>(
-    place.city && tab === "watched"
-      ? `/history?city=${encodeURIComponent(place.city)}&size=12`
-      : null,
+    tab === "watched" ? `/location/plays?lat=${lat}&lon=${lon}&size=12` : null,
   );
+
+  function show(which: "users" | "devices" | "addresses") {
+    setTab("who");
+    setFocus(which);
+    // Rendered first, then scrolled to.
+    requestAnimationFrame(() =>
+      document.getElementById(`loc-${which}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
 
   return (
     <aside className="drawer">
@@ -782,10 +801,10 @@ function Drawer({
       )}
 
       <dl className="stats">
-        <Stat label="Plays" value={place.plays} />
-        <Stat label="Users" value={place.users} />
-        <Stat label="Devices" value={place.devices} />
-        <Stat label="IPs" value={place.ips} />
+        <Stat label="Plays" value={place.plays} onClick={() => setTab("watched")} />
+        <Stat label="Users" value={place.users} onClick={() => show("users")} />
+        <Stat label="Devices" value={place.devices} onClick={() => show("devices")} />
+        <Stat label="IPs" value={place.ips} onClick={() => show("addresses")} />
       </dl>
 
       {place.accuracy_km != null && (
@@ -800,25 +819,23 @@ function Drawer({
         </p>
       )}
 
-      {place.city && (
-        <>
-          <div className="segmented drawer-tabs">
-            <button className={tab === "who" ? "seg on" : "seg"} onClick={() => setTab("who")}>
-              Who
-            </button>
-            <button
-              className={tab === "watched" ? "seg on" : "seg"}
-              onClick={() => setTab("watched")}
-            >
-              Watched
-            </button>
-          </div>
+      <div className="segmented drawer-tabs">
+        <button className={tab === "who" ? "seg on" : "seg"} onClick={() => setTab("who")}>
+          Who
+        </button>
+        <button
+          className={tab === "watched" ? "seg on" : "seg"}
+          onClick={() => setTab("watched")}
+        >
+          Watched
+        </button>
+      </div>
 
-          {tab === "who" && (
+      {tab === "who" && (
             <>
               {detail.error && <p className="note bad-note">{detail.error}</p>}
 
-              <h3>Users</h3>
+          <h3 id="loc-users" className={focus === "users" ? "lit" : undefined}>Users</h3>
               <div className="mini-list">
                 {detail.data?.users.map((u) => (
                   <div key={u.user_id ?? u.name} className="mini">
@@ -837,7 +854,7 @@ function Drawer({
                 ))}
               </div>
 
-              <h3>Devices</h3>
+          <h3 id="loc-devices" className={focus === "devices" ? "lit" : undefined}>Devices</h3>
               <div className="mini-list">
                 {detail.data?.devices.map((d) => (
                   <div key={d.machine_id} className="mini">
@@ -852,7 +869,7 @@ function Drawer({
                 ))}
               </div>
 
-              <h3>Addresses</h3>
+          <h3 id="loc-addresses" className={focus === "addresses" ? "lit" : undefined}>Addresses</h3>
               <div className="mini-list">
                 {detail.data?.addresses.map((a) => (
                   <div key={a.ip_address} className="mini">
@@ -868,7 +885,7 @@ function Drawer({
             </>
           )}
 
-          {tab === "watched" && (
+      {tab === "watched" && (
             <>
               {recent.data?.items.length === 0 && <p className="muted small">Nothing recorded.</p>}
               <div className="mini-list">
@@ -897,8 +914,6 @@ function Drawer({
                   </div>
                 ))}
               </div>
-            </>
-          )}
         </>
       )}
     </aside>
@@ -1027,9 +1042,25 @@ function LiveFlyout({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  onClick?: () => void;
+}) {
   return (
-    <div className="stat">
+    <div
+      className={onClick ? "stat clickable" : "stat"}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) onClick();
+      }}
+    >
       <dt>{label}</dt>
       <dd>{value.toLocaleString()}</dd>
     </div>
@@ -1048,6 +1079,35 @@ function Tile({ label, value }: { label: string; value: number }) {
 /* Pin colours come from the same tokens as the basemap. */
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+/* Where the map was last looked at.
+ *
+ * The map is unmounted when another tab is opened, so without this every visit
+ * snapped back to the whole of North America and any zooming had to be redone.
+ */
+const VIEW_KEY = "map.view";
+
+function lastView(): { center: [number, number]; zoom: number } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "");
+    if (Array.isArray(saved?.center) && typeof saved?.zoom === "number") return saved;
+  } catch {
+    /* nothing saved, or unreadable */
+  }
+  return { center: [-98, 39], zoom: 3 };
+}
+
+function rememberView(map: maplibregl.Map): void {
+  try {
+    const center = map.getCenter();
+    localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ center: [center.lng, center.lat], zoom: map.getZoom() }),
+    );
+  } catch {
+    /* storage unavailable, the default view is fine */
+  }
+}
 
 function emptyCollection(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] };

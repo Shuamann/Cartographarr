@@ -13,6 +13,7 @@ from app.actions import registry
 from app.integrations import arr, notify, seerr, tmdb
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
+from app.filters import Filters
 from app.models import (
     Device,
     EnforcementLog,
@@ -39,6 +40,7 @@ def get_session():
 
 
 Db = Annotated[Session, Depends(get_session)]
+Filt = Annotated[Filters, Depends()]
 
 # What the UI needs from a live session. get_activity returns ~250 fields per
 # stream; sending them all would make the 5-second poll heavier than the map.
@@ -324,35 +326,54 @@ def review_flag(flag_id: int, _: AdminUser, status: str = Body(..., embed=True))
 # ---- dashboard -------------------------------------------------------------
 
 @router.get("/dashboard")
-async def dashboard(db: Db) -> dict:
+async def dashboard(db: Db, filters: Filt) -> dict:
     """Everything the landing screen needs, composed in one call.
 
     Deliberately one endpoint rather than a widget-per-request: the layout is
     still being worked out, and a dashboard that fans out to eight endpoints
     gets slow and hard to change. New sources get added to this payload.
     """
+    # Everything counted from history respects the filters, so the dashboard
+    # answers the same question the map and tables are answering. Live
+    # activity, capabilities and the device backlog deliberately do not: they
+    # describe right now, not a slice of the past.
+    def filtered(*columns):
+        stmt = select(*columns).select_from(History)
+        if filters.needs_location_join:
+            stmt = stmt.join(IpLocation, IpLocation.ip == History.ip_address)
+        conditions = filters.conditions()
+        return stmt.where(*conditions) if conditions else stmt
+
     totals = db.execute(
-        select(
-            select(func.count()).select_from(History).scalar_subquery(),
-            select(func.count()).select_from(User).scalar_subquery(),
-            select(func.count()).select_from(Device).scalar_subquery(),
-            select(func.count()).select_from(MediaItem).where(
-                MediaItem.title.is_not(None)
-            ).scalar_subquery(),
-            select(func.count()).select_from(IpLocation).scalar_subquery(),
-            select(func.count()).select_from(IpLocation).where(
-                IpLocation.is_hosting.is_(True)
-            ).scalar_subquery(),
+        filtered(
+            func.count(),
+            func.count(func.distinct(History.user_id)),
+            func.count(func.distinct(History.machine_id)),
+            func.count(func.distinct(History.rating_key)),
+            func.count(func.distinct(History.ip_address)),
         )
     ).one()
 
+    # Always joins, so a location filter can be applied here too. Kept
+    # separate from the totals above because those must not join and lose rows
+    # for addresses that were never geocoded.
+    hosting_ips = db.execute(
+        select(func.count(func.distinct(History.ip_address)))
+        .select_from(History)
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(*filters.conditions(), IpLocation.is_hosting.is_(True))
+    ).scalar_one()
+
     day = func.date(History.started, "unixepoch", "localtime").label("day")
     recent = db.execute(
-        select(day, func.count().label("plays")).group_by(day).order_by(desc(day)).limit(30)
+        filtered(day, func.count().label("plays"))
+        .group_by(day)
+        .order_by(desc(day))
+        .limit(30)
     ).all()
 
     top_users = db.execute(
-        select(
+        filtered(
             History.user_id,
             func.coalesce(User.friendly_name, User.username).label("name"),
             func.count().label("plays"),
@@ -389,10 +410,11 @@ async def dashboard(db: Db) -> dict:
             "devices": totals[2],
             "media_items": totals[3],
             "ip_locations": totals[4],
-            "hosting_ips": totals[5],
+            "hosting_ips": hosting_ips,
             "new_devices": new_devices,
             "travel_flags": open_flags,
         },
+        "filtered": bool(filters.conditions()),
         "live": {
             "stream_count": live.get("stream_count") or 0,
             "transcode_count": live.get("transcode_count") or 0,

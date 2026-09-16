@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { useApi, useUserNames, type HistoryPage, type HistoryRow } from "../lib/api";
 import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
-import { useUrlFilters } from "../lib/useUrlFilters";
 import { when } from "../components/DataTable";
 
 const SIZE = 100;
@@ -25,12 +24,15 @@ const SORTABLE: Record<string, string> = {
 export default function HistoryRoute({
   onOpenMedia,
   onOpenUser,
+  filters,
+  onFilters,
 }: {
   onOpenMedia?: (row: HistoryRow) => void;
   onOpenUser?: (userId: number) => void;
+  filters: FilterState;
+  onFilters: (next: FilterState) => void;
 }) {
   const names = useUserNames();
-  const [filters, setFilters] = useUrlFilters();
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("started");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
@@ -41,7 +43,7 @@ export default function HistoryRoute({
 
   // Any filter change invalidates the page number.
   function changeFilters(next: FilterState) {
-    setFilters(next);
+    onFilters(next);
     setPage(1);
   }
 

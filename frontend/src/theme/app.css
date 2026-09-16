@@ -995,6 +995,11 @@ label.locked .pill {
 }
 .poster {
   width: 84px;
+  /* Fixed shape with cover, so a 16:9 still never gets stretched into a
+     poster slot. Cover art is what the API prefers, but live TV and the odd
+     item still have nothing but a screen grab. */
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
   flex: 0 0 auto;
   border-radius: var(--radius-sm);
   background: var(--surface-3);
@@ -1109,6 +1114,10 @@ label.locked .pill {
   border-radius: var(--radius-sm);
   background: var(--surface-3);
   object-fit: cover;
+}
+.flyout .stream-poster {
+  width: 60px;
+  height: 90px;
 }
 
 .stream-body {
@@ -1310,4 +1319,38 @@ label.locked .pill {
 
 .danger-editor {
   border-color: var(--danger);
+}
+
+.dash-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.icon-btn {
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
+.stat.clickable {
+  cursor: pointer;
+}
+.stat.clickable:hover {
+  border-color: var(--accent);
+}
+
+/* Briefly marks the section a stat tile jumped to. */
+.drawer h3.lit {
+  color: var(--accent);
 }

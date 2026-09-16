@@ -128,6 +128,15 @@ class MediaItem(Base):
     full_title: Mapped[str | None] = mapped_column(Text)
     year: Mapped[int | None] = mapped_column(Integer)
     thumb: Mapped[str | None] = mapped_column(Text)
+    """For an episode this is the episode still, a 16:9 screen grab, not a
+    poster. Use poster_thumb when you want cover art."""
+
+    grandparent_thumb: Mapped[str | None] = mapped_column(Text)
+    """The show's poster, for episodes."""
+
+    parent_thumb: Mapped[str | None] = mapped_column(Text)
+    """The season's poster, for episodes."""
+
     art: Mapped[str | None] = mapped_column(Text)
     duration: Mapped[int | None] = mapped_column(Integer)
     content_rating: Mapped[str | None] = mapped_column(String(32))
@@ -138,6 +147,18 @@ class MediaItem(Base):
     radarr_slug: Mapped[str | None] = mapped_column(String(255))
     sonarr_slug: Mapped[str | None] = mapped_column(String(255))
     synced_at: Mapped[datetime | None] = mapped_column()
+
+    @property
+    def poster_thumb(self) -> str | None:
+        """Cover art, whatever the media type.
+
+        An episode's own thumb is a still from the episode, which looks wrong
+        stretched into a poster slot, so the show's poster is preferred and the
+        season's is the fallback.
+        """
+        if self.media_type in ("episode", "season"):
+            return self.grandparent_thumb or self.parent_thumb or self.thumb
+        return self.thumb
 
 
 class History(Base):

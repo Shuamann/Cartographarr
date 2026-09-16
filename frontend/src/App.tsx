@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
 import { brandingUrl, useBranding } from "./lib/useBranding";
+import { useUrlFilters } from "./lib/useUrlFilters";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
 import Login from "./routes/Login";
@@ -84,6 +85,9 @@ function SignedIn({
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
   const [prefill, setPrefill] = useState<(Partial<Rule> & { name: string }) | undefined>();
+  // Held here rather than inside each route, so the same filters apply
+  // wherever you go rather than resetting on every tab change.
+  const [filters, setFilters] = useUrlFilters();
   const [focusUser, setFocusUser] = useState<number | null>(null);
 
   function openUser(userId: number) {
@@ -144,6 +148,8 @@ function SignedIn({
                 onNavigate={(t) => setTab(t as Tab)}
                 isAdmin={isAdmin}
                 onOpenUser={openUser}
+                filters={filters}
+                onFilters={setFilters}
               />
             )}
             {active === "Map" && (
@@ -151,10 +157,14 @@ function SignedIn({
                 geoipReady={setup.data?.geoip_ready ?? false}
                 onOpenUser={openUser}
                 onBlockDevice={isAdmin ? blockMachine : undefined}
+                filters={filters}
+                onFilters={setFilters}
               />
             )}
             {active === "Activity" && <Activity />}
-            {active === "History" && <History onOpenUser={openUser} />}
+            {active === "History" && (
+              <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
+            )}
             {active === "Users" && <Users focusUserId={focusUser} key={focusUser ?? "users"} />}
             {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}

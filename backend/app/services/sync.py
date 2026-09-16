@@ -390,6 +390,8 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
             "full_title": meta.get("full_title") or None,
             "year": _int(meta.get("year")),
             "thumb": meta.get("thumb") or None,
+            "grandparent_thumb": meta.get("grandparent_thumb") or None,
+            "parent_thumb": meta.get("parent_thumb") or None,
             "art": meta.get("art") or None,
             "duration": _int(meta.get("duration")),
             "content_rating": meta.get("content_rating") or None,
