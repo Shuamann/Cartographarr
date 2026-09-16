@@ -7,6 +7,7 @@ const LINKS: { key: string; label: string }[] = [
   { key: "trakt", label: "Trakt" },
   { key: "radarr", label: "Radarr" },
   { key: "sonarr", label: "Sonarr" },
+  { key: "seerr", label: "Seerr" },
 ];
 
 /* Everything known about one title, plus the ways out to other services.
@@ -48,6 +49,15 @@ export default function MediaPanel({
         <p className="muted small">
           {[m.year, m.media_type, m.content_rating].filter(Boolean).join(" · ")}
         </p>
+
+        {m.request?.requested_by && (
+          <p className="muted small">
+            Requested by {m.request.requested_by}
+            {m.request.requested_at
+              ? ` on ${new Date(m.request.requested_at).toLocaleDateString()}`
+              : ""}
+          </p>
+        )}
 
         <div className="row wrap linkrow">
           {links.map((l) => (

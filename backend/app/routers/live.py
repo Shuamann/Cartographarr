@@ -10,7 +10,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.actions import registry
-from app.integrations import arr, notify
+from app.integrations import arr, notify, seerr
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.models import (
@@ -251,7 +251,13 @@ async def run_rules_now(_: AdminUser) -> dict:
 
 INTEGRATIONS = {
     i.name: i
-    for i in (arr.radarr, arr.sonarr, notify.apprise_notifier, notify.webhook_notifier)
+    for i in (
+        arr.radarr,
+        arr.sonarr,
+        seerr.seerr,
+        notify.apprise_notifier,
+        notify.webhook_notifier,
+    )
 }
 
 

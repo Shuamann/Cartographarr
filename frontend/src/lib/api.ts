@@ -349,6 +349,11 @@ export type MediaDetail = {
   tmdb_id: string | null;
   tvdb_id: string | null;
   links: Record<string, string>;
+  request: {
+    requested_by: string | null;
+    requested_at: string | null;
+    status: number | null;
+  } | null;
 };
 
 export type LocationDetail = {

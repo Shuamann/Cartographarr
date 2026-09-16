@@ -13,7 +13,7 @@ from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
-from app.integrations import arr
+from app.integrations import arr, seerr
 from app.services import capabilities
 from app.services.sync import geocode_ips
 from app.settings_store import current, is_configured
@@ -283,9 +283,14 @@ async def media_detail(rating_key: int, db: Db) -> dict:
         if link:
             links[service.name] = link
 
+    link = seerr.seerr.link_for(item)
+    if link:
+        links["seerr"] = link
+
     return {
         **{c.name: getattr(item, c.name) for c in MediaItem.__table__.columns},
         "links": links,
+        "request": await seerr.seerr.request_for(item),
     }
 
 

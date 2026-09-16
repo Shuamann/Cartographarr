@@ -31,6 +31,11 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
     keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
   },
   {
+    title: "Seerr",
+    note: "Optional. Shows who requested a title and links to it. Seerr is what Overseerr and Jellyseerr merged into; an older Overseerr should work too.",
+    keys: ["seerr_url", "seerr_api_key"],
+  },
+  {
     title: "Notifications",
     note: "Optional. One Apprise URL per line or comma separated, which covers Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
     keys: ["apprise_urls", "webhook_url"],
@@ -74,6 +79,8 @@ const LABELS: Record<string, string> = {
   radarr_api_key: "Radarr API key",
   sonarr_url: "Sonarr URL",
   sonarr_api_key: "Sonarr API key",
+  seerr_url: "Seerr URL",
+  seerr_api_key: "Seerr API key",
   apprise_urls: "Apprise URLs",
   webhook_url: "Webhook URL",
   session_ttl_hours: "Stay signed in for (hours)",

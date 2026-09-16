@@ -131,11 +131,17 @@ def as_map() -> dict[str, Any]:
 def _integration_states() -> dict[str, str]:
     """Just configured or not. A reachability check would mean network calls on
     every page load, and the Settings page tests properly on demand."""
-    from app.integrations import arr, notify
+    from app.integrations import arr, notify, seerr
 
     return {
         i.name: ("ok" if i.configured() else "unconfigured")
-        for i in (arr.radarr, arr.sonarr, notify.apprise_notifier, notify.webhook_notifier)
+        for i in (
+            arr.radarr,
+            arr.sonarr,
+            seerr.seerr,
+            notify.apprise_notifier,
+            notify.webhook_notifier,
+        )
     }
 
 
