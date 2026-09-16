@@ -394,6 +394,34 @@ class TravelFlag(Base):
     status: Mapped[str] = mapped_column(String(16), default="new")
     created_at: Mapped[datetime | None] = mapped_column()
 
+    # Where each end was, as a place an ignore pattern can name: the network
+    # for a VPN, since a VPN exit moves between cities, and the city otherwise.
+    from_key: Mapped[str | None] = mapped_column(String(255))
+    to_key: Mapped[str | None] = mapped_column(String(255))
+    ignore_id: Mapped[int | None] = mapped_column(Integer)
+    """Set when an ignore pattern closed this flag, rather than a person."""
+
+
+class SignalIgnore(Base):
+    """A sharing signal that is expected for one person.
+
+    A second home, a phone on mobile data, a VPN they always use. Matches the
+    same user moving between the same two places in either direction, and
+    closes those signals as they are found, past and future.
+    """
+
+    __tablename__ = "signal_ignores"
+    __table_args__ = (Index("ix_signal_ignore_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    key_a: Mapped[str] = mapped_column(String(255))
+    key_b: Mapped[str] = mapped_column(String(255))
+    label: Mapped[str | None] = mapped_column(String(255))
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime | None] = mapped_column()
+
 
 class AuditLog(Base):
     """Every change someone made through the app, and every sign in.

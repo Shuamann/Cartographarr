@@ -789,24 +789,238 @@ def travel_flags(db: Db, status: str | None = None, limit: int = 100) -> list[di
     ]
 
 
+def _flag_keys(db: Session, flag: TravelFlag) -> tuple[str, str]:
+    """A flag's place keys, worked out and stored if it predates them."""
+    from app.services import travel
+
+    if flag.from_key and flag.to_key:
+        return flag.from_key, flag.to_key
+    places = {
+        loc.ip: loc
+        for loc in db.execute(select(IpLocation).where(IpLocation.ip.in_([flag.from_ip, flag.to_ip]))).scalars()
+    }
+
+    def key(ip: str | None, city: str | None) -> str:
+        loc = places.get(ip)
+        return travel.place_key(
+            (loc.city if loc else None) or city, loc.asn_org if loc else None, loc.is_hosting if loc else None, ip
+        )
+
+    flag.from_key = key(flag.from_ip, flag.from_city)
+    flag.to_key = key(flag.to_ip, flag.to_city)
+    return flag.from_key, flag.to_key
+
+
+def _key_label(key: str) -> str:
+    kind, _, value = key.partition(":")
+    return {"network": f"the {value} network", "city": value, "ip": f"address {value}"}.get(kind, key)
+
+
+@router.get("/travel-flags/{flag_id}")
+def travel_flag_detail(flag_id: int, db: Db) -> dict:
+    """Both plays behind a signal, where each was, and what separates them."""
+    from app.models import SignalIgnore
+
+    flag = db.get(TravelFlag, flag_id)
+    if flag is None:
+        raise HTTPException(404, "No such signal")
+    user = db.get(User, flag.user_id)
+    from_key, to_key = _flag_keys(db, flag)
+    # Signals found before places were recorded get theirs now, so the count
+    # of similar signals below is not missing the older ones.
+    for other in db.execute(
+        select(TravelFlag).where(TravelFlag.user_id == flag.user_id, TravelFlag.from_key.is_(None))
+    ).scalars():
+        _flag_keys(db, other)
+    db.commit()
+
+    def side(history_id: int, ip: str | None) -> dict:
+        play = db.get(History, history_id)
+        loc = db.get(IpLocation, ip) if ip else None
+        return {
+            "play": None
+            if play is None
+            else {c.name: getattr(play, c.name) for c in History.__table__.columns},
+            "place": None
+            if loc is None
+            else {
+                "city": loc.city,
+                "region": loc.region,
+                "country": loc.country,
+                "lat": loc.lat,
+                "lon": loc.lon,
+                "accuracy_km": loc.accuracy_radius,
+                "asn_org": loc.asn_org,
+                "is_hosting": loc.is_hosting,
+            },
+        }
+
+    first = side(flag.from_history_id, flag.from_ip)
+    second = side(flag.to_history_id, flag.to_ip)
+
+    # How the two plays sit in time: an overlap for a concurrent pair, a gap
+    # otherwise, both in seconds so the page can word it.
+    from app.services import travel
+
+    a, b = first["play"] or {}, second["play"] or {}
+    # The same end the detection uses: when the first play was last watched,
+    # not when a paused session finally closed.
+    a_end = a.get("stopped") or a.get("started")
+    if a_end and a.get("play_duration") and a.get("started"):
+        a_end = min(a_end, a["started"] + a["play_duration"] + travel.PAUSE_SLACK_SECONDS)
+    gap = (b.get("started") - a_end) if (b.get("started") and a_end) else None
+
+    a_key, b_key = travel.pair(from_key, to_key)
+    pattern = db.execute(
+        select(SignalIgnore).where(
+            SignalIgnore.user_id == flag.user_id, SignalIgnore.key_a == a_key, SignalIgnore.key_b == b_key
+        )
+    ).scalar_one_or_none()
+    similar = db.execute(
+        select(func.count()).select_from(TravelFlag).where(
+            TravelFlag.user_id == flag.user_id,
+            TravelFlag.id != flag.id,
+            ((TravelFlag.from_key == from_key) & (TravelFlag.to_key == to_key))
+            | ((TravelFlag.from_key == to_key) & (TravelFlag.to_key == from_key)),
+        )
+    ).scalar_one()
+
+    return {
+        **{c.name: getattr(flag, c.name) for c in TravelFlag.__table__.columns},
+        "user_name": (user.friendly_name or user.username) if user else str(flag.user_id),
+        "from": first,
+        "to": second,
+        "gap_seconds": gap,
+        "pattern_label": f"{_key_label(from_key)} and {_key_label(to_key)}",
+        "ignore": None
+        if pattern is None
+        else {c.name: getattr(pattern, c.name) for c in SignalIgnore.__table__.columns},
+        "similar": similar,
+    }
+
+
 @router.patch("/travel-flags/{flag_id}")
-def review_flag(flag_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
+def review_flag(
+    flag_id: int,
+    admin: AdminUser,
+    status: str = Body(..., embed=True),
+    reason: str = Body("", embed=True),
+) -> dict:
+    """Reviewed closes this one signal. Ignored also records a pattern, so the
+    same person moving between the same two places is closed automatically,
+    now and in future. New reopens a signal a person closed."""
+    from app.models import SignalIgnore
+    from app.services import travel
+
     if status not in {"new", "reviewed", "ignored"}:
         raise HTTPException(400, "Status must be new, reviewed or ignored")
+
+    closed_too = 0
     with session_scope() as db:
         flag = db.get(TravelFlag, flag_id)
         if flag is None:
             raise HTTPException(404, "No such flag")
         before = flag.status
-        flag.status = status
         user = db.get(User, flag.user_id)
         who = (user.friendly_name or user.username) if user else str(flag.user_id)
+        from_key, to_key = _flag_keys(db, flag)
+        label = f"{_key_label(from_key)} and {_key_label(to_key)}"
+
+        flag.status = status
+        flag.ignore_id = None
+
+        if status == "ignored":
+            a_key, b_key = travel.pair(from_key, to_key)
+            pattern = db.execute(
+                select(SignalIgnore).where(
+                    SignalIgnore.user_id == flag.user_id, SignalIgnore.key_a == a_key, SignalIgnore.key_b == b_key
+                )
+            ).scalar_one_or_none()
+            if pattern is None:
+                pattern = SignalIgnore(
+                    user_id=flag.user_id,
+                    key_a=a_key,
+                    key_b=b_key,
+                    label=label,
+                    reason=reason.strip() or None,
+                    created_by=admin.username,
+                    created_at=datetime.now(UTC),
+                )
+                db.add(pattern)
+                db.flush()
+            flag.ignore_id = pattern.id
+
+            # Earlier open signals with the same pattern close now, rather than
+            # each needing the same click.
+            for other in db.execute(
+                select(TravelFlag).where(
+                    TravelFlag.user_id == flag.user_id, TravelFlag.status == "new", TravelFlag.id != flag.id
+                )
+            ).scalars():
+                if travel.pair(*_flag_keys(db, other)) == (a_key, b_key):
+                    other.status = "ignored"
+                    other.ignore_id = pattern.id
+                    closed_too += 1
+
     verb = {"reviewed": "Reviewed", "ignored": "Ignored", "new": "Reopened"}[status]
+    summary = f"{verb} a sharing signal for {who}"
+    if status == "ignored":
+        summary = f"Ignored signals for {who} between {label}" + (f", closing {closed_too} more" if closed_too else "")
     audit.record(
-        admin, "travel.review", f"{verb} a sharing signal for {who}",
-        target=str(flag_id), detail={"before": before, "after": status, "user_id": flag.user_id},
+        admin, "travel.review", summary, target=str(flag_id),
+        detail={"before": before, "after": status, "user_id": flag.user_id, "pattern": label, "closed_too": closed_too},
     )
-    return {"id": flag_id, "status": status}
+    return {"id": flag_id, "status": status, "closed_too": closed_too}
+
+
+@router.get("/signal-ignores")
+def list_signal_ignores(db: Db) -> list[dict]:
+    from app.models import SignalIgnore
+
+    rows = db.execute(select(SignalIgnore).order_by(desc(SignalIgnore.created_at))).scalars().all()
+    names = {
+        u.user_id: u.friendly_name or u.username
+        for u in db.execute(select(User).where(User.user_id.in_([r.user_id for r in rows]))).scalars()
+    }
+    counts = dict(
+        db.execute(
+            select(TravelFlag.ignore_id, func.count()).where(TravelFlag.ignore_id.is_not(None)).group_by(TravelFlag.ignore_id)
+        ).all()
+    )
+    return [
+        {
+            **{c.name: getattr(r, c.name) for c in SignalIgnore.__table__.columns},
+            "user_name": names.get(r.user_id) or str(r.user_id),
+            "closed": counts.get(r.id, 0),
+        }
+        for r in rows
+    ]
+
+
+@router.delete("/signal-ignores/{ignore_id}")
+def delete_signal_ignore(ignore_id: int, admin: AdminUser) -> dict:
+    """Stop ignoring a pattern. Every signal it closed reopens, including the
+    one it was created from; signals a person marked reviewed stay reviewed."""
+    from app.models import SignalIgnore
+
+    with session_scope() as db:
+        pattern = db.get(SignalIgnore, ignore_id)
+        if pattern is None:
+            raise HTTPException(404, "No such pattern")
+        label = pattern.label
+        user = db.get(User, pattern.user_id)
+        who = (user.friendly_name or user.username) if user else str(pattern.user_id)
+        reopened = 0
+        for flag in db.execute(select(TravelFlag).where(TravelFlag.ignore_id == ignore_id)).scalars():
+            flag.status = "new"
+            flag.ignore_id = None
+            reopened += 1
+        db.delete(pattern)
+    audit.record(
+        admin, "travel.unignore", f"Stopped ignoring signals for {who} between {label}, reopening {reopened}",
+        target=str(ignore_id),
+    )
+    return {"deleted": ignore_id, "reopened": reopened}
 
 
 # ---- dashboard -------------------------------------------------------------

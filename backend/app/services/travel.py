@@ -17,7 +17,7 @@ from sqlalchemy.dialects.sqlite import insert
 
 from app.config import Settings
 from app.db import session_scope
-from app.models import History, IpLocation, TravelFlag
+from app.models import History, IpLocation, SignalIgnore, TravelFlag
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,10 @@ EARTH_KM = 6371.0088
 CONCURRENT_WINDOW_SECONDS = 120
 """Below this gap, two plays count as happening at the same time."""
 
+PAUSE_SLACK_SECONDS = 600
+"""Allowed on top of watch time for ordinary pauses when working out when a
+play last had anyone watching it."""
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -33,6 +37,34 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * EARTH_KM * math.asin(math.sqrt(a))
+
+
+def place_key(city: str | None, asn_org: str | None, is_hosting: bool | None, ip: str | None) -> str:
+    """What one end of a signal is, for matching an ignore pattern.
+
+    A VPN or hosting network is named by the network: its exit can land in a
+    different city every day, and ignoring "their VPN" should keep working.
+    Anywhere else is named by the city. An address with neither falls back to
+    the address itself, which is narrow but never matches too much.
+    """
+    if is_hosting and asn_org:
+        return f"network:{asn_org}"
+    if city:
+        return f"city:{city}"
+    return f"ip:{ip}"
+
+
+def pair(a: str, b: str) -> tuple[str, str]:
+    """Order-free, so moving either way between two places is one pattern."""
+    return (a, b) if a <= b else (b, a)
+
+
+def ignore_patterns() -> dict[tuple[int, str, str], int]:
+    with session_scope() as db:
+        return {
+            (i.user_id, i.key_a, i.key_b): i.id
+            for i in db.execute(select(SignalIgnore)).scalars()
+        }
 
 
 def find_flags(settings: Settings) -> int:
@@ -44,12 +76,14 @@ def find_flags(settings: Settings) -> int:
                 History.user_id,
                 History.started,
                 History.stopped,
+                History.play_duration,
                 History.ip_address,
                 IpLocation.lat,
                 IpLocation.lon,
                 IpLocation.city,
                 IpLocation.accuracy_radius,
                 IpLocation.is_hosting,
+                IpLocation.asn_org,
             )
             .join(IpLocation, IpLocation.ip == History.ip_address)
             .where(
@@ -63,6 +97,7 @@ def find_flags(settings: Settings) -> int:
 
     found: list[dict] = []
     previous_by_user: dict[int, tuple] = {}
+    patterns = ignore_patterns()
 
     for row in rows:
         last = previous_by_user.get(row.user_id)
@@ -83,7 +118,16 @@ def find_flags(settings: Settings) -> int:
 
         # Measured from the end of the earlier play, since someone can travel
         # while it is running. Using its start would invent journeys.
+        #
+        # The end is when it was last actually watched, not when the session
+        # closed. A phone left paused keeps its session open for hours or days,
+        # and measuring from that made a person pausing on their phone and
+        # later watching on their TV look like two people at once. Watch time
+        # after the start is the most that can have been watched, plus a few
+        # minutes of slack for pauses along the way.
         departed = last.stopped or last.started
+        if last.play_duration:
+            departed = min(departed, last.started + last.play_duration + PAUSE_SLACK_SECONDS)
         hours = (row.started - departed) / 3600
 
         # A gap of seconds is the same phenomenon as an overlap: nobody
@@ -103,9 +147,17 @@ def find_flags(settings: Settings) -> int:
                 continue
             kind = "travel"
 
+        from_key = place_key(last.city, last.asn_org, last.is_hosting, last.ip_address)
+        to_key = place_key(row.city, row.asn_org, row.is_hosting, row.ip_address)
+        ignored_by = patterns.get((row.user_id, *pair(from_key, to_key)))
+
         found.append(
             {
                 "user_id": row.user_id,
+                "from_key": from_key,
+                "to_key": to_key,
+                "status": "ignored" if ignored_by else "new",
+                "ignore_id": ignored_by,
                 "from_history_id": last.row_id,
                 "to_history_id": row.row_id,
                 "from_city": last.city,
@@ -123,12 +175,27 @@ def find_flags(settings: Settings) -> int:
             }
         )
 
-    if found:
-        with session_scope() as db:
+    with session_scope() as db:
+        if found:
             # Keyed on the later play, so re-running never duplicates a flag
             # and never resets one that has been reviewed.
             stmt = insert(TravelFlag).on_conflict_do_nothing(index_elements=["to_history_id"])
             db.execute(stmt, found)
+
+        # Every run walks all of history, so an open signal that is not found
+        # again no longer qualifies: the detection got stricter, or history
+        # changed. Those are cleared. Anything a person reviewed or ignored is
+        # left alone, since that decision is theirs.
+        still = {f["to_history_id"] for f in found}
+        stale = [
+            flag
+            for flag in db.execute(select(TravelFlag).where(TravelFlag.status == "new")).scalars()
+            if flag.to_history_id not in still
+        ]
+        for flag in stale:
+            db.delete(flag)
+        if stale:
+            log.info("travel: cleared %d open signal(s) that no longer qualify", len(stale))
 
     log.info("travel: %d flagged pairs", len(found))
     return len(found)

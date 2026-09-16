@@ -2290,3 +2290,70 @@ label.locked .pill {
     margin: 4px 0 0;
   }
 }
+
+/* ---- sharing signal detail ----------------------------------------------------- */
+
+.signal-summary {
+  grid-template-columns: 170px minmax(0, 1fr) auto 18px;
+}
+.signal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-detail .stats {
+  margin: 0;
+}
+.signal-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.signal-side {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.signal-side h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.signal-side-body {
+  display: flex;
+  gap: 12px;
+}
+.signal-poster {
+  width: 64px;
+  height: 96px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  object-fit: cover;
+}
+.signal-side .spec {
+  grid-template-columns: max-content minmax(0, 1fr);
+  font-size: 12.5px;
+}
+.signal-side .btn.small-btn {
+  margin-top: 10px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.signal-pattern p {
+  margin: 0;
+}
+.signal-actions {
+  gap: 8px;
+  justify-content: space-between;
+}
+.signal-review {
+  gap: 8px;
+  margin-left: auto;
+}
+.signal-ignores {
+  margin: 8px 0;
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { duration, when } from "../components/DataTable";
 import { StreamEntry } from "../components/EnforcementLog";
 import StreamDetail from "../components/StreamDetail";
+import SignalDetail from "../components/SignalDetail";
 import {
   api,
   useApi,
@@ -776,19 +777,32 @@ function ActivityList({ query }: { query: string }) {
           }
           if (e.kind === "signal") {
             return (
-              <div key={key} className="mini event">
-                <div className="min0">
-                  <strong>{e.signal_kind === "concurrent" ? "Two places at once" : "Impossible travel"}</strong>
-                  <p className="muted small">
-                    {[e.from_city, e.to_city].filter(Boolean).join(" to ")}
-                    {e.km != null ? ` · ${Math.round(e.km).toLocaleString()} km` : ""}
-                    {e.kmh != null && e.signal_kind === "travel" ? ` · ${Math.round(e.kmh).toLocaleString()} km/h` : ""}
-                    {" · "}
-                    {when(e.at_epoch)}
-                  </p>
-                </div>
-                <span className={e.status === "new" ? "pill warn" : "pill"}>{e.status}</span>
-              </div>
+              <article key={key} className={open === key ? "log-entry open" : "log-entry"}>
+                <button className="log-summary signal-summary" onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}>
+                  <span className="log-when muted small">{when(e.at_epoch)}</span>
+                  <span className="log-what clip">
+                    <strong>{e.signal_kind === "concurrent" ? "Two places at once" : "Impossible travel"}</strong>
+                    <span className="muted small clip">
+                      {[e.from_city, e.to_city].filter(Boolean).join(" to ")}
+                      {e.km != null ? ` \u00b7 ${Math.round(e.km).toLocaleString()} km` : ""}
+                      {e.kmh != null && e.signal_kind === "travel" ? ` \u00b7 ${Math.round(e.kmh).toLocaleString()} km/h` : ""}
+                    </span>
+                  </span>
+                  <span className="log-result">
+                    <span className={e.status === "new" ? "pill warn" : "pill"}>{e.status}</span>
+                  </span>
+                  <span className="log-caret" aria-hidden="true">
+                    {open === key ? "\u25b4" : "\u25be"}
+                  </span>
+                </button>
+                {open === key && (
+                  <div className="log-detail">
+                    <div className="min0">
+                      <SignalDetail id={e.id} onChanged={events.reload} />
+                    </div>
+                  </div>
+                )}
+              </article>
             );
           }
           return (
