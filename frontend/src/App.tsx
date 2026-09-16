@@ -113,7 +113,13 @@ function SignedIn({
 
         <main>
           <ErrorBoundary name={active} key={active}>
-            {active === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
+            {active === "Dashboard" && (
+              <Dashboard
+                onNavigate={(t) => setTab(t as Tab)}
+                isAdmin={isAdmin}
+                onOpenUser={openUser}
+              />
+            )}
             {active === "Map" && (
               <Map
                 geoipReady={setup.data?.geoip_ready ?? false}

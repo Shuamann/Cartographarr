@@ -272,3 +272,43 @@ class AppSession(Base):
     app_user_id: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime | None] = mapped_column()
     expires_at: Mapped[datetime | None] = mapped_column()
+
+
+class TravelFlag(Base):
+    """Two plays by one account, too far apart to be the same person.
+
+    The clearest sign of a shared password. Stored rather than recomputed so a
+    flag can be reviewed and stay reviewed.
+    """
+
+    __tablename__ = "travel_flags"
+    __table_args__ = (Index("ix_travel_user", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer)
+    from_history_id: Mapped[int] = mapped_column(Integer)
+    to_history_id: Mapped[int] = mapped_column(Integer, unique=True)
+
+    from_city: Mapped[str | None] = mapped_column(String(255))
+    to_city: Mapped[str | None] = mapped_column(String(255))
+    from_ip: Mapped[str | None] = mapped_column(String(45))
+    to_ip: Mapped[str | None] = mapped_column(String(45))
+    from_started: Mapped[int | None] = mapped_column(Integer)
+    to_started: Mapped[int | None] = mapped_column(Integer)
+
+    kind: Mapped[str] = mapped_column(String(16), default="travel")
+    """`concurrent` when the two plays overlap in time, which is not travel at
+    all but one account streaming from two places at once. `travel` when there
+    is a real gap that is still too short for the distance."""
+
+    km: Mapped[float | None] = mapped_column(Float)
+    hours: Mapped[float | None] = mapped_column(Float)
+    kmh: Mapped[float | None] = mapped_column(Float)
+    """Meaningless for a concurrent pair, so it is left null rather than
+    reported as a million kilometres an hour."""
+    hosting_involved: Mapped[bool] = mapped_column(Boolean, default=False)
+    """A VPN explains impossible travel without anyone sharing a password, so
+    it is recorded and shown rather than being silently excluded."""
+
+    status: Mapped[str] = mapped_column(String(16), default="new")
+    created_at: Mapped[datetime | None] = mapped_column()

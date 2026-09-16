@@ -75,6 +75,16 @@ class Settings(BaseSettings):
     enforce_cooldown_seconds: int = 60
     """Per rule, per session, to stop a stubborn client from filling the log."""
 
+    # ---- Impossible travel -------------------------------------------------
+    impossible_kmh: float = 900.0
+    """Faster than a commercial flight, so not one person moving."""
+
+    impossible_min_km: float = 100.0
+    """Below this, city centroid error alone can manufacture a flag."""
+
+    impossible_max_accuracy_km: float = 200.0
+    """Skip pairs where the location is too vague to draw a conclusion from."""
+
     # ---- Auth --------------------------------------------------------------
     session_ttl_hours: int = 720
     session_cookie_name: str = "cartographarr_session"

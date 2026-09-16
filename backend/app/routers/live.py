@@ -12,7 +12,16 @@ from sqlalchemy.orm import Session
 from app.actions import registry
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
-from app.models import Device, EnforcementLog, History, IpLocation, MediaItem, Rule, User
+from app.models import (
+    Device,
+    EnforcementLog,
+    History,
+    IpLocation,
+    MediaItem,
+    Rule,
+    TravelFlag,
+    User,
+)
 from app.services import capabilities, enforcer
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
@@ -237,6 +246,38 @@ async def run_rules_now(_: AdminUser) -> dict:
     return await enforcer.run_once()
 
 
+# ---- impossible travel -----------------------------------------------------
+
+@router.get("/travel-flags")
+def travel_flags(db: Db, status: str | None = None, limit: int = 100) -> list[dict]:
+    stmt = select(TravelFlag, func.coalesce(User.friendly_name, User.username).label("name")).join(
+        User, User.user_id == TravelFlag.user_id, isouter=True
+    )
+    if status:
+        stmt = stmt.where(TravelFlag.status == status)
+    stmt = stmt.order_by(desc(TravelFlag.to_started)).limit(limit)
+
+    return [
+        {
+            **{c.name: getattr(flag, c.name) for c in TravelFlag.__table__.columns},
+            "user_name": name or str(flag.user_id),
+        }
+        for flag, name in db.execute(stmt).all()
+    ]
+
+
+@router.patch("/travel-flags/{flag_id}")
+def review_flag(flag_id: int, _: AdminUser, status: str = Body(..., embed=True)) -> dict:
+    if status not in {"new", "reviewed", "ignored"}:
+        raise HTTPException(400, "Status must be new, reviewed or ignored")
+    with session_scope() as db:
+        flag = db.get(TravelFlag, flag_id)
+        if flag is None:
+            raise HTTPException(404, "No such flag")
+        flag.status = status
+    return {"id": flag_id, "status": status}
+
+
 # ---- dashboard -------------------------------------------------------------
 
 @router.get("/dashboard")
@@ -283,6 +324,10 @@ async def dashboard(db: Db) -> dict:
         select(func.count()).select_from(Device).where(Device.is_new_unreviewed.is_(True))
     ).scalar_one()
 
+    open_flags = db.execute(
+        select(func.count()).select_from(TravelFlag).where(TravelFlag.status == "new")
+    ).scalar_one()
+
     last_enforcement = db.execute(
         select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(5)
     ).scalars()
@@ -303,6 +348,7 @@ async def dashboard(db: Db) -> dict:
             "ip_locations": totals[4],
             "hosting_ips": totals[5],
             "new_devices": new_devices,
+            "travel_flags": open_flags,
         },
         "live": {
             "stream_count": live.get("stream_count") or 0,

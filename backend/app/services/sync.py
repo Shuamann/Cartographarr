@@ -21,6 +21,7 @@ from app.db import session_scope
 from app.settings_store import current as current_settings
 from app.geo.lookup import GeoResolver, is_private
 from app.models import Device, History, IpLocation, Library, MediaItem, SyncState, User
+from app.services import travel
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
@@ -430,7 +431,16 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     finally:
         resolver.close()
 
-    return {"history": history, "metadata": metadata, "devices": devices, "ips": ips}
+    # After geocoding, so newly placed addresses are considered straight away.
+    flags = travel.find_flags(settings)
+
+    return {
+        "history": history,
+        "metadata": metadata,
+        "devices": devices,
+        "ips": ips,
+        "travel_flags": flags,
+    }
 
 
 async def run_slow_sync(client: TautulliClient) -> dict:

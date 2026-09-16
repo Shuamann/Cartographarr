@@ -41,6 +41,8 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -234,6 +236,7 @@ export type Dashboard = {
     ip_locations: number;
     hosting_ips: number;
     new_devices: number;
+    travel_flags: number;
   };
   live: {
     stream_count: number;
@@ -381,3 +384,21 @@ export function useUserNames(): Map<number, string> {
     [users.data],
   );
 }
+
+export type TravelFlag = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  kind: "concurrent" | "travel";
+  from_city: string | null;
+  to_city: string | null;
+  from_ip: string | null;
+  to_ip: string | null;
+  from_started: number | null;
+  to_started: number | null;
+  km: number | null;
+  hours: number | null;
+  kmh: number | null;
+  hosting_involved: boolean;
+  status: "new" | "reviewed" | "ignored";
+};

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApi, type Dashboard, type LiveSession } from "../lib/api";
+import TravelFlags from "../components/TravelFlags";
 
 /* The landing screen.
  *
@@ -8,7 +9,15 @@ import { useApi, type Dashboard, type LiveSession } from "../lib/api";
  * activity, capabilities, and integrations once they exist. Rearranging the
  * layout, or adding a panel, doesn't mean touching the data path.
  */
-export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: string) => void }) {
+export default function DashboardRoute({
+  onNavigate,
+  isAdmin,
+  onOpenUser,
+}: {
+  onNavigate: (tab: string) => void;
+  isAdmin?: boolean;
+  onOpenUser?: (userId: number) => void;
+}) {
   const data = useApi<Dashboard>("/dashboard");
 
   useEffect(() => {
@@ -59,6 +68,13 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
           label="new devices"
           sub="not yet reviewed"
           warn={d.totals.new_devices > 0}
+          onClick={() => onNavigate("Devices")}
+        />
+        <Card
+          big={d.totals.travel_flags}
+          label="sharing signals"
+          sub="unreviewed"
+          warn={d.totals.travel_flags > 0}
         />
       </section>
 
@@ -80,6 +96,8 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
           </div>
         </section>
       </div>
+
+      <TravelFlags isAdmin={Boolean(isAdmin)} onOpenUser={onOpenUser} />
 
       <section>
         <div className="row-between">
