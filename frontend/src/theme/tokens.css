@@ -55,6 +55,15 @@
   --map-heat-4: #f472b6;
   --map-heat-5: #fde047;
 
+  /* Service icons on link buttons, in each service's own colour. */
+  --brand-plex: #EBAF00;
+  --brand-imdb: #F5C518;
+  --brand-tmdb: #01B4E4;
+  --brand-trakt: #9F42C6;
+  --brand-radarr: #FFCB3D;
+  --brand-sonarr: #2596BE;
+  --brand-seerr: #6f7cf2;
+
   --pad-page: 24px;
   --radius: 8px;
   --radius-sm: 5px;

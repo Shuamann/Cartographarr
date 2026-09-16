@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
+import BrandIcon from "../components/BrandIcon";
 
 type Section = {
   title: string;
@@ -511,7 +512,10 @@ function SettingsForm() {
         {current.sections?.map((section) => (
           <section key={section.title} className="card-section">
             <div className="row-between">
-              <h3>{section.title}</h3>
+              <h3 className="section-title">
+                <BrandIcon name={section.title.toLowerCase()} size={16} />
+                {section.title}
+              </h3>
               {section.test && (
                 <TestButton
                   name={section.test}

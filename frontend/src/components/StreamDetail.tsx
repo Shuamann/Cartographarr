@@ -1,4 +1,5 @@
 import { useState } from "react";
+import BrandIcon from "./BrandIcon";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
 import { useBans } from "../lib/bans";
@@ -117,6 +118,7 @@ export default function StreamDetail({
                   target="_blank"
                   rel="noreferrer"
                 >
+                  <BrandIcon name={l.key} />
                   {l.label}
                 </a>
               ))}

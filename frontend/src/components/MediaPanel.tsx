@@ -1,4 +1,5 @@
 import { useApi, type MediaDetail } from "../lib/api";
+import BrandIcon from "./BrandIcon";
 
 const LINKS: { key: string; label: string }[] = [
   { key: "plex", label: "Plex" },
@@ -62,6 +63,7 @@ export default function MediaPanel({
         <div className="row wrap linkrow">
           {links.map((l) => (
             <a key={l.key} className="ms-btn" href={m.links[l.key]} target="_blank" rel="noreferrer">
+              <BrandIcon name={l.key} />
               {l.label}
             </a>
           ))}
