@@ -314,3 +314,22 @@ class TravelFlag(Base):
 
     status: Mapped[str] = mapped_column(String(16), default="new")
     created_at: Mapped[datetime | None] = mapped_column()
+
+
+class AuditLog(Base):
+    """Every change that reaches outside this app.
+
+    Sharing changes cannot be undone from here, so what something looked like
+    before is worth keeping even when the change went fine.
+    """
+
+    __tablename__ = "audit_log"
+    __table_args__ = (Index("ix_audit_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    app_user_id: Mapped[int | None] = mapped_column(Integer)
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str | None] = mapped_column(String(255))
+    payload: Mapped[str | None] = mapped_column(Text)
+    result: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime | None] = mapped_column()

@@ -9,8 +9,8 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
   },
   {
     title: "Plex",
-    note: "The server id is discovered from Tautulli, and enables the Plex deep link.",
-    keys: ["plex_machine_identifier"],
+    note: "The server id is discovered from Tautulli and enables the Plex deep link. A token is only needed to manage sharing; everything else goes through Tautulli.",
+    keys: ["plex_token", "plex_machine_identifier"],
   },
   {
     title: "Map locations",
@@ -68,6 +68,7 @@ const LABELS: Record<string, string> = {
   tautulli_api_key: "API key",
   tautulli_verify_ssl: "Verify SSL certificate",
   tautulli_timeout: "Request timeout (seconds)",
+  plex_token: "Plex token",
   plex_machine_identifier: "Plex server id",
   maxmind_account_id: "MaxMind account ID",
   maxmind_license_key: "MaxMind license key",

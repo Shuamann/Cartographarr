@@ -18,6 +18,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "apprise>=1.9",
     "python-multipart>=0.0.12",
+    "plexapi>=4.16",
 ]
 
 [project.optional-dependencies]

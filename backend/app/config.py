@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     tautulli_verify_ssl: bool = True
     tautulli_timeout: float = 30.0
 
+    plex_token: str = ""
+    """Server owner's Plex token. Only needed for sharing: everything else
+    goes through Tautulli. Find it in any Plex XML request, or in Tautulli's
+    settings."""
+
     plex_machine_identifier: str = ""
     """Server id for app.plex.tv deep links. Optional; without it the Plex
     button just isn't rendered."""
