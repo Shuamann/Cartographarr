@@ -310,7 +310,7 @@ export default function PeopleRoute({
 
 // ---- user ----------------------------------------------------------------------
 
-type Tab = "overview" | "history" | "places" | "devices" | "activity" | "access";
+type Tab = "overview" | "users" | "history" | "places" | "devices" | "activity" | "access";
 
 function UserProfile({
   userId,
@@ -481,6 +481,7 @@ function DeviceProfile({
 
   const tabs: [Tab, string][] = [
     ["overview", "Overview"],
+    ["users", `Users ${d.owners.length}`],
     ["history", "History"],
     ["places", `Places ${d.places.length}`],
     ["activity", "Activity"],
@@ -566,6 +567,62 @@ function DeviceProfile({
               </div>
             </section>
             <Overview profile={d} extra={[["First seen", when(d.first_seen)]]} />
+          </>
+        )}
+        {tab === "users" && (
+          <>
+            <p className="muted small">
+              Every account that has signed in to or used this device, most recent first.
+              {d.owners.length > 1 && " More than one account on a single device can be a household, or a shared login."}
+            </p>
+            <div className="device-users">
+              {d.owners.map((o) => {
+                const streaming = (live?.sessions ?? []).some(
+                  (x) => x.machine_id === machineId && Number(x.user_id) === o.user_id,
+                );
+                return (
+                  <section key={o.user_id} className="device-user">
+                    <div className="row-between">
+                      <button className="linkish device-user-name" onClick={() => onSelectUser(o.user_id)}>
+                        {streaming && <span className="live-dot" title="Streaming on this device now" />}
+                        {o.name}
+                      </button>
+                      <span className="row person-pills">
+                        {o.deleted_in_tautulli && <span className="pill warn">deleted in Tautulli</span>}
+                        {streaming && <span className="pill ok">streaming now</span>}
+                      </span>
+                    </div>
+                    <dl className="spec">
+                      <dt>Plays</dt>
+                      <dd>
+                        {o.play_count.toLocaleString()} · {duration(o.seconds)} watched
+                      </dd>
+                      <dt>First used</dt>
+                      <dd>{when(o.first_seen)}</dd>
+                      <dt>Last used</dt>
+                      <dd>
+                        {when(o.last_seen)} <span className="muted small">({ago(o.last_seen)})</span>
+                      </dd>
+                      <dt>Last watched</dt>
+                      <dd>{o.last_watched?.title ?? "Unknown"}</dd>
+                      <dt>From</dt>
+                      <dd>
+                        {o.places.length === 0
+                          ? "No located plays"
+                          : o.places.map((x, i) => (
+                              <span key={i} className="pill">
+                                {[x.city, x.region].filter(Boolean).join(", ") || x.country || "Unknown"} {x.plays}
+                                {x.is_hosting ? " VPN" : ""}
+                              </span>
+                            ))}
+                      </dd>
+                      <dt>Addresses</dt>
+                      <dd>{o.addresses}</dd>
+                    </dl>
+                  </section>
+                );
+              })}
+            </div>
           </>
         )}
         {tab === "history" && (

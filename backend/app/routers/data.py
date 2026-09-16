@@ -757,6 +757,53 @@ def device_detail(machine_id: str, db: Db) -> dict:
         u.user_id: u.friendly_name or u.username
         for u in db.execute(select(User).where(User.user_id.in_([d.user_id for d in rows]))).scalars()
     }
+    # Per account on this device: how much, from where, and what they watched
+    # last, so a shared device can be read account by account.
+    per_user = {
+        uid: (plays, seconds, first, last, ips)
+        for uid, plays, seconds, first, last, ips in db.execute(
+            select(
+                History.user_id,
+                func.count(),
+                func.sum(History.play_duration),
+                func.min(History.started),
+                func.max(History.started),
+                func.count(func.distinct(History.ip_address)),
+            )
+            .where(History.machine_id == machine_id)
+            .group_by(History.user_id)
+        ).all()
+    }
+    places: dict[int, list[dict]] = {}
+    for uid, city, region, country, hosting, plays in db.execute(
+        select(
+            History.user_id,
+            IpLocation.city,
+            IpLocation.region,
+            IpLocation.country,
+            func.max(IpLocation.is_hosting),
+            func.count(),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address)
+        .where(History.machine_id == machine_id)
+        .group_by(History.user_id, IpLocation.city, IpLocation.region, IpLocation.country)
+        .order_by(desc(func.count()))
+    ).all():
+        places.setdefault(uid, []).append(
+            {"city": city, "region": region, "country": country, "is_hosting": bool(hosting), "plays": plays}
+        )
+    last_titles = {}
+    for uid, title, started in db.execute(
+        select(History.user_id, History.full_title, History.started)
+        .where(History.machine_id == machine_id)
+        .order_by(desc(History.started))
+    ).all():
+        last_titles.setdefault(uid, {"title": title, "started": started})
+    deleted = {
+        u.user_id: bool(u.deleted_in_tautulli)
+        for u in db.execute(select(User).where(User.user_id.in_([d.user_id for d in rows]))).scalars()
+    }
+
     latest = rows[0]
     return {
         "machine_id": machine_id,
@@ -770,9 +817,14 @@ def device_detail(machine_id: str, db: Db) -> dict:
             {
                 "user_id": d.user_id,
                 "name": names.get(d.user_id) or str(d.user_id),
-                "play_count": d.play_count,
+                "play_count": per_user.get(d.user_id, (d.play_count,))[0],
+                "seconds": (per_user.get(d.user_id) or (0, 0))[1] or 0,
                 "first_seen": d.first_seen,
                 "last_seen": d.last_seen,
+                "addresses": (per_user.get(d.user_id) or (0, 0, 0, 0, 0))[4],
+                "places": places.get(d.user_id, [])[:5],
+                "last_watched": last_titles.get(d.user_id),
+                "deleted_in_tautulli": deleted.get(d.user_id, False),
             }
             for d in rows
         ],

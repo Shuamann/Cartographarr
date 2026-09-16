@@ -2357,3 +2357,23 @@ label.locked .pill {
 .signal-ignores {
   margin: 8px 0;
 }
+
+.device-users {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
+}
+.device-user {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.device-user .spec {
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin-top: 8px;
+}
+.device-user-name {
+  font-size: 15px;
+  font-weight: 600;
+}

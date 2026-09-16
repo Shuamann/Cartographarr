@@ -424,7 +424,18 @@ export type DeviceDetail = Profile & {
   first_seen: number | null;
   last_seen: number | null;
   is_new_unreviewed: boolean;
-  owners: { user_id: number; name: string; play_count: number; first_seen: number | null; last_seen: number | null }[];
+  owners: {
+    user_id: number;
+    name: string;
+    play_count: number;
+    seconds: number;
+    first_seen: number | null;
+    last_seen: number | null;
+    addresses: number;
+    places: { city: string | null; region: string | null; country: string | null; is_hosting: boolean; plays: number }[];
+    last_watched: { title: string | null; started: number | null } | null;
+    deleted_in_tautulli: boolean;
+  }[];
 };
 
 export type PersonEvent =

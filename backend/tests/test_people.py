@@ -85,3 +85,13 @@ def test_episode_links_point_at_the_show(client):
     # No show to link to means no button, never a wrong one.
     orphan = client.get("/api/media/502").json()["links"]
     assert "tmdb" not in orphan and "trakt" not in orphan
+
+
+def test_device_users_tab_breaks_down_each_account(client):
+    claim(client)
+    seed()
+    owners = {o["user_id"]: o for o in client.get("/api/devices/dev-1").json()["owners"]}
+    assert owners[7]["play_count"] == 2 and owners[7]["seconds"] == 1200
+    assert owners[8]["play_count"] == 1
+    assert owners[7]["places"][0]["city"] == "Springfield"
+    assert owners[7]["last_watched"]["title"] == "A Show - Pilot"
