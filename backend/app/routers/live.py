@@ -468,6 +468,86 @@ def unban_device(machine_id: str, admin: AdminUser) -> dict:
     return {"machine_id": machine_id, "banned": False}
 
 
+def _ban_only_devices(rule: Rule) -> list[str] | None:
+    """The device ids of a rule that does nothing but stop those devices, or
+    None if the rule does anything else.
+
+    Only exact matches convert: one condition, "device is any of", not
+    negated, and the only action is stopping the stream. A rule with a time
+    window, a VPN condition or a notification is a real rule and stays one.
+    """
+    tree = enforcer.rule_tree(rule)
+    steps = enforcer.rule_actions(rule)
+    if len(steps) != 1 or steps[0].get("name") != "terminate":
+        return None
+    if tree.get("negate") or len(tree.get("items") or []) != 1:
+        return None
+    leaf = tree["items"][0]
+    if leaf.get("type") != "condition" or leaf.get("field") != "device" or leaf.get("op") != "any":
+        return None
+    ids = [str(v) for v in (leaf.get("value") or []) if str(v).strip()]
+    return ids or None
+
+
+@router.get("/bans/convertible")
+def convertible_rules(db: Db, _: AdminUser) -> list[dict]:
+    """Rules made by the old Block button, which only stop given devices."""
+    out = []
+    for rule in db.execute(select(Rule).order_by(Rule.id)).scalars():
+        ids = _ban_only_devices(rule)
+        if ids is None:
+            continue
+        message = next((st.get("params", {}).get("message") for st in enforcer.rule_actions(rule)), None)
+        out.append({"id": rule.id, "name": rule.name, "enabled": rule.enabled, "machine_ids": ids, "message": message})
+    return out
+
+
+@router.post("/bans/convert")
+def convert_rules_to_bans(admin: AdminUser, rule_ids: list[int] = Body(..., embed=True)) -> dict:
+    """Move device-only rules into the ban list, then delete the rules.
+
+    A disabled rule was not stopping anything, so its devices are not banned;
+    it is only removed. Devices already banned are left as they are.
+    """
+    from app.models import BannedDevice
+
+    banned = removed = 0
+    with session_scope() as db:
+        for rule_id in rule_ids:
+            rule = db.get(Rule, rule_id)
+            if rule is None:
+                continue
+            ids = _ban_only_devices(rule)
+            if ids is None:
+                raise HTTPException(400, f"{rule.name!r} does more than ban devices, so it stays a rule")
+            if rule.enabled:
+                for mid in ids:
+                    if db.get(BannedDevice, mid) is not None:
+                        continue
+                    device = db.execute(
+                        select(Device).where(Device.machine_id == mid).order_by(desc(Device.last_seen)).limit(1)
+                    ).scalar_one_or_none()
+                    db.add(
+                        BannedDevice(
+                            machine_id=mid,
+                            label=(device.player if device else None) or mid[:12],
+                            user_id=device.user_id if device else None,
+                            reason=f"Converted from the rule {rule.name!r}",
+                            banned_by=admin.username,
+                            banned_at=datetime.now(UTC),
+                        )
+                    )
+                    banned += 1
+            name = rule.name
+            db.delete(rule)
+            removed += 1
+            audit.record(
+                admin, "rule.convert", f"Moved rule {name!r} into the ban list",
+                target=str(rule_id), detail={"machine_ids": ids, "was_enabled": rule.enabled},
+            )
+    return {"rules_removed": removed, "devices_banned": banned}
+
+
 @router.get("/map/banned")
 def banned_on_map(db: Db) -> dict:
     """Where banned devices have been seen, and where they were stopped.

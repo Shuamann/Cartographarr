@@ -164,7 +164,7 @@ export default function RulesRoute({
           />
         )}
 
-        <BanListCard />
+        <BanListCard onRulesChanged={rules.reload} />
 
         {rules.data?.length === 0 && !draft && <p className="muted">No rules yet.</p>}
 
@@ -217,10 +217,49 @@ export default function RulesRoute({
 
 /* The ban list shown as the rule it is. It always runs first, and it is
  * managed from People, the map and stream cards rather than edited here. */
-function BanListCard() {
+type Convertible = { id: number; name: string; enabled: boolean; machine_ids: string[]; message: string | null };
+
+function BanListCard({ onRulesChanged }: { onRulesChanged: () => void }) {
   const bans = useBans();
   const nav = useNav();
   const [open, setOpen] = useState(false);
+  // Rules left over from the old Block button, which only stop devices.
+  const convertible = useApi<Convertible[]>(nav.isAdmin ? "/bans/convertible" : null);
+  const [converting, setConverting] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+
+  async function convert() {
+    const list = convertible.data ?? [];
+    const custom = list.filter((r) => r.message).length;
+    const disabled = list.filter((r) => !r.enabled).length;
+    const ok = window.confirm(
+      `Move ${list.length} rule${list.length === 1 ? "" : "s"} into the ban list?
+
+` +
+        `Their devices are banned and the rules are deleted, so each device is managed from one place.` +
+        (custom ? `
+
+${custom} of them had their own message; banned devices all see the ban message from Settings.` : "") +
+        (disabled ? `
+
+${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ? "its" : "their"} devices are not banned, the rule is just removed.` : ""),
+    );
+    if (!ok) return;
+    setConverting(true);
+    try {
+      const r = await api.post<{ rules_removed: number; devices_banned: number }>("/bans/convert", {
+        rule_ids: list.map((x) => x.id),
+      });
+      setDone(`Moved ${r.rules_removed} rule${r.rules_removed === 1 ? "" : "s"}, banning ${r.devices_banned} device${r.devices_banned === 1 ? "" : "s"}.`);
+      convertible.reload();
+      onRulesChanged();
+      window.dispatchEvent(new Event("cartographarr:bans-changed"));
+    } catch (err) {
+      setDone((err as Error).message);
+    } finally {
+      setConverting(false);
+    }
+  }
 
   return (
     <div className="rule system-rule">
@@ -235,6 +274,19 @@ function BanListCard() {
           <span className="muted"> then </span>stop the stream, with the ban message from Settings.
         </p>
         <p className="muted small">Ban or unban a device from People, a stream card, or the map.</p>
+        {(convertible.data?.length ?? 0) > 0 && (
+          <div className="note warn-note convert-note">
+            <span>
+              {convertible.data!.length} rule{convertible.data!.length === 1 ? " below does" : "s below do"} nothing
+              but stop specific devices ({convertible.data!.map((r) => r.name).join(", ")}).{" "}
+              {convertible.data!.length === 1 ? "It predates the ban list and can move into it." : "They predate the ban list and can move into it."}
+            </span>
+            <button className="btn" onClick={convert} disabled={converting}>
+              {converting ? "Moving…" : "Move into ban list"}
+            </button>
+          </div>
+        )}
+        {done && <p className="note">{done}</p>}
         {open && (
           <div className="mini-list">
             {bans.list.length === 0 && <p className="muted">Nothing is banned.</p>}

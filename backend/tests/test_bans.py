@@ -73,3 +73,25 @@ def test_map_shows_where_banned_devices_played_and_tried(client):
     assert kinds == [("attempt", "London"), ("seen", "Kansas City")]
     # A device that is not banned never appears, even at the same place.
     assert all(f["properties"]["machine_id"] == "bad" for f in features)
+
+
+def test_only_device_only_rules_convert_into_the_ban_list(client):
+    claim(client)
+    device_only = {"type": "group", "op": "and", "items": [{"type": "condition", "field": "device", "op": "any", "value": ["dev-a", "dev-b"]}]}
+    with_time = {"type": "group", "op": "and", "items": [
+        {"type": "condition", "field": "device", "op": "any", "value": ["dev-c"]},
+        {"type": "condition", "field": "time", "op": "between", "value": ["22:00", "06:00"]},
+    ]}
+    stop = [{"name": "terminate", "params": {}}]
+    a = client.post("/api/rules", json={"name": "Block two", "conditions": device_only, "actions": stop}).json()
+    b = client.post("/api/rules", json={"name": "Night only", "conditions": with_time, "actions": stop}).json()
+    c = client.post("/api/rules", json={"name": "Just log", "conditions": device_only, "actions": [{"name": "log_only"}]}).json()
+
+    assert [r["id"] for r in client.get("/api/bans/convertible").json()] == [a["id"]]
+    # A rule that does more than ban is refused, not flattened into a ban.
+    assert client.post("/api/bans/convert", json={"rule_ids": [b["id"]]}).status_code == 400
+
+    result = client.post("/api/bans/convert", json={"rule_ids": [a["id"]]}).json()
+    assert result == {"rules_removed": 1, "devices_banned": 2}
+    assert sorted(x["machine_id"] for x in client.get("/api/bans").json()) == ["dev-a", "dev-b"]
+    assert sorted(r["id"] for r in client.get("/api/rules").json()) == sorted([b["id"], c["id"]])
