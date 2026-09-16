@@ -167,6 +167,8 @@ export type LiveSession = {
   media_type: string | null;
   full_title: string | null;
   library_name: string | null;
+  rating_key: number | null;
+  section_id: number | null;
   transcode_decision: string | null;
   video_full_resolution: string | null;
   quality_profile: string | null;
@@ -175,6 +177,8 @@ export type LiveSession = {
     city: string | null;
     region: string | null;
     country: string | null;
+    lat: number | null;
+    lon: number | null;
     is_hosting: boolean;
     asn_org: string | null;
   } | null;

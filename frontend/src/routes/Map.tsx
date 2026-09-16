@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import { useApi, type MapPoint, type MapPoints } from "../lib/api";
+import {
+  api,
+  useApi,
+  type Activity,
+  type LiveSession,
+  type MapPoint,
+  type MapPoints,
+} from "../lib/api";
 import { when } from "../components/DataTable";
 import FilterBar from "../components/FilterBar";
 import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
+import { useIsAvailable } from "../components/Gated";
 import type { HistoryPage, LocationDetail } from "../lib/api";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
@@ -28,9 +36,11 @@ function webglAvailable(): boolean {
 export default function MapRoute({
   geoipReady,
   onOpenUser,
+  onBlockDevice,
 }: {
   geoipReady: boolean;
   onOpenUser?: (userId: number) => void;
+  onBlockDevice?: (machineId: string, label: string) => void;
 }) {
   const [filters, setFilters] = useState<FilterState>(EMPTY);
   const query = useMemo(() => toQuery(filters), [filters]);
@@ -57,6 +67,22 @@ export default function MapRoute({
   const [showAccuracy, setShowAccuracy] = useState(
     () => localStorage.getItem("layer.accuracy") !== "off",
   );
+  const [showLive, setShowLive] = useState(() => localStorage.getItem("layer.live") !== "off");
+
+  const live = useApi<Activity>("/activity");
+  useEffect(() => {
+    const timer = setInterval(live.reload, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Only streams we can actually place belong on a map. A LAN address has no
+  // location to look up, so those are counted and explained rather than
+  // silently missing.
+  const allLive = live.data?.sessions ?? [];
+  const liveSessions = allLive.filter((s) => s.geo?.lat != null);
+  const unplaceable = allLive.length - liveSessions.length;
+  const [hovered, setHovered] = useState<Hover | null>(null);
 
   function toggleLayer(name: string, value: boolean, set: (v: boolean) => void) {
     set(value);
@@ -104,6 +130,22 @@ export default function MapRoute({
               />
               Accuracy
             </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={showLive}
+                onChange={(e) => toggleLayer("live", e.target.checked, setShowLive)}
+              />
+              Live
+              {liveSessions.length > 0 && (
+                <span className="ms-count live">{liveSessions.length}</span>
+              )}
+            </label>
+            {unplaceable > 0 && (
+              <span className="muted small" title="Local addresses have no public location">
+                {unplaceable} on your network, not mappable
+              </span>
+            )}
           </div>
         )}
 
@@ -122,6 +164,8 @@ export default function MapRoute({
             onSelect={setSelected}
             showHistory={showHistory}
             showAccuracy={showAccuracy}
+            liveSessions={showLive ? liveSessions : []}
+            onHoverLive={setHovered}
           />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
@@ -146,6 +190,18 @@ export default function MapRoute({
             <Tile label="Locations" value={features.length} />
             <Tile label="Hours" value={Math.round(summary.data.seconds / 3600)} />
           </div>
+        )}
+
+        {hovered && (
+          <LiveFlyout
+            session={hovered.session}
+            x={hovered.x}
+            y={hovered.y}
+            onClose={() => setHovered(null)}
+            onOpenUser={onOpenUser}
+            onBlockDevice={onBlockDevice}
+            onTerminated={live.reload}
+          />
         )}
 
         {selected && (
@@ -183,21 +239,34 @@ function groundCircle(lon: number, lat: number, km: number, steps = 64): GeoJSON
   return { type: "Polygon", coordinates: [ring] };
 }
 
+type Hover = { session: LiveSession; x: number; y: number };
+
 function MapCanvas({
   features,
   onSelect,
   showHistory,
   showAccuracy,
+  liveSessions,
+  onHoverLive,
 }: {
   features: MapPoint[];
   onSelect: (place: Place) => void;
   showHistory: boolean;
   showAccuracy: boolean;
+  liveSessions: LiveSession[];
+  onHoverLive: (hover: Hover | null) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  // Map event handlers are registered once and would otherwise capture the
+  // first render's values forever, so the live data is read through refs.
+  const liveRef = useRef(liveSessions);
+  liveRef.current = liveSessions;
+  const onHoverRef = useRef(onHoverLive);
+  onHoverRef.current = onHoverLive;
 
   useEffect(() => {
     if (!container.current || map.current) return;
@@ -403,6 +472,83 @@ function MapCanvas({
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
   }, [ready, features, onSelect, showHistory, showAccuracy]);
+
+  // ---- live streams ------------------------------------------------------
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+
+    const data: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: liveSessions.map((s) => ({
+        type: "Feature",
+        properties: { session_key: s.session_key },
+        geometry: {
+          type: "Point",
+          coordinates: [s.geo!.lon as number, s.geo!.lat as number],
+        },
+      })),
+    };
+
+    const existing = m.getSource("live") as maplibregl.GeoJSONSource | undefined;
+    if (existing) {
+      existing.setData(data);
+      return;
+    }
+
+    m.addSource("live", { type: "geojson", data });
+
+    // A ring in its own colour, not a filled dot. Shape as well as colour,
+    // because colour alone fails for anyone colour blind and washes out
+    // against a dark basemap.
+    m.addLayer({
+      id: "live-halo",
+      type: "circle",
+      source: "live",
+      paint: {
+        "circle-color": css("--live", "#fbbf24"),
+        "circle-opacity": 0.18,
+        "circle-radius": 22,
+      },
+    });
+    m.addLayer({
+      id: "live-ring",
+      type: "circle",
+      source: "live",
+      paint: {
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-color": css("--live", "#fbbf24"),
+        "circle-stroke-width": 3,
+        "circle-radius": 11,
+      },
+    });
+    m.addLayer({
+      id: "live-dot",
+      type: "circle",
+      source: "live",
+      paint: { "circle-color": css("--live", "#fbbf24"), "circle-radius": 4 },
+    });
+
+    const show = (e: maplibregl.MapLayerMouseEvent) => {
+      const key = String(e.features?.[0]?.properties?.session_key ?? "");
+      const session = liveRef.current.find((s) => s.session_key === key);
+      if (!session) return;
+      m.getCanvas().style.cursor = "pointer";
+      onHoverRef.current({ session, x: e.point.x, y: e.point.y });
+    };
+
+    for (const layer of ["live-halo", "live-ring", "live-dot"]) {
+      m.on("mouseenter", layer, show);
+      m.on("mousemove", layer, show);
+      m.on("mouseleave", layer, () => {
+        m.getCanvas().style.cursor = "";
+        // Deliberately left open: the flyout carries buttons, and closing the
+        // instant the pointer leaves the pin would put them out of reach. The
+        // flyout closes itself once the pointer leaves it.
+      });
+    }
+  }, [ready, liveSessions]);
+
 
   return (
     <>
@@ -678,6 +824,126 @@ function Drawer({
         </>
       )}
     </aside>
+  );
+}
+
+
+/* Stream details, pinned next to its map pin.
+ *
+ * Positioned in React rather than a MapLibre popup so the actions are real
+ * buttons wired to the same API calls the rest of the app uses.
+ */
+function LiveFlyout({
+  session,
+  x,
+  y,
+  onClose,
+  onOpenUser,
+  onBlockDevice,
+  onTerminated,
+}: {
+  session: LiveSession;
+  x: number;
+  y: number;
+  onClose: () => void;
+  onOpenUser?: (userId: number) => void;
+  onBlockDevice?: (machineId: string, label: string) => void;
+  onTerminated?: () => void;
+}) {
+  const plexPass = useIsAvailable("plex_pass");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const who = session.friendly_name || session.username || "Unknown";
+  const where = session.geo
+    ? [session.geo.city, session.geo.region].filter(Boolean).join(", ")
+    : session.ip_address;
+  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+
+  async function stop() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/activity/${session.session_key}/terminate`, {
+        message: "This device is not permitted to stream. Contact the server owner.",
+      });
+      onTerminated?.();
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="flyout"
+      style={{ left: x, top: y }}
+      onMouseLeave={onClose}
+      role="dialog"
+    >
+      <div className="flyout-head">
+        {session.rating_key && (
+          <img
+            className="stream-poster"
+            src={`/api/media/${session.rating_key}/image?width=120&height=180`}
+            alt=""
+            onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+          />
+        )}
+        <div className="min0">
+          <strong>{session.full_title}</strong>
+          <p className="muted small">
+            {session.user_id != null && onOpenUser ? (
+              <button className="linkish" onClick={() => onOpenUser(session.user_id as number)}>
+                {who}
+              </button>
+            ) : (
+              who
+            )}
+          </p>
+          <p className="muted small">
+            {session.player} · {session.platform}
+          </p>
+          <p className="muted small">
+            {where}
+            {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
+          </p>
+        </div>
+        <button className="tab" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </div>
+
+      <p className="muted small">
+        <span className="pill">{session.transcode_decision}</span>
+        {session.video_full_resolution && <span className="pill">{session.video_full_resolution}</span>}
+        {session.state && <span className="pill">{session.state}</span>}
+        {Math.round(progress)}%
+      </p>
+      <div className="progress">
+        <div className="progress-fill" style={{ width: `${progress}%` }} />
+      </div>
+
+      {error && <p className="note bad-note">{error}</p>}
+
+      <div className="row wrap flyout-actions">
+        <button className="btn danger" onClick={stop} disabled={busy || !plexPass.ok}>
+          {busy ? "Stopping…" : "Stop stream"}
+        </button>
+        {onBlockDevice && session.machine_id && (
+          <button
+            className="btn"
+            onClick={() =>
+              onBlockDevice(session.machine_id as string, session.player || "this device")
+            }
+          >
+            Ban device
+          </button>
+        )}
+      </div>
+      {!plexPass.ok && <p className="muted small">{plexPass.reason}</p>}
+    </div>
   );
 }
 

@@ -14,6 +14,7 @@ from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
 from app.services import capabilities
+from app.services.sync import geocode_ips
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 

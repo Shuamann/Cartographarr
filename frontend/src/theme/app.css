@@ -1057,3 +1057,118 @@ label.locked .pill {
 .drawer h3 {
   margin: 16px 0 6px;
 }
+
+/* ---- now playing strip ------------------------------------------------- */
+
+.now-playing {
+  margin: 14px 0 4px;
+}
+.now-playing.empty {
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.now-playing .section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.stream-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.stream-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.stream-card:hover {
+  border-color: var(--accent);
+}
+.stream-card.more {
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0;
+  border-style: dashed;
+}
+
+.stream-poster {
+  width: 48px;
+  height: 72px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  object-fit: cover;
+}
+
+.stream-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stream-body .progress {
+  margin-top: auto;
+}
+
+/* ---- live stream flyout ------------------------------------------------ */
+
+.ms-count.live {
+  background: var(--live);
+  color: var(--live-ink);
+}
+
+.flyout {
+  position: absolute;
+  z-index: 5;
+  width: 330px;
+  max-width: calc(100% - 24px);
+  padding: 12px;
+  transform: translate(-50%, calc(-100% - 20px));
+  border: 1px solid var(--live);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.flyout-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.flyout-head p {
+  margin: 1px 0 0;
+}
+.flyout .progress {
+  margin: 6px 0 10px;
+}
+.flyout-actions {
+  gap: 8px;
+}
+.flyout-actions .btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.min0 {
+  min-width: 0;
+  flex: 1;
+}

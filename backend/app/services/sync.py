@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import session_scope
+from app.settings_store import current as current_settings
 from app.geo.lookup import GeoResolver, is_private
 from app.models import Device, History, IpLocation, Library, MediaItem, SyncState, User
 from app.tautulli.client import TautulliClient
@@ -262,6 +263,33 @@ def refresh_devices() -> int:
 
 
 # ---- geocoding -------------------------------------------------------------
+
+def geocode_ips(ips: set[str]) -> int:
+    """Resolve and store a specific set of addresses.
+
+    Used by the live activity endpoint, where a stream from an address that has
+    never appeared in history would otherwise have nowhere to sit on the map
+    until the next sync.
+    """
+    if not ips:
+        return 0
+    settings = current_settings()
+    resolver = GeoResolver(settings.geoip_dir)
+    try:
+        if not resolver.available:
+            return 0
+        now = datetime.now(UTC)
+        rows = []
+        for ip in ips:
+            result = resolver.lookup(ip) or {"ip": ip, "is_private": is_private(ip)}
+            result["looked_up_at"] = now
+            rows.append(result)
+        with session_scope() as session:
+            _upsert(session, IpLocation, rows)
+        return len(rows)
+    finally:
+        resolver.close()
+
 
 def geocode_new_ips(resolver: GeoResolver) -> int:
     """Resolve IPs seen in history that aren't in the cache yet."""

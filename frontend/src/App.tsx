@@ -69,9 +69,13 @@ function SignedIn({
   // Blocking a device from the inventory opens the rule editor already filled
   // in, so nobody has to copy a machine_id by hand.
   function blockDevice(device: Device) {
+    blockMachine(device.machine_id, device.player || device.machine_id.slice(0, 8));
+  }
+
+  function blockMachine(machineId: string, label: string) {
     setPrefill({
-      name: `Block ${device.player || device.machine_id.slice(0, 8)}`,
-      match_machine_id: device.machine_id,
+      name: `Block ${label}`,
+      match_machine_id: machineId,
       action: "terminate",
     });
     setTab("Rules");
@@ -111,7 +115,11 @@ function SignedIn({
           <ErrorBoundary name={active} key={active}>
             {active === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
             {active === "Map" && (
-              <Map geoipReady={setup.data?.geoip_ready ?? false} onOpenUser={openUser} />
+              <Map
+                geoipReady={setup.data?.geoip_ready ?? false}
+                onOpenUser={openUser}
+                onBlockDevice={isAdmin ? blockMachine : undefined}
+              />
             )}
             {active === "Activity" && <Activity />}
             {active === "History" && <History onOpenUser={openUser} />}

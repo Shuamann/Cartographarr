@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useApi, type Dashboard } from "../lib/api";
+import { useEffect, useState } from "react";
+import { useApi, type Dashboard, type LiveSession } from "../lib/api";
 
 /* The landing screen.
  *
@@ -35,6 +35,8 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
 
       {live.error && <p className="note bad-note">{live.error}</p>}
 
+      <NowPlaying sessions={live.sessions} onOpen={() => onNavigate("Activity")} />
+
       <section className="cards">
         <Card
           big={live.stream_count}
@@ -59,26 +61,6 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
           warn={d.totals.new_devices > 0}
         />
       </section>
-
-      {live.sessions.length > 0 && (
-        <section>
-          <h2 className="section-head">Playing now</h2>
-          <div className="mini-list">
-            {live.sessions.map((s) => (
-              <div key={s.session_key} className="mini">
-                <div>
-                  <strong>{s.full_title}</strong>
-                  <p className="muted small">
-                    {s.friendly_name || s.username} · {s.player} · {s.transcode_decision}
-                    {s.geo?.is_hosting && <span className="pill warn"> VPN</span>}
-                  </p>
-                </div>
-                <span className="muted small">{Math.round(Number(s.progress_percent ?? 0))}%</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <div className="dash-cols">
         <section>
@@ -126,6 +108,102 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
         )}
       </section>
     </div>
+  );
+}
+
+const VISIBLE = 4;
+
+/* Live streams as their own strip across the top.
+ *
+ * Collapsed to a single row when there are more than fit, because a busy
+ * evening should not push the rest of the dashboard off the screen.
+ */
+function NowPlaying({
+  sessions,
+  onOpen,
+}: {
+  sessions: LiveSession[];
+  onOpen: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (sessions.length === 0) {
+    return (
+      <section className="now-playing empty">
+        <p className="muted">Nothing streaming right now.</p>
+      </section>
+    );
+  }
+
+  const shown = expanded ? sessions : sessions.slice(0, VISIBLE);
+  const hidden = sessions.length - shown.length;
+
+  return (
+    <section className="now-playing">
+      <div className="row-between">
+        <h2 className="section-head">
+          Now playing
+          <span className="pill">{sessions.length}</span>
+        </h2>
+        <div className="row">
+          {sessions.length > VISIBLE && (
+            <button className="tab" onClick={() => setExpanded(!expanded)}>
+              {expanded ? "Show fewer" : `Show all ${sessions.length}`}
+            </button>
+          )}
+          <button className="tab" onClick={onOpen}>
+            Activity
+          </button>
+        </div>
+      </div>
+
+      <div className="stream-strip">
+        {shown.map((s) => (
+          <StreamCard key={s.session_key} session={s} onClick={onOpen} />
+        ))}
+        {!expanded && hidden > 0 && (
+          <button className="stream-card more" onClick={() => setExpanded(true)}>
+            <span className="card-big">+{hidden}</span>
+            <span className="card-sub">more streaming</span>
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StreamCard({ session, onClick }: { session: LiveSession; onClick: () => void }) {
+  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+  const who = session.friendly_name || session.username || "Unknown";
+
+  return (
+    <button className="stream-card" onClick={onClick}>
+      {session.rating_key ? (
+        <img
+          className="stream-poster"
+          src={`/api/media/${session.rating_key}/image?width=120&height=180`}
+          alt=""
+          onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+        />
+      ) : (
+        <div className="stream-poster" />
+      )}
+
+      <span className="stream-body">
+        <strong className="clip">{session.full_title}</strong>
+        <span className="muted small clip">{who}</span>
+        <span className="muted small clip">
+          {session.player}
+          {session.transcode_decision === "transcode" && (
+            <span className="pill warn">transcode</span>
+          )}
+          {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
+        </span>
+        <span className="progress">
+          <span className="progress-fill" style={{ width: `${progress}%` }} />
+        </span>
+      </span>
+    </button>
   );
 }
 
