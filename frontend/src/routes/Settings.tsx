@@ -168,6 +168,34 @@ const AREAS: Area[] = [
   },
 ];
 
+/* One page per job, in a sidebar, the way Radarr and Sonarr lay settings out.
+ * Connections first, since nothing works until those are set. */
+type Page = {
+  id: string;
+  title: string;
+  group: (typeof NAV_GROUPS)[number];
+  blurb?: string;
+  sections?: Section[];
+  keys?: string[];
+};
+
+const NAV_GROUPS = ["Connections", "Cartographarr"] as const;
+
+const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const PAGES: Page[] = [
+  ...AREAS.map((a): Page => ({
+    id: slug(a.area),
+    title: a.area,
+    group: ["Behaviour", "Access"].includes(a.area) ? "Cartographarr" : "Connections",
+    blurb: a.blurb,
+    sections: a.sections,
+    keys: a.sections.flatMap((x) => x.keys),
+  })),
+  { id: "appearance", title: "Appearance", group: "Cartographarr", blurb: "The name and marks shown around the app.", keys: ["app_name"] },
+  { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
+];
+
 const LABELS: Record<string, string> = {
   tautulli_url: "Tautulli URL",
   tautulli_local_url: "Local URL",
@@ -258,10 +286,8 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
     );
   }
   return (
-    <div className="pad scroll">
-      <div className="settings">
-        <SettingsForm />
-      </div>
+    <div className="scroll settings-scroll">
+      <SettingsForm />
     </div>
   );
 }
@@ -275,6 +301,23 @@ function SettingsForm() {
   const [revealed, setRevealed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const [page, setPage] = useState<string>(() => {
+    try {
+      return localStorage.getItem("settings.page") ?? PAGES[0].id;
+    } catch {
+      return PAGES[0].id;
+    }
+  });
+  function open(id: string) {
+    setPage(id);
+    try {
+      localStorage.setItem("settings.page", id);
+    } catch {
+      /* remembering the page is a convenience only */
+    }
+    document.querySelector(".settings-scroll")?.scrollTo({ top: 0 });
+  }
 
   const byKey = new Map((settings.data ?? []).map((s) => [s.key, s]));
   const dirty = Object.keys(draft).length > 0;
@@ -403,80 +446,101 @@ function SettingsForm() {
     );
   }
 
-  if (settings.error) return <p className="note bad-note">{settings.error}</p>;
+  if (settings.error) return <p className="note bad-note pad">{settings.error}</p>;
+
+  const current = PAGES.find((x) => x.id === page) ?? PAGES[0];
+  const unsaved = (p: Page) => (p.keys ?? []).some((k) => k in draft);
 
   return (
-    <>
-      <div className="row-between">
+    <div className="settings-layout">
+      <nav className="settings-nav" aria-label="Settings sections">
         <h1>Settings</h1>
-        <div className="row">
-          {saved && <span className="muted small">Saved.</span>}
-          <button className="btn primary" onClick={save} disabled={!dirty || saving}>
-            {saving ? "Saving…" : dirty ? `Save ${Object.keys(draft).length} change(s)` : "Saved"}
-          </button>
-        </div>
-      </div>
+        {NAV_GROUPS.map((group) => (
+          <div key={group} className="settings-nav-group">
+            <span className="settings-nav-label">{group}</span>
+            {PAGES.filter((x) => x.group === group).map((x) => (
+              <button
+                key={x.id}
+                className={x.id === current.id ? "settings-nav-item on" : "settings-nav-item"}
+                onClick={() => open(x.id)}
+                aria-current={x.id === current.id ? "page" : undefined}
+              >
+                <span>{x.title}</span>
+                {unsaved(x) && <span className="unsaved-dot" title="Unsaved changes" />}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
 
-      {error && <p className="note bad-note">{error}</p>}
+      <div className="settings-page">
+        <header className="settings-page-head">
+          <h2>{current.title}</h2>
+          {current.blurb && <p className="muted">{current.blurb}</p>}
+        </header>
 
-      {AREAS.map((area) => (
-        <Area key={area.area} title={area.area} blurb={area.blurb}>
-          {area.sections.map((section) => (
-            <section key={section.title} className="card-section">
-              <div className="row-between">
-                <h3>{section.title}</h3>
-                {section.test && (
-                  <TestButton
-                    name={section.test}
-                    values={Object.fromEntries(
-                      section.keys.filter((k) => k in draft).map((k) => [k, draft[k]]),
-                    )}
-                  />
-                )}
-              </div>
-              {section.note && <p className="muted small">{section.note}</p>}
-              <div className="grid2">{section.keys.map(field)}</div>
-              {section.title === "Syncing" && <SyncNow />}
+        {error && <p className="note bad-note">{error}</p>}
+
+        {current.sections?.map((section) => (
+          <section key={section.title} className="card-section">
+            <div className="row-between">
+              <h3>{section.title}</h3>
+              {section.test && (
+                <TestButton
+                  name={section.test}
+                  values={Object.fromEntries(section.keys.filter((k) => k in draft).map((k) => [k, draft[k]]))}
+                />
+              )}
+            </div>
+            {section.note && <p className="muted small">{section.note}</p>}
+            <div className="grid2">{section.keys.map(field)}</div>
+            {section.title === "Syncing" && <SyncNow />}
+          </section>
+        ))}
+
+        {current.id === "appearance" && (
+          <>
+            <section className="card-section">
+              <h3>Name</h3>
+              <div className="grid2">{field("app_name")}</div>
             </section>
-          ))}
-        </Area>
-      ))}
+            <BrandingImages />
+          </>
+        )}
 
-      <Area title="Appearance" blurb="The name and marks shown around the app.">
-        <section className="card-section">
-          <h3>Name</h3>
-          <div className="grid2">{field("app_name")}</div>
-        </section>
-        <BrandingImages />
-      </Area>
+        {current.id === "accounts" && (
+          <>
+            <Accounts />
+            <ChangePassword />
+          </>
+        )}
 
-      <Area title="Accounts" blurb="Who can sign in to Cartographarr.">
-        <Accounts />
-        <ChangePassword />
-      </Area>
-    </>
-  );
-}
-
-/* One titled card per area, so the page reads as four jobs rather than one
- * long list of unrelated switches. */
-function Area({
-  title,
-  blurb,
-  children,
-}: {
-  title: string;
-  blurb?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="area">
-      <header>
-        <h2>{title}</h2>
-        {blurb && <p className="muted small">{blurb}</p>}
-      </header>
-      <div className="area-body">{children}</div>
-    </section>
+        {/* Changes are kept while moving between pages, so this bar follows
+            you rather than living at the top of one page. */}
+        {(dirty || saved) && (
+          <div className={dirty ? "save-bar" : "save-bar done"} role="status">
+            <span>
+              {dirty
+                ? `${Object.keys(draft).length} unsaved change${Object.keys(draft).length === 1 ? "" : "s"}` +
+                  (PAGES.filter((x) => x.id !== current.id && unsaved(x)).length
+                    ? `, some on ${PAGES.filter((x) => x.id !== current.id && unsaved(x)).map((x) => x.title).join(", ")}`
+                    : "")
+                : "Saved."}
+            </span>
+            {dirty && (
+              <div className="row">
+                <button className="btn" onClick={() => setDraft({})} disabled={saving}>
+                  Discard
+                </button>
+                <button className="btn primary" onClick={save} disabled={saving}>
+                  {saving ? "Saving\u2026" : "Save"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
