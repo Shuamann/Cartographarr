@@ -15,6 +15,7 @@ import { toQuery } from "../lib/filters";
 import { useUrlFilters } from "../lib/useUrlFilters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
+import TimeScrubber from "../components/TimeScrubber";
 import { useIsAvailable } from "../components/Gated";
 import type { HistoryPage, LocationDetail } from "../lib/api";
 
@@ -237,6 +238,10 @@ export default function MapRoute({
           />
         )}
       </div>
+
+      {view === "map" && canDrawMap && (
+        <TimeScrubber filters={filters} onChange={setFilters} />
+      )}
     </div>
   );
 }
