@@ -35,7 +35,11 @@ def get_session():
 
 
 Db = Annotated[Session, Depends(get_session)]
-Filt = Annotated[Filters, Depends()]
+from app import privacy
+from app.privacy import ScopedFilt, ViewerScope
+
+# Filters narrowed to what the signed-in viewer may see (app/privacy.py).
+Filt = ScopedFilt
 
 SORTABLE = {
     "started": History.started,
@@ -128,6 +132,7 @@ def map_points(filters: Filt, db: Db) -> dict:
 @router.get("/history")
 def history(
     filters: Filt,
+    scope: ViewerScope,
     db: Db,
     page: int = Query(1, ge=1),
     size: int = Query(100, ge=1, le=1000),
@@ -153,13 +158,13 @@ def history(
         "page": page,
         "size": size,
         "items": [
-            {c.name: getattr(row, c.name) for c in History.__table__.columns} for row in rows
+            privacy.scrub_play(scope, {c.name: getattr(row, c.name) for c in History.__table__.columns}) for row in rows
         ],
     }
 
 
 @router.get("/history/{row_id}")
-async def history_detail(row_id: int, db: Db) -> dict:
+async def history_detail(row_id: int, db: Db, scope: ViewerScope) -> dict:
     """Full stream detail for one row.
 
     Codec/bitrate/resolution are fetched live rather than synced: they need a
@@ -168,6 +173,7 @@ async def history_detail(row_id: int, db: Db) -> dict:
     row = db.get(History, row_id)
     if row is None:
         raise HTTPException(404, "No such history row")
+    privacy.require_self(scope, row.user_id)
 
     base = {c.name: getattr(row, c.name) for c in History.__table__.columns}
 
@@ -414,6 +420,7 @@ async def media_detail(rating_key: int, db: Db) -> dict:
 @router.get("/location")
 def location_detail(
     db: Db,
+    scope: ViewerScope,
     lat: float | None = None,
     lon: float | None = None,
     city: str | None = None,
@@ -436,6 +443,9 @@ def location_detail(
             where.append(IpLocation.country == country)
     if not where:
         raise HTTPException(400, "Give coordinates, or a city")
+    me = scope.plex_user_id if scope and scope.plex_user_id is not None else -1
+    if scope is not None and scope.own_only:
+        where.append(History.user_id == me)
 
     joined = select(History).join(IpLocation, IpLocation.ip == History.ip_address).where(*where)
 
@@ -487,9 +497,26 @@ def location_detail(
 
     total = db.execute(select(func.count()).select_from(joined.subquery())).scalar_one()
 
+    if scope is not None and not scope.own_only:
+        # Anonymised: the viewer's own rows, and everyone else folded into one
+        # line with a count, so the place still reads as busy without naming.
+        own = [u for u in users if u.user_id == me]
+        others = sum(u.plays for u in users if u.user_id != me)
+        users = own
+        devices = [d for d in devices if d.user_id == me]
+        mine = {
+            ip for (ip,) in db.execute(
+                select(History.ip_address).where(History.user_id == me).distinct()
+            ).all()
+        }
+        addresses = [a for a in addresses if a.ip_address in mine]
+    else:
+        others = 0
+
     return {
         "city": city,
         "country": country,
+        "other_viewers_plays": others,
         "plays": total,
         "users": [
             {
@@ -527,6 +554,7 @@ def location_detail(
 @router.get("/location/plays")
 def location_plays(
     db: Db,
+    scope: ViewerScope,
     lat: float,
     lon: float,
     size: int = Query(12, le=200),
@@ -536,12 +564,13 @@ def location_plays(
         select(History)
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .where(IpLocation.lat == lat, IpLocation.lon == lon)
+        .where(*([History.user_id == (scope.plex_user_id or -1)] if scope is not None and scope.own_only else []))
         .order_by(desc(History.started))
         .limit(size)
     )
     return {
         "items": [
-            {c.name: getattr(row, c.name) for c in History.__table__.columns}
+            privacy.scrub_play(scope, {c.name: getattr(row, c.name) for c in History.__table__.columns})
             for row in db.execute(stmt).scalars()
         ]
     }
@@ -550,7 +579,7 @@ def location_plays(
 # ---- directories -----------------------------------------------------------
 
 @router.get("/users")
-def users(db: Db) -> list:
+def users(db: Db, scope: ViewerScope) -> list:
     """Everyone who has ever had access, deleted or not.
 
     Plays and the last play come from history here rather than from Tautulli,
@@ -570,6 +599,9 @@ def users(db: Db) -> list:
         .outerjoin(stats, stats.c.user_id == User.user_id)
         .order_by(User.friendly_name)
     )
+    if scope is not None:
+        # Private modes list only the viewer. Nobody else is named.
+        stmt = stmt.where(User.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
     return [
         {
             **{c.name: getattr(u, c.name) for c in User.__table__.columns},
@@ -752,7 +784,8 @@ def _profile(db: Session, where: list) -> dict:
 
 
 @router.get("/users/{user_id}")
-def user_detail(user_id: int, db: Db) -> dict:
+def user_detail(user_id: int, db: Db, scope: ViewerScope) -> dict:
+    privacy.require_self(scope, user_id)
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(404, "No such user")
@@ -771,7 +804,7 @@ def user_detail(user_id: int, db: Db) -> dict:
 
 
 @router.get("/devices/{machine_id}")
-def device_detail(machine_id: str, db: Db) -> dict:
+def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
     """One device, across everyone who has used it. The same install can be
     signed in to more than one account, which is itself worth seeing."""
     rows = db.execute(
@@ -779,6 +812,11 @@ def device_detail(machine_id: str, db: Db) -> dict:
     ).scalars().all()
     if not rows:
         raise HTTPException(404, "No such device")
+    if scope is not None:
+        # Only a device the viewer has used, and only their own use of it.
+        rows = [d for d in rows if scope.is_self(d.user_id)]
+        if not rows:
+            raise HTTPException(403, "You can only see your own devices")
 
     names = {
         u.user_id: u.friendly_name or u.username
@@ -855,16 +893,23 @@ def device_detail(machine_id: str, db: Db) -> dict:
             }
             for d in rows
         ],
-        **_profile(db, [History.machine_id == machine_id]),
+        **_profile(
+            db,
+            [History.machine_id == machine_id]
+            + ([History.user_id == scope.plex_user_id] if scope is not None else []),
+        ),
     }
 
 
 @router.get("/addresses/{ip}")
-def address_detail(ip: str, db: Db) -> dict:
+def address_detail(ip: str, db: Db, scope: ViewerScope) -> dict:
     """One IP address: where it is, whose network, and everyone and every
     device that has played from it."""
-    plays = db.execute(select(func.count()).where(History.ip_address == ip)).scalar_one()
+    only = [History.user_id == scope.plex_user_id] if scope is not None else []
+    plays = db.execute(select(func.count()).where(History.ip_address == ip, *only)).scalar_one()
     if not plays:
+        if scope is not None:
+            raise HTTPException(403, "You can only see addresses you have played from")
         raise HTTPException(404, "No plays from that address")
     loc = db.get(IpLocation, ip)
 
@@ -877,7 +922,7 @@ def address_detail(ip: str, db: Db) -> dict:
             func.min(History.started),
             func.max(History.started),
         )
-        .where(History.ip_address == ip)
+        .where(History.ip_address == ip, *only)
         .group_by(History.user_id)
         .order_by(desc(func.max(History.started)))
     ).all()
@@ -890,7 +935,7 @@ def address_detail(ip: str, db: Db) -> dict:
             func.count(),
             func.max(History.started),
         )
-        .where(History.ip_address == ip, History.machine_id.is_not(None))
+        .where(History.ip_address == ip, History.machine_id.is_not(None), *only)
         .group_by(History.machine_id)
         .order_by(desc(func.max(History.started)))
     ).all()
@@ -911,7 +956,7 @@ def address_detail(ip: str, db: Db) -> dict:
             "is_hosting": loc.is_hosting,
             "is_private": loc.is_private,
         },
-        **_profile(db, [History.ip_address == ip]),
+        **_profile(db, [History.ip_address == ip, *only]),
         "accounts": [
             {
                 "user_id": uid,
@@ -955,6 +1000,16 @@ def person_activity(
 
     if user_id is None and machine_id is None:
         raise HTTPException(400, "Give a user_id or a machine_id")
+    scope = privacy.scope_for(user)
+    if scope is not None:
+        if user_id is not None:
+            privacy.require_self(scope, user_id)
+        if machine_id is not None and not db.execute(
+            select(func.count()).select_from(Device).where(
+                Device.machine_id == machine_id, Device.user_id == (scope.plex_user_id or -1)
+            )
+        ).scalar_one():
+            raise HTTPException(403, "You can only see your own devices")
 
     out: list[dict] = []
 
@@ -1021,8 +1076,10 @@ def person_activity(
 
 
 @router.get("/devices")
-def devices(db: Db, user_id: int | None = None, new_only: bool = False) -> list:
+def devices(db: Db, scope: ViewerScope, user_id: int | None = None, new_only: bool = False) -> list:
     stmt = select(Device).order_by(desc(Device.last_seen))
+    if scope is not None:
+        stmt = stmt.where(Device.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
     if user_id is not None:
         stmt = stmt.where(Device.user_id == user_id)
     if new_only:

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { api, useApi } from "./api";
+import { useNav } from "./nav";
 
 export type Ban = {
   machine_id: string;
@@ -20,7 +21,10 @@ export type Ban = {
 const CHANGED = "cartographarr:bans-changed";
 
 export function useBans() {
-  const bans = useApi<Ban[]>("/bans");
+  // The ban list is admin data, and refused to viewers while viewer privacy
+  // is on, so only admins ask for it.
+  const { isAdmin } = useNav();
+  const bans = useApi<Ban[]>(isAdmin ? "/bans" : null, [isAdmin]);
   useEffect(() => {
     const reload = () => bans.reload();
     window.addEventListener(CHANGED, reload);

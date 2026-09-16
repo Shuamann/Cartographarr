@@ -45,7 +45,10 @@ def get_session():
 Db = Annotated[Session, Depends(get_session)]
 log = logging.getLogger(__name__)
 
-Filt = Annotated[Filters, Depends()]
+from app import privacy
+from app.privacy import ScopedFilt, ViewerScope
+
+Filt = ScopedFilt
 
 # What the UI needs from a live session. get_activity returns ~250 fields per
 # stream; sending them all would make the 5-second poll heavier than the map.
@@ -96,7 +99,11 @@ def list_actions() -> list[dict]:
 # ---- live activity ---------------------------------------------------------
 
 @router.get("/activity")
-async def activity(db: Db) -> dict:
+async def activity_endpoint(db: Db, scope: ViewerScope) -> dict:
+    return await activity(db, scope)
+
+
+async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
     if not is_configured():
         return {"stream_count": 0, "sessions": [], "error": "Tautulli is not configured"}
 
@@ -133,8 +140,14 @@ async def activity(db: Db) -> dict:
             }
         )
 
+    if scope is not None:
+        if scope.own_only:
+            sessions = [x for x in sessions if scope.is_self(x.get("user_id"))]
+        else:
+            sessions = [privacy.scrub_session(scope, x) for x in sessions]
+
     return {
-        "stream_count": data.get("stream_count"),
+        "stream_count": data.get("stream_count") if scope is None or not scope.own_only else len(sessions),
         "total_bandwidth": data.get("total_bandwidth"),
         "wan_bandwidth": data.get("wan_bandwidth"),
         "transcode_count": data.get("stream_count_transcode"),
@@ -209,7 +222,8 @@ def _rule_dict(rule: Rule) -> dict:
 
 
 @router.get("/rules")
-def list_rules(db: Db) -> list[dict]:
+def list_rules(db: Db, scope: ViewerScope) -> list[dict]:
+    privacy.forbid_private(scope)
     stmt = select(Rule).order_by(Rule.id)
     return [_rule_dict(r) for r in db.execute(stmt).scalars()]
 
@@ -345,7 +359,8 @@ def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, A
 
 
 @router.get("/enforcement-log")
-def enforcement_log(db: Db, limit: int = 100) -> list[dict]:
+def enforcement_log(db: Db, scope: ViewerScope, limit: int = 100) -> list[dict]:
+    privacy.forbid_private(scope)
     stmt = select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(limit)
     return [
         {c.name: getattr(row, c.name) for c in EnforcementLog.__table__.columns}
@@ -397,9 +412,10 @@ def combined_log(
 
 
 @router.get("/bans")
-def list_bans(db: Db) -> list[dict]:
+def list_bans(db: Db, scope: ViewerScope) -> list[dict]:
     """Banned devices, with who they belong to, when they were last seen, and
     how often they have tried to stream since."""
+    privacy.forbid_private(scope)
     from app.models import BannedDevice
 
     bans = db.execute(select(BannedDevice).order_by(desc(BannedDevice.banned_at))).scalars().all()
@@ -587,13 +603,14 @@ def convert_rules_to_bans(admin: AdminUser, rule_ids: list[int] = Body(..., embe
 
 
 @router.get("/map/banned")
-def banned_on_map(db: Db) -> dict:
+def banned_on_map(db: Db, scope: ViewerScope) -> dict:
     """Where banned devices have been seen, and where they were stopped.
 
     Two kinds of point: places a banned device played from (its history),
     and places it tried to stream from after the ban, taken from the
     location recorded when the stream was stopped.
     """
+    privacy.forbid_private(scope)
     from app.models import BannedDevice
 
     bans = {b.machine_id: b for b in db.execute(select(BannedDevice)).scalars()}
@@ -663,8 +680,9 @@ def banned_on_map(db: Db) -> dict:
 
 
 @router.get("/rules/fields")
-def rule_fields(db: Db) -> dict:
+def rule_fields(db: Db, scope: ViewerScope) -> dict:
     """Everything the rule builder needs to draw its dropdowns."""
+    privacy.forbid_private(scope)
     from app.models import Library
     from app.services import conditions as cond
 
@@ -890,12 +908,14 @@ async def test_integration(
 # ---- impossible travel -----------------------------------------------------
 
 @router.get("/travel-flags")
-def travel_flags(db: Db, status: str | None = None, limit: int = 100) -> list[dict]:
+def travel_flags(db: Db, scope: ViewerScope, status: str | None = None, limit: int = 100) -> list[dict]:
     stmt = select(TravelFlag, func.coalesce(User.friendly_name, User.username).label("name")).join(
         User, User.user_id == TravelFlag.user_id, isouter=True
     )
     if status:
         stmt = stmt.where(TravelFlag.status == status)
+    if scope is not None:
+        stmt = stmt.where(TravelFlag.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
     stmt = stmt.order_by(desc(TravelFlag.to_started)).limit(limit)
 
     return [
@@ -935,13 +955,14 @@ def _key_label(key: str) -> str:
 
 
 @router.get("/travel-flags/{flag_id}")
-def travel_flag_detail(flag_id: int, db: Db) -> dict:
+def travel_flag_detail(flag_id: int, db: Db, scope: ViewerScope) -> dict:
     """Both plays behind a signal, where each was, and what separates them."""
     from app.models import SignalIgnore
 
     flag = db.get(TravelFlag, flag_id)
     if flag is None:
         raise HTTPException(404, "No such signal")
+    privacy.require_self(scope, flag.user_id)
     user = db.get(User, flag.user_id)
     from_key, to_key = _flag_keys(db, flag)
     # Signals found before places were recorded get theirs now, so the count
@@ -1092,7 +1113,8 @@ def review_flag(
 
 
 @router.get("/signal-ignores")
-def list_signal_ignores(db: Db) -> list[dict]:
+def list_signal_ignores(db: Db, scope: ViewerScope) -> list[dict]:
+    privacy.forbid_private(scope)
     from app.models import SignalIgnore
 
     rows = db.execute(select(SignalIgnore).order_by(desc(SignalIgnore.created_at))).scalars().all()
@@ -1144,7 +1166,7 @@ def delete_signal_ignore(ignore_id: int, admin: AdminUser) -> dict:
 # ---- dashboard -------------------------------------------------------------
 
 @router.get("/dashboard")
-async def dashboard(db: Db, filters: Filt) -> dict:
+async def dashboard(db: Db, filters: Filt, scope: ViewerScope) -> dict:
     """Everything the landing screen needs, composed in one call.
 
     Deliberately one endpoint rather than a widget-per-request: the layout is
@@ -1203,18 +1225,38 @@ async def dashboard(db: Db, filters: Filt) -> dict:
     ).all()
 
     new_devices = db.execute(
-        select(func.count()).select_from(Device).where(Device.is_new_unreviewed.is_(True))
+        select(func.count()).select_from(Device).where(
+            Device.is_new_unreviewed.is_(True),
+            *([Device.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1)] if scope is not None else []),
+        )
     ).scalar_one()
 
+    me = scope.plex_user_id if scope is not None and scope.plex_user_id is not None else -1
     open_flags = db.execute(
-        select(func.count()).select_from(TravelFlag).where(TravelFlag.status == "new")
+        select(func.count()).select_from(TravelFlag).where(
+            TravelFlag.status == "new", *([TravelFlag.user_id == me] if scope is not None else [])
+        )
     ).scalar_one()
 
-    last_enforcement = db.execute(
-        select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(5)
-    ).scalars()
+    last_enforcement = (
+        []
+        if scope is not None
+        else db.execute(select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(5)).scalars()
+    )
 
-    live = await activity(db)
+    live = await activity(db, scope)
+    if scope is not None and not scope.own_only:
+        from types import SimpleNamespace
+
+        # Anonymised: the ranking stays, other people's names do not.
+        top_users = [
+            SimpleNamespace(
+                user_id=r.user_id if r.user_id == me else None,
+                name=r.name if r.user_id == me else privacy.ANOTHER,
+                plays=r.plays,
+            )
+            for r in top_users
+        ]
 
     return {
         "capabilities": capabilities.as_map(),

@@ -57,7 +57,17 @@ export default function App() {
   // never open to whoever reaches the URL first.
   if (!auth.data.authenticated) return <Login state={auth.data} onDone={auth.reload} />;
 
-  return <SignedIn isAdmin={isAdmin} tab={tab} setTab={setTab} caps={caps} user={user} onSignOut={auth.reload} />;
+  return (
+    <SignedIn
+      isAdmin={isAdmin}
+      tab={tab}
+      setTab={setTab}
+      caps={caps}
+      user={user}
+      privacy={auth.data.privacy}
+      onSignOut={auth.reload}
+    />
+  );
 }
 
 function SignedIn({
@@ -66,6 +76,7 @@ function SignedIn({
   setTab,
   caps,
   user,
+  privacy,
   onSignOut,
 }: {
   isAdmin: boolean;
@@ -73,6 +84,7 @@ function SignedIn({
   setTab: (t: Tab) => void;
   caps: Capabilities | null;
   user: AuthState["user"];
+  privacy: AuthState["privacy"];
   onSignOut: () => void;
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
@@ -197,6 +209,15 @@ function SignedIn({
           <SignOut username={user?.username ?? ""} onSignOut={onSignOut} />
         </header>
 
+        {privacy && privacy.mode !== "all" && !isAdmin && (
+          <div className={privacy.linked ? "privacy-bar" : "privacy-bar warn"}>
+            {!privacy.linked
+              ? "Your account is not linked to a Plex user, so there is nothing of yours to show. Ask an admin to link it under Settings, Accounts."
+              : privacy.mode === "own"
+                ? "You are seeing only your own plays, devices and streams."
+                : "Other people are anonymised. Totals and the map cover the whole server."}
+          </div>
+        )}
         <main>
           <ErrorBoundary name={active} key={active}>
             <Suspense fallback={<div className="pad muted">Loading…</div>}>

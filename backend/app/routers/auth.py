@@ -36,6 +36,7 @@ def _public(user: AppUser) -> dict:
         "auth_source": user.auth_source,
         "is_active": user.is_active,
         "last_login": user.last_login,
+        "plex_user_id": user.plex_user_id,
     }
 
 
@@ -81,6 +82,19 @@ def state(request: Request) -> dict:
         "authenticated": user is not None,
         "user": _public(user) if user else None,
         "proxy_enabled": settings.auth_proxy_enabled,
+        "privacy": _privacy(user) if user else None,
+    }
+
+
+def _privacy(user: AppUser) -> dict:
+    """What the page needs to explain a restricted view to a viewer."""
+    from app import privacy
+
+    scope = privacy.scope_for(user)
+    return {
+        "mode": scope.mode if scope else "all",
+        "plex_user_id": scope.plex_user_id if scope else privacy.linked_plex_user(user),
+        "linked": bool(scope is None or scope.plex_user_id is not None),
     }
 
 
@@ -247,7 +261,7 @@ def create_user(
 
 @router.put("/users/{user_id}")
 def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
-    allowed = {"role", "email", "is_active", "password"}
+    allowed = {"role", "email", "is_active", "password", "plex_user_id"}
     unknown = set(values) - allowed
     if unknown:
         raise HTTPException(400, f"Cannot change: {', '.join(sorted(unknown))}")
@@ -280,8 +294,8 @@ def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
                 raise HTTPException(400, problem)
             user.password_hash = hash_password(values["password"])
             db.execute(delete(AppSession).where(AppSession.app_user_id == user.id))
-        before = {f: getattr(user, f) for f in ("role", "email", "is_active")}
-        for field in ("role", "email", "is_active"):
+        before = {f: getattr(user, f) for f in ("role", "email", "is_active", "plex_user_id")}
+        for field in ("role", "email", "is_active", "plex_user_id"):
             if field in values:
                 setattr(user, field, values[field])
         db.flush()
@@ -296,6 +310,8 @@ def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
         parts.append("email")
     if "password" in values:
         parts.append("reset password")
+    if "plex_user_id" in values and values["plex_user_id"] != before["plex_user_id"]:
+        parts.append("linked Plex user" if values["plex_user_id"] else "unlinked Plex user")
     audit.record(
         admin, "account.update",
         f"Changed account {user.username}: {', '.join(parts) or 'no changes'}",

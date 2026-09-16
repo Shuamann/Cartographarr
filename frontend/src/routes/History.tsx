@@ -107,11 +107,23 @@ export default function HistoryRoute({
                 <tr
                   key={row.row_id}
                   className={open === row.row_id ? "loc-row selected" : "loc-row"}
-                  onClick={() => (onOpenMedia ? onOpenMedia(row) : setOpen(open === row.row_id ? null : row.row_id))}
+                  onClick={() =>
+                    (row as HistoryRow & { anonymised?: boolean }).anonymised
+                      ? undefined
+                      : onOpenMedia
+                        ? onOpenMedia(row)
+                        : setOpen(open === row.row_id ? null : row.row_id)
+                  }
                   aria-expanded={open === row.row_id}
                 >
                   <td className="muted">{when(row.started)}</td>
-                  <td>{row.full_title}</td>
+                  <td>
+                    {(row as HistoryRow & { anonymised?: boolean }).anonymised ? (
+                      <span className="muted">Withheld, another viewer</span>
+                    ) : (
+                      row.full_title
+                    )}
+                  </td>
                   <td>
                     {row.user_id !== null && onOpenUser ? (
                       <button

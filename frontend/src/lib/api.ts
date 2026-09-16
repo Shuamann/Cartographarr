@@ -347,6 +347,7 @@ export type AppUser = {
   auth_source: string;
   is_active: boolean;
   last_login: string | null;
+  plex_user_id?: number | null;
 };
 
 export type AuthState = {
@@ -354,6 +355,7 @@ export type AuthState = {
   authenticated: boolean;
   user: AppUser | null;
   proxy_enabled: boolean;
+  privacy: { mode: "all" | "own" | "anonymised"; plex_user_id: number | null; linked: boolean } | null;
 };
 
 export type PlexUser = {

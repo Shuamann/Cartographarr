@@ -2417,3 +2417,15 @@ label.locked .pill {
   gap: 8px;
   margin-top: 12px;
 }
+
+.privacy-bar {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.privacy-bar.warn {
+  color: var(--ink);
+  border-bottom-color: var(--warn);
+}

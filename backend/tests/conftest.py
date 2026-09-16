@@ -40,6 +40,9 @@ def client(monkeypatch, tmp_path):
     # this test's reloaded models, or a filtered query names two copies of the
     # same table.
     importlib.reload(app.filters)
+    import app.privacy
+
+    importlib.reload(app.privacy)
 
     import app.auth.deps, app.routers.auth, app.main
     import app.routers.admin, app.routers.branding, app.routers.data, app.routers.live

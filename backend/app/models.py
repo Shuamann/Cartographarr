@@ -340,6 +340,9 @@ class AppUser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime | None] = mapped_column()
     last_login: Mapped[datetime | None] = mapped_column()
+    plex_user_id: Mapped[int | None] = mapped_column(Integer)
+    """Which Plex user this person is, for viewer privacy. Set by an admin, or
+    left empty to match by email or username."""
 
 
 class AppSession(Base):

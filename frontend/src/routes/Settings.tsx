@@ -153,6 +153,11 @@ const AREAS: Area[] = [
     blurb: "Who can sign in, and how.",
     sections: [
       {
+        title: "Viewer privacy",
+        note: "What viewer accounts can see. Admins always see everything. Own data only hides everyone else entirely. Others anonymised keeps totals, charts and the map for the whole server, but other people appear as \"Another viewer\" with their addresses, devices and titles withheld. A viewer is matched to a Plex user by the link under Accounts, or by email or username; a viewer who matches nobody sees no personal data.",
+        keys: ["viewer_privacy"],
+      },
+      {
         title: "Reverse proxy sign in",
         note: "Only turn this on with an authenticating proxy in front. The header is honoured solely from the addresses listed here, otherwise anyone who can reach the app could claim to be anyone.",
         keys: [
@@ -222,6 +227,7 @@ const LABELS: Record<string, string> = {
   proxy_user_header: "Username header",
   proxy_email_header: "Email header",
   proxy_default_role: "Role for new proxy users",
+  viewer_privacy: "Viewers can see",
   radarr_url: "Local URL",
   radarr_public_url: "Remote URL, for buttons",
   radarr_api_key: "API key",
@@ -414,6 +420,16 @@ function SettingsForm() {
           >
             <option value="true">On</option>
             <option value="false">Off</option>
+          </select>
+        ) : key === "viewer_privacy" ? (
+          <select
+            disabled={locked}
+            value={String(value ?? "all")}
+            onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+          >
+            <option value="all">Everything on the server</option>
+            <option value="own">Only their own data</option>
+            <option value="anonymised">Everything, with other people anonymised</option>
           </select>
         ) : key === "proxy_default_role" ? (
           <select
@@ -832,6 +848,8 @@ function SyncNow() {
 
 function Accounts() {
   const users = useApi<AppUser[]>("/auth/users");
+  // Plex users to link accounts to, for viewer privacy.
+  const plexUsers = useApi<{ user_id: number; username: string | null; friendly_name: string | null; email: string | null }[]>("/users");
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ username: "", password: "", role: "viewer", email: "" });
   const [error, setError] = useState<string | null>(null);
@@ -932,6 +950,20 @@ function Accounts() {
                 <select value={u.role} onChange={(e) => change(u, { role: e.target.value })}>
                   <option value="viewer">Viewer</option>
                   <option value="admin">Admin</option>
+                </select>
+              </td>
+              <td>
+                <select
+                  title="Which Plex user this is, for viewer privacy. Automatic matches by email or username."
+                  value={u.plex_user_id ?? ""}
+                  onChange={(e) => change(u, { plex_user_id: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">Plex user: automatic</option>
+                  {(plexUsers.data ?? []).map((p) => (
+                    <option key={p.user_id} value={p.user_id}>
+                      {p.friendly_name || p.username || p.user_id}
+                    </option>
+                  ))}
                 </select>
               </td>
               <td className="muted small">

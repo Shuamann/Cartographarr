@@ -140,6 +140,10 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    viewer_privacy: str = "all"
+    """What viewer accounts can see: `all` of the server, only their `own`
+    data, or everything with other people `anonymised`. Admins see all."""
+
     auth_proxy_enabled: bool = False
     """Trust an authenticating reverse proxy (Authelia, Authentik, Cloudflare
     Access). Off until you have one in front, or anyone could send the header."""
