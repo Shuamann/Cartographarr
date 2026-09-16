@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Select, desc, func, select
+from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
-from app.db import SessionLocal
+from app.auth.deps import AdminUser
+from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
 from app.settings_store import current, is_configured
@@ -67,6 +68,10 @@ def map_points(filters: Filt, db: Db) -> dict:
             IpLocation.country_code,
             IpLocation.is_hosting,
             IpLocation.asn_org,
+            # GeoLite2 places an IP at a city or postal centroid, not an
+            # address. Carrying the radius lets the map draw how uncertain
+            # each point actually is instead of implying a rooftop.
+            func.max(IpLocation.accuracy_radius).label("accuracy_km"),
             func.count().label("plays"),
             func.count(func.distinct(History.user_id)).label("users"),
             func.count(func.distinct(History.machine_id)).label("devices"),
@@ -92,6 +97,7 @@ def map_points(filters: Filt, db: Db) -> dict:
                 "country_code": row.country_code,
                 "is_hosting": row.is_hosting,
                 "asn_org": row.asn_org,
+                "accuracy_km": row.accuracy_km,
                 "plays": row.plays,
                 "users": row.users,
                 "devices": row.devices,
@@ -229,6 +235,83 @@ def users(db: Db) -> list:
             for u in db.execute(stmt).scalars().all()]
 
 
+@router.get("/users/{user_id}")
+def user_detail(user_id: int, db: Db) -> dict:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "No such user")
+
+    totals = db.execute(
+        select(
+            func.count(),
+            func.sum(History.play_duration),
+            func.count(func.distinct(History.machine_id)),
+            func.count(func.distinct(History.ip_address)),
+            func.min(History.started),
+            func.max(History.started),
+        ).where(History.user_id == user_id)
+    ).one()
+
+    devices = db.execute(
+        select(Device).where(Device.user_id == user_id).order_by(desc(Device.last_seen))
+    ).scalars().all()
+
+    places = db.execute(
+        select(
+            IpLocation.city,
+            IpLocation.region,
+            IpLocation.country,
+            IpLocation.is_hosting,
+            IpLocation.asn_org,
+            func.count().label("plays"),
+        )
+        .join(History, History.ip_address == IpLocation.ip)
+        .where(History.user_id == user_id)
+        .group_by(IpLocation.city, IpLocation.region, IpLocation.country)
+        .order_by(desc(func.count()))
+        .limit(20)
+    ).all()
+
+    top = db.execute(
+        select(
+            func.coalesce(History.grandparent_rating_key, History.rating_key).label("key"),
+            func.max(func.coalesce(History.grandparent_title, History.full_title)).label("title"),
+            func.count().label("plays"),
+        )
+        .where(History.user_id == user_id)
+        .group_by("key")
+        .order_by(desc(func.count()))
+        .limit(10)
+    ).all()
+
+    return {
+        **{c.name: getattr(user, c.name) for c in User.__table__.columns},
+        "totals": {
+            "plays": totals[0],
+            "seconds": totals[1] or 0,
+            "devices": totals[2],
+            "ips": totals[3],
+            "first_play": totals[4],
+            "last_play": totals[5],
+        },
+        "devices": [
+            {c.name: getattr(d, c.name) for c in Device.__table__.columns} for d in devices
+        ],
+        "places": [
+            {
+                "city": p.city,
+                "region": p.region,
+                "country": p.country,
+                "is_hosting": p.is_hosting,
+                "asn_org": p.asn_org,
+                "plays": p.plays,
+            }
+            for p in places
+        ],
+        "top_media": [{"rating_key": t.key, "title": t.title, "plays": t.plays} for t in top],
+    }
+
+
 @router.get("/devices")
 def devices(db: Db, user_id: int | None = None, new_only: bool = False) -> list:
     stmt = select(Device).order_by(desc(Device.last_seen))
@@ -238,6 +321,24 @@ def devices(db: Db, user_id: int | None = None, new_only: bool = False) -> list:
         stmt = stmt.where(Device.is_new_unreviewed.is_(True))
     return [{c.name: getattr(d, c.name) for c in Device.__table__.columns}
             for d in db.execute(stmt).scalars().all()]
+
+
+@router.post("/devices/{machine_id}/review")
+def review_device(machine_id: str, _: AdminUser, reviewed: bool = True) -> dict:
+    """Clear (or restore) the "new device" flag.
+
+    Admin only: acknowledging a device is how the alert gets dismissed, and a
+    viewer dismissing it for everyone would defeat the point.
+    """
+    with session_scope() as db:
+        rows = db.execute(
+            update(Device)
+            .where(Device.machine_id == machine_id)
+            .values(is_new_unreviewed=not reviewed)
+        )
+        if not rows.rowcount:
+            raise HTTPException(404, "No such device")
+    return {"machine_id": machine_id, "is_new_unreviewed": not reviewed}
 
 
 @router.get("/libraries")

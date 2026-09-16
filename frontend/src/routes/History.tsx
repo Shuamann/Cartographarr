@@ -1,0 +1,120 @@
+import { useMemo, useState } from "react";
+import { useApi, type HistoryPage, type HistoryRow } from "../lib/api";
+import FilterBar from "../components/FilterBar";
+import { EMPTY, toQuery, type FilterState } from "../lib/filters";
+import { when } from "../components/DataTable";
+
+const SIZE = 100;
+
+const SORTABLE: Record<string, string> = {
+  started: "When",
+  full_title: "Title",
+  user_id: "User",
+  platform: "Platform",
+  player: "Device",
+  media_type: "Type",
+  percent_complete: "Progress",
+};
+
+/* Paginated and sorted server-side, unlike Users and Devices.
+ *
+ * There are tens of thousands of rows, so sorting in the browser would mean
+ * shipping all of them first.
+ */
+export default function HistoryRoute({ onOpenMedia }: { onOpenMedia?: (row: HistoryRow) => void }) {
+  const [filters, setFilters] = useState<FilterState>(EMPTY);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState("started");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  const query = useMemo(() => toQuery(filters), [filters]);
+  const url = `/history${query}${query ? "&" : "?"}page=${page}&size=${SIZE}&sort=${sort}&order=${order}`;
+  const data = useApi<HistoryPage>(url);
+
+  // Any filter change invalidates the page number.
+  function changeFilters(next: FilterState) {
+    setFilters(next);
+    setPage(1);
+  }
+
+  function sortBy(key: string) {
+    if (sort === key) setOrder(order === "asc" ? "desc" : "asc");
+    else {
+      setSort(key);
+      setOrder("desc");
+    }
+    setPage(1);
+  }
+
+  const total = data.data?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / SIZE));
+
+  return (
+    <div className="map-page">
+      <FilterBar value={filters} onChange={changeFilters} />
+
+      <div className="viewbar">
+        <span className="muted small">
+          {total.toLocaleString()} {total === 1 ? "play" : "plays"}
+        </span>
+        <div className="row" style={{ marginLeft: "auto" }}>
+          <button className="ms-btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            Previous
+          </button>
+          <span className="muted small">
+            Page {page.toLocaleString()} of {pages.toLocaleString()}
+          </span>
+          <button className="ms-btn" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+            Next
+          </button>
+        </div>
+      </div>
+
+      <div className="view-body">
+        <div className="list-wrap">
+          {data.error && <p className="note bad-note pad">{data.error}</p>}
+          <table className="table locations">
+            <thead>
+              <tr>
+                {Object.entries(SORTABLE).map(([key, label]) => (
+                  <th
+                    key={key}
+                    className={sort === key ? "sorted" : ""}
+                    onClick={() => sortBy(key)}
+                  >
+                    {label}
+                    {sort === key && <span className="caret">{order === "asc" ? "▲" : "▼"}</span>}
+                  </th>
+                ))}
+                <th>Where</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.data?.items.map((row) => (
+                <tr
+                  key={row.row_id}
+                  className={onOpenMedia ? "loc-row" : undefined}
+                  onClick={onOpenMedia ? () => onOpenMedia(row) : undefined}
+                >
+                  <td className="muted">{when(row.started)}</td>
+                  <td>{row.full_title}</td>
+                  <td>{row.user_id}</td>
+                  <td className="muted">{row.platform}</td>
+                  <td className="muted">{row.player}</td>
+                  <td>
+                    <span className="pill">{row.media_type}</span>
+                    {row.transcode_decision === "transcode" && (
+                      <span className="pill warn">transcode</span>
+                    )}
+                  </td>
+                  <td className="num">{row.percent_complete ?? 0}%</td>
+                  <td className="muted">{row.ip_address}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

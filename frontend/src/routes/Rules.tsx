@@ -17,11 +17,11 @@ const MATCHERS: { key: keyof Rule; label: string; placeholder?: string; hint?: s
   { key: "match_paused_minutes_gt", label: "Paused over (min)", placeholder: "30" },
 ];
 
-export default function RulesRoute() {
+export default function RulesRoute({ prefill }: { prefill?: Partial<Rule> & { name: string } }) {
   const rules = useApi<Rule[]>("/rules");
   const actions = useApi<ActionSpec[]>("/actions");
   const logEntries = useApi<Enforcement[]>("/enforcement-log?limit=50");
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(prefill ?? null);
   const [error, setError] = useState<string | null>(null);
 
   const dryRun = logEntries.data?.some((e) => e.dry_run) ?? true;

@@ -933,3 +933,24 @@ label.locked .pill {
   padding: 4px 8px;
   font-size: 13px;
 }
+
+.idbtn {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.idbtn:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.idbtn code {
+  font-size: 12px;
+}

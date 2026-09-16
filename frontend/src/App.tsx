@@ -7,10 +7,14 @@ import Login from "./routes/Login";
 import Setup from "./routes/Setup";
 import Map from "./routes/Map";
 import Activity from "./routes/Activity";
+import History from "./routes/History";
+import Users from "./routes/Users";
+import Devices from "./routes/Devices";
 import Rules from "./routes/Rules";
 import Settings from "./routes/Settings";
+import type { Device, Rule } from "./lib/api";
 
-const TABS = ["Dashboard", "Map", "Activity", "Rules", "Settings"] as const;
+const TABS = ["Dashboard", "Map", "Activity", "History", "Users", "Devices", "Rules", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 const ADMIN_TABS: Tab[] = ["Rules", "Settings"];
 
@@ -54,6 +58,18 @@ function SignedIn({
   onSignOut: () => void;
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
+  const [prefill, setPrefill] = useState<(Partial<Rule> & { name: string }) | undefined>();
+
+  // Blocking a device from the inventory opens the rule editor already filled
+  // in, so nobody has to copy a machine_id by hand.
+  function blockDevice(device: Device) {
+    setPrefill({
+      name: `Block ${device.player || device.machine_id.slice(0, 8)}`,
+      match_machine_id: device.machine_id,
+      action: "terminate",
+    });
+    setTab("Rules");
+  }
 
   if (setup.loading) return <Splash>Loading…</Splash>;
 
@@ -90,7 +106,10 @@ function SignedIn({
             {active === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
             {active === "Map" && <Map geoipReady={setup.data?.geoip_ready ?? false} />}
             {active === "Activity" && <Activity />}
-            {active === "Rules" && <Rules />}
+            {active === "History" && <History />}
+            {active === "Users" && <Users />}
+            {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
+            {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}
           </ErrorBoundary>
         </main>

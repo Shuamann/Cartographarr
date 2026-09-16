@@ -123,6 +123,7 @@ export type MapPoint = {
     country_code: string | null;
     is_hosting: boolean;
     asn_org: string | null;
+    accuracy_km: number | null;
     plays: number;
     users: number;
     devices: number;
@@ -258,4 +259,87 @@ export type AuthState = {
   authenticated: boolean;
   user: AppUser | null;
   proxy_enabled: boolean;
+};
+
+export type PlexUser = {
+  user_id: number;
+  username: string | null;
+  friendly_name: string | null;
+  email: string | null;
+  thumb: string | null;
+  is_active: boolean;
+  is_home_user: boolean;
+  last_seen: number | null;
+};
+
+export type Device = {
+  machine_id: string;
+  user_id: number;
+  player: string | null;
+  platform: string | null;
+  product: string | null;
+  first_seen: number | null;
+  last_seen: number | null;
+  play_count: number;
+  is_new_unreviewed: boolean;
+};
+
+export type UserDetail = PlexUser & {
+  totals: {
+    plays: number;
+    seconds: number;
+    devices: number;
+    ips: number;
+    first_play: number | null;
+    last_play: number | null;
+  };
+  devices: Device[];
+  places: {
+    city: string | null;
+    region: string | null;
+    country: string | null;
+    is_hosting: boolean;
+    asn_org: string | null;
+    plays: number;
+  }[];
+  top_media: { rating_key: number; title: string; plays: number }[];
+};
+
+export type HistoryRow = {
+  row_id: number;
+  user_id: number | null;
+  machine_id: string | null;
+  ip_address: string | null;
+  started: number | null;
+  media_type: string | null;
+  rating_key: number | null;
+  full_title: string | null;
+  platform: string | null;
+  player: string | null;
+  transcode_decision: string | null;
+  percent_complete: number | null;
+};
+
+export type HistoryPage = {
+  total: number;
+  page: number;
+  size: number;
+  items: HistoryRow[];
+};
+
+export type MediaDetail = {
+  rating_key: number;
+  title: string | null;
+  full_title: string | null;
+  year: number | null;
+  media_type: string | null;
+  summary: string | null;
+  thumb: string | null;
+  art: string | null;
+  content_rating: string | null;
+  duration: number | null;
+  imdb_id: string | null;
+  tmdb_id: string | null;
+  tvdb_id: string | null;
+  links: Record<string, string>;
 };
