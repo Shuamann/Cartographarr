@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     sonarr_url: str = ""
     sonarr_api_key: str = ""
 
+    apprise_urls: str = ""
+    """Where notifications go. One Apprise URL per line or comma separated, so
+    one setting covers Discord, ntfy, Gotify, Pushover, Telegram, email and the
+    hundred or so others Apprise speaks."""
+
+    webhook_url: str = ""
+    """Posted a JSON body when a rule says to. The escape hatch for anything
+    Apprise does not cover."""
+
     # ---- Impossible travel -------------------------------------------------
     impossible_kmh: float = 900.0
     """Faster than a commercial flight, so not one person moving."""

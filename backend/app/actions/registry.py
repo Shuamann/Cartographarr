@@ -58,8 +58,12 @@ def unmet(action: Action) -> list[str]:
         if requirement == "plex_pass" and not capabilities.plex_pass_active():
             missing.append("plex_pass")
         elif requirement.startswith("integration:"):
-            # Integrations land in a later phase; treat as unmet until then.
-            missing.append(requirement)
+            from app.integrations.notify import apprise_notifier, webhook_notifier
+
+            available = {i.name: i for i in (apprise_notifier, webhook_notifier)}
+            integration = available.get(requirement.split(":", 1)[1])
+            if integration is None or not integration.configured():
+                missing.append(requirement)
     return missing
 
 
@@ -117,6 +121,80 @@ async def _log_only(session: Session, _params: Params) -> str:
         session.get("full_title"),
     )
     return "logged"
+
+
+def _describe(session: Session) -> str:
+    who = session.get("friendly_name") or session.get("username") or "Someone"
+    where = (session.get("geo") or {}).get("city") if isinstance(session.get("geo"), dict) else None
+    parts = [
+        f"{who} started {session.get('full_title')}",
+        f"on {session.get('player')}" if session.get("player") else "",
+        f"from {where}" if where else "",
+    ]
+    return " ".join(p for p in parts if p)
+
+
+async def _notify(session: Session, params: Params) -> str:
+    from app.integrations.notify import apprise_notifier
+
+    title = params.get("title") or "Cartographarr"
+    body = params.get("message") or _describe(session)
+    return await apprise_notifier.send(title, body)
+
+
+register(
+    Action(
+        name="notify",
+        label="Send a notification",
+        description="Messages wherever you have pointed Apprise, and leaves the stream alone.",
+        execute=_notify,
+        requires=("integration:apprise",),
+        param_schema={
+            "message": {
+                "type": "string",
+                "label": "Message (defaults to a description of the stream)",
+            }
+        },
+    )
+)
+
+
+async def _webhook(session: Session, params: Params) -> str:
+    from app.integrations.notify import webhook_notifier
+
+    return await webhook_notifier.send(
+        {
+            "event": "rule_matched",
+            "message": params.get("message") or _describe(session),
+            "session": {
+                key: session.get(key)
+                for key in (
+                    "session_key",
+                    "user_id",
+                    "username",
+                    "friendly_name",
+                    "machine_id",
+                    "player",
+                    "platform",
+                    "ip_address",
+                    "full_title",
+                    "transcode_decision",
+                )
+            },
+        }
+    )
+
+
+register(
+    Action(
+        name="webhook",
+        label="Post to a webhook",
+        description="Sends the stream details as JSON to the URL in Settings.",
+        execute=_webhook,
+        requires=("integration:webhook",),
+        param_schema={"message": {"type": "string", "label": "Message"}},
+    )
+)
 
 
 register(

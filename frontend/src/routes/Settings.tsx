@@ -31,6 +31,11 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
     keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
   },
   {
+    title: "Notifications",
+    note: "Optional. One Apprise URL per line or comma separated, which covers Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
+    keys: ["apprise_urls", "webhook_url"],
+  },
+  {
     title: "Reverse proxy sign in",
     note: "Only turn this on with an authenticating proxy in front. The header is honoured solely from the addresses listed here, otherwise anyone who can reach the app could claim to be anyone.",
     keys: ["auth_proxy_enabled", "trusted_proxy_ips", "proxy_user_header", "proxy_email_header", "proxy_default_role"],
@@ -69,6 +74,8 @@ const LABELS: Record<string, string> = {
   radarr_api_key: "Radarr API key",
   sonarr_url: "Sonarr URL",
   sonarr_api_key: "Sonarr API key",
+  apprise_urls: "Apprise URLs",
+  webhook_url: "Webhook URL",
   session_ttl_hours: "Stay signed in for (hours)",
   session_cookie_secure: "Only send the cookie over HTTPS",
 };

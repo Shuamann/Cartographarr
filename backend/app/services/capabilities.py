@@ -124,9 +124,18 @@ def as_map() -> dict[str, Any]:
         },
         "probed_at": caps.get("probed_at"),
         "stale": caps.get("stale", False),
-        # Filled in when integrations land; the shape is fixed now so the
-        # frontend's gating doesn't change later.
-        "integrations": {},
+        "integrations": _integration_states(),
+    }
+
+
+def _integration_states() -> dict[str, str]:
+    """Just configured or not. A reachability check would mean network calls on
+    every page load, and the Settings page tests properly on demand."""
+    from app.integrations import arr, notify
+
+    return {
+        i.name: ("ok" if i.configured() else "unconfigured")
+        for i in (arr.radarr, arr.sonarr, notify.apprise_notifier, notify.webhook_notifier)
     }
 
 
