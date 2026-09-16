@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
         log.info("%s ready", settings.app_name)
     else:
         log.info(
-            "%s started unconfigured (missing: %s) — open the UI to run setup",
+            "%s started unconfigured (missing: %s). Open the UI to run setup",
             settings.app_name,
             ", ".join(missing_required()),
         )
@@ -120,7 +120,7 @@ def _static_dir() -> Path | None:
     """Built SPA, if there is one.
 
     /srv/static in the container; the sibling frontend/dist when running from a
-    checkout. Absent during backend-only development, which is fine — Vite
+    checkout. Absent during backend-only development, which is fine, because Vite
     serves the UI then and proxies /api here.
     """
     for candidate in (Path("/srv/static"), Path(__file__).resolve().parents[2] / "frontend" / "dist"):

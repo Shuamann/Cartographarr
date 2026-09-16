@@ -50,7 +50,7 @@ async def main() -> int:
         data = await client.call("get_history", length=1, order_column="date", order_dir="desc")
         rows = (data or {}).get("data") or []
         if not rows:
-            print("No history rows returned — is this server new, or the key wrong?")
+            print("No history rows returned. Is this server new, or the key wrong?")
             return 2
         row = rows[0]
 

@@ -3,7 +3,7 @@
 Maps Plex viewing history by location, and enforces device-level access control,
 on top of Tautulli.
 
-Plex has no API to ban a shared user's device — `plex.tv/devices.xml` only lists
+Plex has no API to ban a shared user's device. `plex.tv/devices.xml` only lists
 devices on the token owner's own account, so a friend's Firestick is invisible to
 you. Blocking is therefore behavioural: match the live session on `machine_id`
 (Plex's `clientIdentifier`, stable across player renames) and terminate it.
@@ -26,7 +26,7 @@ template UI instead: map `/data` to your appdata path and publish container
 port 6277.
 
 **No configuration needed to start.** The container boots unconfigured and the
-UI walks you through first-run setup — Tautulli URL and API key, optionally a
+UI walks you through first-run setup: Tautulli URL and API key, optionally a
 free MaxMind GeoLite2 account for the map. Credentials are validated before
 they're saved, stored in the app's own database, and editable afterwards in
 Settings. Nothing is baked into the image.
@@ -38,7 +38,7 @@ new plays costs about a tenth of a second.
 ### Configuring by environment variable instead
 
 Every setting can also be supplied as an env var, which is handy for Unraid
-templates. **An environment variable wins and renders read-only in the UI** —
+templates. **An environment variable wins and renders read-only in the UI**,
 exactly how Radarr behaves. Leave one unset and the UI owns it.
 
 | Variable | Notes |

@@ -170,7 +170,7 @@ async def history_detail(row_id: int, db: Db) -> dict:
 # ---- media -----------------------------------------------------------------
 
 def _deep_links(item: MediaItem, settings) -> dict[str, str]:
-    """External links. Only ones we can build with what's cached — a missing
+    """External links. Only ones we can build with what's cached. A missing
     id means no button, never a broken one."""
     links: dict[str, str] = {}
     kind = "tv" if item.media_type in ("show", "season", "episode") else "movie"
@@ -250,7 +250,7 @@ def libraries(db: Db) -> list:
 @router.get("/filter-options")
 def filter_options(db: Db) -> dict[str, list[Any]]:
     """Distinct values for the filter UI, straight from what's actually in
-    history — no hardcoded lists to drift out of date."""
+    history, so no hardcoded lists to drift out of date."""
 
     def distinct(column):
         return [

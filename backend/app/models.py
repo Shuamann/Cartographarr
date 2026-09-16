@@ -3,7 +3,7 @@
 Column set is what Tautulli's get_history actually returns (verified by
 scripts/probe_source.py), plus section_id backfilled from get_metadata.
 Deliberately absent: video_resolution, bandwidth, quality_profile. They need a
-per-row get_stream_data call, and nothing needs them from history — rules read
+per-row get_stream_data call, and nothing needs them from history. Rules read
 live get_activity, which carries them already. Stream detail fetches them on
 demand for the one row being looked at.
 """
@@ -24,7 +24,7 @@ class Setting(Base):
     Stored as text and re-validated through the pydantic Settings model on
     load, so the field's declared type is the single source of truth for
     coercion. Anything set by an environment variable never reaches this
-    table — see settings_store.load().
+    table. See settings_store.load().
     """
 
     __tablename__ = "settings"
@@ -58,7 +58,7 @@ class User(Base):
 class Device(Base):
     """One physical client install.
 
-    machine_id is Plex's clientIdentifier — stable across renames, which is why
+    machine_id is Plex's clientIdentifier, stable across renames, which is why
     rules match on it and not on `player`.
     """
 
@@ -97,7 +97,7 @@ class IpLocation(Base):
     asn_org: Mapped[str | None] = mapped_column(String(255))
     is_hosting: Mapped[bool] = mapped_column(Boolean, default=False)
     """ASN org matched a hosting/VPN provider. Better credential-sharing signal
-    than distance alone — see geo/lookup.py."""
+    than distance alone. See geo/lookup.py."""
     is_private: Mapped[bool] = mapped_column(Boolean, default=False)
     looked_up_at: Mapped[datetime | None] = mapped_column()
 

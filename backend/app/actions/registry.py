@@ -2,7 +2,7 @@
 
 The enforcer resolves by name and calls `execute`, so it never learns what any
 particular action does. Adding a webhook, a notification or a script runner
-later is one module plus an entry here — no enforcer change, no migration.
+later is one module plus an entry here, with no enforcer change, no migration.
 
 `requires` ties into services/capabilities: an action whose requirements aren't
 met is refused with a logged reason rather than failing silently somewhere

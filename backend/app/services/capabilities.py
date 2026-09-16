@@ -2,7 +2,7 @@
 
 One map, two sources: the Plex server (via Tautulli) and, later, configured
 integrations. The UI reads it to disable controls with a reason rather than
-hiding them, and the API enforces it independently — UI gating is a courtesy,
+hiding them, and the API enforces it independently. UI gating is a courtesy,
 not a control.
 
 Plex Pass comes from Tautulli's get_server_info (`pms_plexpass`), so no Plex
@@ -104,7 +104,7 @@ def is_stale() -> bool:
 
 def plex_pass_active() -> bool:
     """False when unknown. Callers use this to refuse an action, and refusing
-    on unknown is the safe direction — the alternative is a confusing failure
+    on unknown is the safe direction, because the alternative is a confusing failure
     from Plex itself."""
     return get().get("plex_pass") is True
 
@@ -134,5 +134,5 @@ def _plex_pass_reason(caps: dict[str, Any]) -> str | None:
     if caps.get("plex_pass") is True:
         return None
     if caps.get("plex_pass") is False:
-        return "Requires Plex Pass — stream termination is unavailable"
-    return caps.get("error") or "Plex Pass status unknown — not probed yet"
+        return "Requires Plex Pass. Stream termination is unavailable"
+    return caps.get("error") or "Plex Pass status unknown, not probed yet"

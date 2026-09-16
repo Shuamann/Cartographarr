@@ -79,7 +79,7 @@ def test_malformed_cidr_does_not_match_rather_than_crashing():
 def test_concurrent_streams_is_strictly_greater_than():
     busy = {"user_stream_count": 3, "is_hosting": False, "paused_minutes": None}
     assert matches(rule(match_concurrent_streams_gt=2), SESSION, busy) is True
-    # Exactly at the limit is allowed — "more than 3" must not fire on the 3rd.
+    # Exactly at the limit is allowed, so "more than 3" must not fire on the 3rd.
     at_limit = {"user_stream_count": 3, "is_hosting": False, "paused_minutes": None}
     assert matches(rule(match_concurrent_streams_gt=3), SESSION, at_limit) is False
 

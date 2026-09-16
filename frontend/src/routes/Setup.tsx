@@ -83,7 +83,7 @@ export default function Setup({ status, onDone }: Props) {
 
     try {
       if (Object.keys(values).length) await api.put("/settings", values);
-      // Kick the backfill but don't wait on it — it can run for minutes.
+      // Kick the backfill but don't wait on it, since it can run for minutes.
       api.post("/sync/run").catch(() => {});
       onDone();
     } catch (err) {
@@ -167,7 +167,7 @@ export default function Setup({ status, onDone }: Props) {
             <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noreferrer">
               MaxMind GeoLite2
             </a>{" "}
-            account turns IP addresses into map pins. Skip it and everything else still works —
+            account turns IP addresses into map pins. Skip it and everything else still works,
             you can add it later.
           </p>
 
@@ -231,7 +231,7 @@ function TestResult({ test }: { test: TautulliTest }) {
           : `Couldn't connect: ${remote.error}`}
       </p>
 
-      {/* A local URL that fails is not an error — it just won't be preferred.
+      {/* A local URL that fails is not an error; it just won't be preferred.
           Saying so prevents a pointless round of debugging. */}
       {local.tried && !local.ok && (
         <p className="note warn-note">
@@ -239,7 +239,7 @@ function TestResult({ test }: { test: TautulliTest }) {
           if this app runs outside your LAN.
         </p>
       )}
-      {local.tried && local.ok && <p className="note ok-note">Local URL reachable — it'll be preferred.</p>}
+      {local.tried && local.ok && <p className="note ok-note">Local URL reachable, so it will be preferred.</p>}
     </div>
   );
 }

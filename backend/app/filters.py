@@ -22,7 +22,7 @@ IntListParam = Annotated[list[int] | None, Query()]
 def _epoch(day: date) -> int:
     """Midnight local time as a unix timestamp.
 
-    Not strftime("%s") — that is glibc-only and silently absent on Windows.
+    Not strftime("%s"), which is glibc-only and silently absent on Windows.
     Local rather than UTC because "plays on the 14th" means the user's 14th.
     """
     return int(datetime.combine(day, time.min).timestamp())

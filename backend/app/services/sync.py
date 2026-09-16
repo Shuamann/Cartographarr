@@ -288,7 +288,7 @@ def geocode_new_ips(resolver: GeoResolver) -> int:
         rows = []
         now = datetime.now(UTC)
         for ip in unknown:
-            # A None here means the database had no entry — genuinely
+            # A None here means the database had no entry, so it is genuinely
             # unresolvable, safe to cache so it isn't retried forever.
             result = resolver.lookup(ip) or {"ip": ip, "is_private": is_private(ip)}
             result["looked_up_at"] = now
@@ -315,7 +315,7 @@ def _split_guids(guids: list[str] | None) -> dict[str, str | None]:
 async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
     """Fetch metadata for rating_keys never seen before.
 
-    This is also where history.section_id comes from — get_history doesn't
+    This is also where history.section_id comes from, because get_history doesn't
     return it, get_metadata does, and the fetch is happening anyway.
     """
     with session_scope() as session:

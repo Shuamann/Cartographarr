@@ -18,7 +18,7 @@ from app.db import init_db, session_scope
 from app.models import Setting
 
 FROZEN = {"data_dir"}
-"""Not editable at runtime at any price — the DB we'd save into lives there."""
+"""Not editable at runtime at any price: the DB we'd save into lives there."""
 
 _cache: tuple[Settings, frozenset[str]] | None = None
 
@@ -95,7 +95,7 @@ def is_configured() -> bool:
 
 
 def describe() -> list[dict[str, Any]]:
-    """Every setting with its value and where it came from — powers the UI."""
+    """Every setting with its value and where it came from. Powers the UI."""
     settings, locked = current(), locked_keys()
     return [
         {

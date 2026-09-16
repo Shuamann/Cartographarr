@@ -31,7 +31,7 @@ export function useIsAvailable(requirement: string): { ok: boolean; reason: stri
  *
  * Disabled and explained, never hidden: a hidden feature teaches people it
  * doesn't exist, while a greyed-out one with "Requires Plex Pass" teaches them
- * what to turn on. The API refuses independently — this is a courtesy, not a
+ * what to turn on. The API refuses independently; this is a courtesy, not a
  * control.
  */
 export default function Gated({

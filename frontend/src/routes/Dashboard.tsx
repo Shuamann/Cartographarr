@@ -4,7 +4,7 @@ import { useApi, type Dashboard } from "../lib/api";
 /* The landing screen.
  *
  * What goes here is still being worked out, so this reads from ONE endpoint
- * (/api/dashboard) that composes every source — local database, live Tautulli
+ * (/api/dashboard) that composes every source: local database, live Tautulli
  * activity, capabilities, and integrations once they exist. Rearranging the
  * layout, or adding a panel, doesn't mean touching the data path.
  */
@@ -105,7 +105,7 @@ export default function DashboardRoute({ onNavigate }: { onNavigate: (tab: strin
           <button className="tab" onClick={() => onNavigate("Rules")}>All rules</button>
         </div>
         {d.settings.enforce_dry_run && (
-          <p className="muted small">Dry run is on — rules record but don't act.</p>
+          <p className="muted small">Dry run is on, so rules record but don't act.</p>
         )}
         {d.recent_enforcement.length === 0 ? (
           <p className="muted">Nothing yet.</p>
@@ -156,7 +156,7 @@ function Card({
   );
 }
 
-/* Inline SVG rather than a charting library — it's one series of thirty
+/* Inline SVG rather than a charting library, since it's one series of thirty
  * points, and a dependency would outweigh the chart. */
 function Sparkline({ points }: { points: { day: string; plays: number }[] }) {
   if (points.length < 2) return <p className="muted">Not enough history yet.</p>;

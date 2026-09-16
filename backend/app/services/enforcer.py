@@ -50,7 +50,7 @@ def _equal(left: Any, right: Any) -> bool:
 
 def matches(rule: Rule, session: Session, context: dict[str, Any]) -> bool:
     """Every matcher that is set must hold. A rule with none set matches
-    nothing — an empty rule silently killing every stream would be the worst
+    nothing. An empty rule silently killing every stream would be the worst
     possible default."""
     checks: list[bool] = []
 
@@ -198,7 +198,7 @@ async def run_once() -> dict[str, Any]:
 
             missing = registry.unmet(action)
             if missing:
-                # Refused, not silently skipped — the log says why.
+                # Refused, not silently skipped, and the log says why.
                 _record(rule, session, dry_run, f"refused: requires {', '.join(missing)}")
                 break
 

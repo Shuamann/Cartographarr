@@ -19,7 +19,7 @@ WORKDIR /srv
 
 # Source first, then one install. A dep-caching layer is possible by copying
 # pyproject alone and faking a package dir, but that leaves an empty `app` in
-# site-packages shadowing the real one — a bad trade for ~40s of rebuild.
+# site-packages shadowing the real one, a bad trade for ~40s of rebuild.
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/scripts ./scripts

@@ -59,7 +59,7 @@ function SessionCard({ session, onChanged }: { session: LiveSession; onChanged: 
           <p className="muted small">
             {where}
             {session.geo?.is_hosting && (
-              <span className="pill warn"> VPN / hosting — {session.geo.asn_org}</span>
+              <span className="pill warn"> VPN / hosting: {session.geo.asn_org}</span>
             )}
             {session.location && <span className="pill"> {session.location}</span>}
             {session.state && <span className="pill"> {session.state}</span>}
@@ -117,7 +117,7 @@ function StopForm({ session, onDone }: { session: LiveSession; onDone: () => voi
           <span className="fixed"> {session.session_key}</span>
         </p>
         <small className="muted">
-          Only the highlighted part is editable — Plex adds the rest and it can't be changed.
+          Only the highlighted part is editable. Plex adds the rest and it can't be changed.
         </small>
       </div>
 

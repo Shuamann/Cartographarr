@@ -1,7 +1,7 @@
 """Tautulli API client.
 
 Tautulli's API is one endpoint with a `cmd` parameter, so this is one method.
-No per-command wrapper classes — callers pass the command name.
+No per-command wrapper classes; callers pass the command name.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class TautulliClient:
         """Prefer the LAN URL, once, then remember the answer.
 
         A LAN address is faster and keeps traffic off the reverse proxy, but
-        it's unreachable from anywhere else — so it gets one short-timeout
+        it's unreachable from anywhere else, so it gets one short-timeout
         try and the remote URL takes over for the life of the client.
         """
         if self._base is not None:

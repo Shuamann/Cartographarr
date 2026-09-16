@@ -1,7 +1,7 @@
 """Settings, from environment / .env.
 
 Only what the current phases use. Plex, enforcement, auth and integration
-settings arrive with the phases that need them — config for a feature that
+settings arrive with the phases that need them. Config for a feature that
 doesn't exist yet is just churn.
 """
 
@@ -36,14 +36,14 @@ class Settings(BaseSettings):
     reverse proxy. Falls back to tautulli_url on any failure."""
 
     tautulli_local_timeout: float = 3.0
-    """Short — this is a reachability probe, not a real request."""
+    """Short, because this is a reachability probe, not a real request."""
 
     tautulli_api_key: str = ""
     tautulli_verify_ssl: bool = True
     tautulli_timeout: float = 30.0
 
     plex_machine_identifier: str = ""
-    """Server id for app.plex.tv deep links. Optional — without it the Plex
+    """Server id for app.plex.tv deep links. Optional; without it the Plex
     button just isn't rendered."""
 
     source_mode: Literal["auto", "api", "db"] = "auto"
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     Turning this off is a deliberate act after reading the enforcement log."""
 
     enforce_cooldown_seconds: int = 60
-    """Per rule, per session — stops a stubborn client from filling the log."""
+    """Per rule, per session, to stop a stubborn client from filling the log."""
 
     # ---- GeoIP -------------------------------------------------------------
     maxmind_account_id: str = ""

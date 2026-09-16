@@ -51,6 +51,6 @@ def session_scope() -> Iterator[Session]:
 
 
 def init_db() -> None:
-    import app.models  # noqa: F401  — registers the tables on Base
+    import app.models  # noqa: F401  (registers the tables on Base)
 
     Base.metadata.create_all(engine)

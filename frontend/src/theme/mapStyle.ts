@@ -44,7 +44,7 @@ export function buildMapStyle(): StyleSpecification {
         type: "line",
         source: "carto",
         "source-layer": "transportation",
-        // Roads are context, not content — thin, and only once zoomed in.
+        // Roads are context, not content, so thin and only once zoomed in.
         minzoom: 5,
         paint: {
           "line-color": road,

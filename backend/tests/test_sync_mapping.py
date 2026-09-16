@@ -1,5 +1,5 @@
 """Coercion checks. Tautulli types everything loosely, so this is where the
-bugs are — the upsert itself is SQLAlchemy's problem, not ours.
+bugs are. The upsert itself is SQLAlchemy's problem, not ours.
 """
 
 from app.services.sync import _bool, _int, _map_history, _split_guids

@@ -114,7 +114,7 @@ def test_maxmind(
     ready = (settings.geoip_dir / "city.mmdb").exists()
     return {
         "ok": ready,
-        "error": None if ready else "Download failed — check the key, or retry in a few minutes",
+        "error": None if ready else "Download failed. Check the key, or retry in a few minutes",
     }
 
 
@@ -123,7 +123,7 @@ def get_settings() -> list[dict]:
     """Every setting, its value, and whether the environment owns it.
 
     `source: environment` means an env var (Unraid docker config) supplied it,
-    so the UI must render it read-only — same as Radarr.
+    so the UI must render it read-only, same as Radarr.
     """
     return [{**row, "value": _redact(row["key"], row["value"])} for row in describe()]
 

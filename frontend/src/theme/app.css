@@ -496,7 +496,7 @@ input:focus-visible {
   overflow-y: auto;
 }
 .row {
-  /* Generic flex utility. Never put this on a <tr> — display:flex destroys
+  /* Generic flex utility. Never put this on a <tr>: display:flex destroys
      table layout and the header and body columns stop lining up. */
   display: flex;
   align-items: center;

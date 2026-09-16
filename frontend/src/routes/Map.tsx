@@ -10,8 +10,8 @@ type Place = MapPoint["properties"];
 type View = "map" | "list";
 
 /* MapLibre 5 needs WebGL2 and throws on construction without it. Checking up
- * front means the list can be the default on machines that can't draw a map —
- * a headless VM, software rendering, an old driver — instead of showing an
+ * front means the list can be the default on machines that can't draw a map:
+ * a headless VM, software rendering, an old driver. That beats showing an
  * error where a map should be. */
 function webglAvailable(): boolean {
   try {
@@ -67,7 +67,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
         </div>
         {!canDrawMap && (
           <span className="muted small">
-            No WebGL here — showing the list instead. The map works in a browser with graphics
+            No WebGL here, so showing the list instead. The map works in a browser with graphics
             acceleration.
           </span>
         )}
@@ -87,7 +87,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
           </div>
         )}
         {geoipReady && features.length === 0 && !points.loading && (
-          <div className="map-banner">Nothing to show yet — the first sync may still be running.</div>
+          <div className="map-banner">Nothing to show yet. The first sync may still be running.</div>
         )}
         {points.error && <div className="map-banner bad">{points.error}</div>}
 
@@ -193,7 +193,7 @@ function MapCanvas({
       cluster: true,
       clusterRadius: 45,
       clusterMaxZoom: 12,
-      // Cluster totals sum plays, not pins — one busy city outweighs a dozen
+      // Cluster totals sum plays, not pins, so one busy city outweighs a dozen
       // one-off locations. `hosting` lets the circle be coloured honestly.
       clusterProperties: {
         plays: ["+", ["get", "plays"]],
@@ -367,7 +367,7 @@ function LocationList({
                 <td className="num">{p.devices}</td>
                 <td className="num">{p.ips}</td>
                 <td className="num muted">
-                  {p.last_play ? new Date(p.last_play * 1000).toLocaleDateString() : "—"}
+                  {p.last_play ? new Date(p.last_play * 1000).toLocaleDateString() : "-"}
                 </td>
               </tr>
             );
@@ -400,7 +400,7 @@ function Drawer({ place, onClose }: { place: Place; onClose: () => void }) {
       {place.is_hosting && (
         <p className="note warn-note">
           This traffic comes from a hosting or VPN provider, so the location is where the server
-          is — not where the viewer is.
+          is, not where the viewer is.
         </p>
       )}
 

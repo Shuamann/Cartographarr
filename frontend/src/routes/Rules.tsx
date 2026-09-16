@@ -4,7 +4,7 @@ import { api, useApi, type ActionSpec, type Enforcement, type Rule } from "../li
 type Draft = Partial<Rule> & { name: string };
 
 const MATCHERS: { key: keyof Rule; label: string; placeholder?: string; hint?: string }[] = [
-  { key: "match_machine_id", label: "Device ID", placeholder: "machine_id", hint: "Survives player renames — the reliable way to target one device" },
+  { key: "match_machine_id", label: "Device ID", placeholder: "machine_id", hint: "Survives player renames, so it is the reliable way to target one device" },
   { key: "match_user_id", label: "User ID", placeholder: "123" },
   { key: "match_player", label: "Player name", placeholder: "Living Room TV", hint: "The viewer can change this" },
   { key: "match_platform", label: "Platform", placeholder: "Roku" },
@@ -150,7 +150,7 @@ export default function RulesRoute() {
             .map((a) => (
               <p key={a.name} className="muted small">
                 {a.description}
-                {a.unmet.length > 0 && ` — unavailable: ${a.unmet.join(", ")}`}
+                {a.unmet.length > 0 && `, unavailable: ${a.unmet.join(", ")}`}
               </p>
             ))}
 

@@ -1,6 +1,6 @@
 """GeoIP: MaxMind GeoLite2 City + ASN, read locally.
 
-City gives the pin. ASN gives the credential-sharing signal — a stream from a
+City gives the pin. ASN gives the credential-sharing signal: a stream from a
 hosting/VPN ASN explains most "impossible travel" hits better than distance
 does, and it's free under the same licence key.
 
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 EDITIONS = {"GeoLite2-City": "city.mmdb", "GeoLite2-ASN": "asn.mmdb"}
 DOWNLOAD = "https://download.maxmind.com/geoip/databases/{edition}/download"
 """The modern endpoint, which takes account id + licence key as basic auth.
-Not /app/geoip_download — that one only accepts the key as a query parameter
+Not /app/geoip_download, which only accepts the key as a query parameter
 and answers 401 to an Authorization header, which puts the secret in every URL
 and log line."""
 
@@ -75,7 +75,7 @@ def is_private(ip: str) -> bool:
 def ensure_databases(
     geoip_dir: Path, account_id: str, license_key: str, max_age_days: int = 7
 ) -> None:
-    """Download or refresh the mmdb files. Never raises — logs and moves on."""
+    """Download or refresh the mmdb files. Never raises; logs and moves on."""
     geoip_dir.mkdir(parents=True, exist_ok=True)
     if not (account_id and license_key):
         log.info("No MaxMind credentials; skipping GeoIP download")

@@ -133,7 +133,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-/* Pick one title and the map repaints to only its plays — including every
+/* Pick one title and the map repaints to only its plays, including every
  * episode when a show is chosen, which the backend handles. */
 function TitlePicker({ value, onChange }: Props) {
   const [query, setQuery] = useState("");
