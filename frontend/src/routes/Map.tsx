@@ -1,10 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import { useApi, type MapPoint, type MapPoints } from "../lib/api";
+import FilterBar from "../components/FilterBar";
+import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 
+type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
+
 export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
-  const points = useApi<MapPoints>("/map/points");
+  const [filters, setFilters] = useState<FilterState>(EMPTY);
+  const query = useMemo(() => toQuery(filters), [filters]);
+
+  const points = useApi<MapPoints>(`/map/points${query}`);
+  const summary = useApi<Summary>(`/stats/summary${query}`);
   const [selected, setSelected] = useState<MapPoint["properties"] | null>(null);
 
   const container = useRef<HTMLDivElement>(null);
@@ -78,7 +86,12 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       clusterMaxZoom: 12,
       // Cluster totals must sum plays, not count pins — one busy city
       // outweighs a dozen one-off locations and the circle should say so.
-      clusterProperties: { plays: ["+", ["get", "plays"]] },
+      // `hosting` counts how many of the grouped locations are VPN/hosting,
+      // so the cluster can be coloured honestly (see below).
+      clusterProperties: {
+        plays: ["+", ["get", "plays"]],
+        hosting: ["+", ["case", ["get", "is_hosting"], 1, 0]],
+      },
     });
 
     m.addLayer({
@@ -87,7 +100,15 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       source: "plays",
       filter: ["has", "point_count"],
       paint: {
-        "circle-color": accent(),
+        // Red only when every location in the cluster is a hosting/VPN origin.
+        // One flagged IP among fifty ordinary ones shouldn't turn the whole
+        // circle red, and an all-VPN cluster shouldn't look ordinary.
+        "circle-color": [
+          "case",
+          ["==", ["get", "hosting"], ["get", "point_count"]],
+          danger(),
+          accent(),
+        ],
         "circle-opacity": 0.85,
         "circle-stroke-width": 2,
         "circle-stroke-color": surface(),
@@ -144,22 +165,48 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
     }
   }, [ready, points.data]);
 
+  // A pin that no longer matches the filters shouldn't keep its drawer open.
+  useEffect(() => setSelected(null), [query]);
+
   return (
-    <div className="map-wrap">
-      <div ref={container} className="map" />
+    <div className="map-page">
+      <FilterBar value={filters} onChange={setFilters} />
 
-      {!geoipReady && (
-        <div className="map-banner">
-          No location database installed, so there are no pins yet. Add a MaxMind key in Settings.
-        </div>
-      )}
-      {geoipReady && points.data?.features.length === 0 && !points.loading && (
-        <div className="map-banner">Nothing to show yet — the first sync may still be running.</div>
-      )}
-      {points.error && <div className="map-banner bad">{points.error}</div>}
-      {mapError && <div className="map-banner bad">{mapError}</div>}
+      <div className="map-wrap">
+        <div ref={container} className="map" />
 
-      {selected && <Drawer place={selected} onClose={() => setSelected(null)} />}
+        {summary.data && (
+          <div className="summary">
+            <Tile label="Plays" value={summary.data.plays} />
+            <Tile label="Users" value={summary.data.users} />
+            <Tile label="Devices" value={summary.data.devices} />
+            <Tile label="Locations" value={points.data?.features.length ?? 0} />
+            <Tile label="Hours" value={Math.round(summary.data.seconds / 3600)} />
+          </div>
+        )}
+
+        {!geoipReady && (
+          <div className="map-banner">
+            No location database installed, so there are no pins yet. Add a MaxMind key in Settings.
+          </div>
+        )}
+        {geoipReady && points.data?.features.length === 0 && !points.loading && (
+          <div className="map-banner">Nothing to show yet — the first sync may still be running.</div>
+      )}
+        {points.error && <div className="map-banner bad">{points.error}</div>}
+        {mapError && <div className="map-banner bad">{mapError}</div>}
+
+        {selected && <Drawer place={selected} onClose={() => setSelected(null)} />}
+      </div>
+    </div>
+  );
+}
+
+function Tile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="summary-tile">
+      <span className="summary-value">{value.toLocaleString()}</span>
+      <span className="summary-label">{label}</span>
     </div>
   );
 }
