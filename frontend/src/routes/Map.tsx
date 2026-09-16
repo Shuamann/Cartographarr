@@ -6,6 +6,21 @@ import { EMPTY, toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
+type Place = MapPoint["properties"];
+type View = "map" | "list";
+
+/* MapLibre 5 needs WebGL2 and throws on construction without it. Checking up
+ * front means the list can be the default on machines that can't draw a map —
+ * a headless VM, software rendering, an old driver — instead of showing an
+ * error where a map should be. */
+function webglAvailable(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return Boolean(canvas.getContext("webgl2"));
+  } catch {
+    return false;
+  }
+}
 
 export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
   const [filters, setFilters] = useState<FilterState>(EMPTY);
@@ -13,14 +28,99 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
 
   const points = useApi<MapPoints>(`/map/points${query}`);
   const summary = useApi<Summary>(`/stats/summary${query}`);
-  const [selected, setSelected] = useState<MapPoint["properties"] | null>(null);
+  const [selected, setSelected] = useState<Place | null>(null);
 
+  const canDrawMap = useMemo(webglAvailable, []);
+  const [view, setView] = useState<View>(() => {
+    const saved = localStorage.getItem("view") as View | null;
+    if (saved && (saved === "list" || canDrawMap)) return saved;
+    return canDrawMap ? "map" : "list";
+  });
+
+  function choose(next: View) {
+    setView(next);
+    localStorage.setItem("view", next);
+  }
+
+  // A place that no longer matches the filters shouldn't keep its panel open.
+  useEffect(() => setSelected(null), [query]);
+
+  const features = points.data?.features ?? [];
+
+  return (
+    <div className="map-page">
+      <FilterBar value={filters} onChange={setFilters} />
+
+      <div className="viewbar">
+        <div className="segmented">
+          <button
+            className={view === "map" ? "seg on" : "seg"}
+            onClick={() => choose("map")}
+            disabled={!canDrawMap}
+            title={canDrawMap ? "Show the map" : "This browser has no WebGL, so the map can't draw"}
+          >
+            Map
+          </button>
+          <button className={view === "list" ? "seg on" : "seg"} onClick={() => choose("list")}>
+            List
+          </button>
+        </div>
+        {!canDrawMap && (
+          <span className="muted small">
+            No WebGL here — showing the list instead. The map works in a browser with graphics
+            acceleration.
+          </span>
+        )}
+      </div>
+
+      <div className="view-body">
+        {view === "map" ? (
+          <MapCanvas features={features} onSelect={setSelected} />
+        ) : (
+          <LocationList features={features} selected={selected} onSelect={setSelected} />
+        )}
+
+        {!geoipReady && (
+          <div className="map-banner">
+            No location database installed, so there's nothing to place yet. Add a MaxMind key in
+            Settings.
+          </div>
+        )}
+        {geoipReady && features.length === 0 && !points.loading && (
+          <div className="map-banner">Nothing to show yet — the first sync may still be running.</div>
+        )}
+        {points.error && <div className="map-banner bad">{points.error}</div>}
+
+        {summary.data && (
+          <div className="summary">
+            <Tile label="Plays" value={summary.data.plays} />
+            <Tile label="Users" value={summary.data.users} />
+            <Tile label="Devices" value={summary.data.devices} />
+            <Tile label="Locations" value={features.length} />
+            <Tile label="Hours" value={Math.round(summary.data.seconds / 3600)} />
+          </div>
+        )}
+
+        {selected && <Drawer place={selected} onClose={() => setSelected(null)} />}
+      </div>
+    </div>
+  );
+}
+
+/* ---- map --------------------------------------------------------------- */
+
+function MapCanvas({
+  features,
+  onSelect,
+}: {
+  features: MapPoint[];
+  onSelect: (place: Place) => void;
+}) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
-  // ---- create once -------------------------------------------------------
   useEffect(() => {
     if (!container.current || map.current) return;
 
@@ -34,12 +134,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
         attributionControl: { compact: true },
       });
     } catch (err) {
-      // No WebGL (headless browser, software rendering disabled, old GPU
-      // driver). The map is the only thing that needs it.
-      setMapError(
-        `This browser can't display the map: ${(err as Error).message}. ` +
-          "Everything else still works.",
-      );
+      setMapError(`The map couldn't start: ${(err as Error).message}`);
       return;
     }
 
@@ -54,8 +149,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
     map.current = m;
 
     // A map created while its container is hidden or still laying out comes up
-    // 0x0 and never fetches a tile, because MapLibre measures once. Watching
-    // the container covers that, window resizes, and panel collapses alike.
+    // 0x0 and never fetches a tile, because MapLibre measures once.
     const observer = new ResizeObserver(() => m.resize());
     observer.observe(container.current);
 
@@ -63,44 +157,44 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       observer.disconnect();
       m.remove();
       map.current = null;
+      setReady(false);
     };
   }, []);
 
-  // ---- restyle on theme change ------------------------------------------
+  // Restyle on theme change.
   useEffect(() => {
-    const root = document.documentElement;
     const observer = new MutationObserver(() => {
       if (!map.current) return;
-      // setStyle wipes our layers, so rebuild them once the new style settles.
       setReady(false);
       map.current.setStyle(buildMapStyle());
       map.current.once("styledata", () => setReady(true));
     });
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => observer.disconnect();
   }, []);
 
-  // ---- data layers -------------------------------------------------------
   useEffect(() => {
     const m = map.current;
-    if (!m || !ready || !points.data) return;
+    if (!m || !ready) return;
 
+    const data: MapPoints = { type: "FeatureCollection", features };
     const existing = m.getSource("plays") as maplibregl.GeoJSONSource | undefined;
     if (existing) {
-      existing.setData(points.data);
+      existing.setData(data);
       return;
     }
 
     m.addSource("plays", {
       type: "geojson",
-      data: points.data,
+      data,
       cluster: true,
       clusterRadius: 45,
       clusterMaxZoom: 12,
-      // Cluster totals must sum plays, not count pins — one busy city
-      // outweighs a dozen one-off locations and the circle should say so.
-      // `hosting` counts how many of the grouped locations are VPN/hosting,
-      // so the cluster can be coloured honestly (see below).
+      // Cluster totals sum plays, not pins — one busy city outweighs a dozen
+      // one-off locations. `hosting` lets the circle be coloured honestly.
       clusterProperties: {
         plays: ["+", ["get", "plays"]],
         hosting: ["+", ["case", ["get", "is_hosting"], 1, 0]],
@@ -113,18 +207,16 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       source: "plays",
       filter: ["has", "point_count"],
       paint: {
-        // Red only when every location in the cluster is a hosting/VPN origin.
-        // One flagged IP among fifty ordinary ones shouldn't turn the whole
-        // circle red, and an all-VPN cluster shouldn't look ordinary.
+        // Red only when every location inside is a hosting/VPN origin.
         "circle-color": [
           "case",
           ["==", ["get", "hosting"], ["get", "point_count"]],
-          danger(),
-          accent(),
+          css("--danger", "#b91c1c"),
+          css("--accent", "#0e7490"),
         ],
         "circle-opacity": 0.85,
         "circle-stroke-width": 2,
-        "circle-stroke-color": surface(),
+        "circle-stroke-color": css("--surface", "#fff"),
         "circle-radius": ["interpolate", ["linear"], ["get", "plays"], 1, 16, 500, 26, 5000, 38],
       },
     });
@@ -139,7 +231,7 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
         "text-font": ["Open Sans Regular"],
         "text-size": 12,
       },
-      paint: { "text-color": accentInk() },
+      paint: { "text-color": css("--accent-ink", "#fff") },
     });
 
     m.addLayer({
@@ -148,12 +240,15 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       source: "plays",
       filter: ["!", ["has", "point_count"]],
       paint: {
-        // Hosting/VPN origins get the warning colour: they're the ones worth
-        // a second look.
-        "circle-color": ["case", ["get", "is_hosting"], danger(), accent()],
+        "circle-color": [
+          "case",
+          ["get", "is_hosting"],
+          css("--danger", "#b91c1c"),
+          css("--accent", "#0e7490"),
+        ],
         "circle-opacity": 0.9,
         "circle-stroke-width": 2,
-        "circle-stroke-color": surface(),
+        "circle-stroke-color": css("--surface", "#fff"),
         "circle-radius": ["interpolate", ["linear"], ["get", "plays"], 1, 6, 100, 12, 2000, 20],
       },
     });
@@ -163,80 +258,138 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
       if (!feature) return;
       const source = m.getSource("plays") as maplibregl.GeoJSONSource;
       source.getClusterExpansionZoom(feature.properties!.cluster_id).then((zoom) => {
-        m.easeTo({ center: (feature.geometry as GeoJSON.Point).coordinates as [number, number], zoom });
+        m.easeTo({
+          center: (feature.geometry as GeoJSON.Point).coordinates as [number, number],
+          zoom,
+        });
       });
     });
 
     m.on("click", "points", (e) => {
       const feature = e.features?.[0];
-      if (feature) setSelected(feature.properties as unknown as MapPoint["properties"]);
+      if (feature) onSelect(feature.properties as unknown as Place);
     });
 
     for (const layer of ["clusters", "points"]) {
       m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
-  }, [ready, points.data]);
-
-  // A pin that no longer matches the filters shouldn't keep its drawer open.
-  useEffect(() => setSelected(null), [query]);
+  }, [ready, features, onSelect]);
 
   return (
-    <div className="map-page">
-      <FilterBar value={filters} onChange={setFilters} />
-
-      <div className="map-wrap">
-        <div ref={container} className="map" />
-
-        {summary.data && (
-          <div className="summary">
-            <Tile label="Plays" value={summary.data.plays} />
-            <Tile label="Users" value={summary.data.users} />
-            <Tile label="Devices" value={summary.data.devices} />
-            <Tile label="Locations" value={points.data?.features.length ?? 0} />
-            <Tile label="Hours" value={Math.round(summary.data.seconds / 3600)} />
-          </div>
-        )}
-
-        {!geoipReady && (
-          <div className="map-banner">
-            No location database installed, so there are no pins yet. Add a MaxMind key in Settings.
-          </div>
-        )}
-        {geoipReady && points.data?.features.length === 0 && !points.loading && (
-          <div className="map-banner">Nothing to show yet — the first sync may still be running.</div>
-      )}
-        {points.error && <div className="map-banner bad">{points.error}</div>}
-        {mapError && <div className="map-banner bad">{mapError}</div>}
-
-        {selected && <Drawer place={selected} onClose={() => setSelected(null)} />}
-      </div>
-    </div>
+    <>
+      <div ref={container} className="map" />
+      {mapError && <div className="map-banner bad">{mapError}</div>}
+    </>
   );
 }
 
-function Tile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="summary-tile">
-      <span className="summary-value">{value.toLocaleString()}</span>
-      <span className="summary-label">{label}</span>
-    </div>
-  );
-}
+/* ---- list -------------------------------------------------------------- */
 
-function Drawer({
-  place,
-  onClose,
+type SortKey = "place" | "plays" | "users" | "devices" | "ips" | "last_play";
+
+function LocationList({
+  features,
+  selected,
+  onSelect,
 }: {
-  place: MapPoint["properties"];
-  onClose: () => void;
+  features: MapPoint[];
+  selected: Place | null;
+  onSelect: (place: Place) => void;
 }) {
-  const where = [place.city, place.region, place.country].filter(Boolean).join(", ");
+  const [sort, setSort] = useState<SortKey>("plays");
+  const [asc, setAsc] = useState(false);
+
+  const rows = useMemo(() => {
+    const value = (p: Place) =>
+      sort === "place" ? placeName(p).toLowerCase() : (p[sort] as number | null) ?? 0;
+    return [...features].sort((a, b) => {
+      const [x, y] = [value(a.properties), value(b.properties)];
+      const cmp = typeof x === "string" ? x.localeCompare(y as string) : (x as number) - (y as number);
+      return asc ? cmp : -cmp;
+    });
+  }, [features, sort, asc]);
+
+  function header(key: SortKey, label: string, numeric = false) {
+    const active = sort === key;
+    return (
+      <th
+        className={`${numeric ? "num " : ""}${active ? "sorted" : ""}`}
+        onClick={() => {
+          if (active) setAsc(!asc);
+          else {
+            setSort(key);
+            setAsc(key === "place");
+          }
+        }}
+      >
+        {label}
+        {active && <span className="caret">{asc ? "▲" : "▼"}</span>}
+      </th>
+    );
+  }
+
+  if (features.length === 0) return <div className="list-wrap" />;
+
+  return (
+    <div className="list-wrap">
+      <table className="table locations">
+        <thead>
+          <tr>
+            {header("place", "Location")}
+            <th>Network</th>
+            {header("plays", "Plays", true)}
+            {header("users", "Users", true)}
+            {header("devices", "Devices", true)}
+            {header("ips", "IPs", true)}
+            {header("last_play", "Last play", true)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((f) => {
+            const p = f.properties;
+            const key = `${f.geometry.coordinates[0]},${f.geometry.coordinates[1]}`;
+            const isSelected =
+              selected !== null && placeName(selected) === placeName(p) && selected.plays === p.plays;
+            return (
+              <tr
+                key={key}
+                className={isSelected ? "loc-row selected" : "loc-row"}
+                onClick={() => onSelect(p)}
+              >
+                <td>
+                  {placeName(p)}
+                  {p.is_hosting && <span className="pill warn">VPN</span>}
+                </td>
+                <td className="muted">{p.asn_org}</td>
+                <td className="num">{p.plays.toLocaleString()}</td>
+                <td className="num">{p.users}</td>
+                <td className="num">{p.devices}</td>
+                <td className="num">{p.ips}</td>
+                <td className="num muted">
+                  {p.last_play ? new Date(p.last_play * 1000).toLocaleDateString() : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ---- shared ------------------------------------------------------------ */
+
+function placeName(p: Place): string {
+  return [p.city, p.region, p.country].filter(Boolean).join(", ") || "Unknown location";
+}
+
+function Drawer({ place, onClose }: { place: Place; onClose: () => void }) {
   return (
     <aside className="drawer">
       <header>
         <div>
-          <h2>{where || "Unknown location"}</h2>
+          <h2>{placeName(place)}</h2>
           {place.asn_org && <p className="muted">{place.asn_org}</p>}
         </div>
         <button className="tab" onClick={onClose} aria-label="Close">
@@ -259,9 +412,7 @@ function Drawer({
       </dl>
 
       {place.last_play && (
-        <p className="muted">
-          Last play {new Date(place.last_play * 1000).toLocaleString()}
-        </p>
+        <p className="muted">Last play {new Date(place.last_play * 1000).toLocaleString()}</p>
       )}
     </aside>
   );
@@ -276,10 +427,15 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+function Tile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="summary-tile">
+      <span className="summary-value">{value.toLocaleString()}</span>
+      <span className="summary-label">{label}</span>
+    </div>
+  );
+}
+
 /* Pin colours come from the same tokens as the basemap. */
 const css = (name: string, fallback: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-const accent = () => css("--accent", "#0e7490");
-const accentInk = () => css("--accent-ink", "#ffffff");
-const surface = () => css("--surface", "#ffffff");
-const danger = () => css("--danger", "#b91c1c");

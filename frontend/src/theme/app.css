@@ -496,6 +496,8 @@ input:focus-visible {
   overflow-y: auto;
 }
 .row {
+  /* Generic flex utility. Never put this on a <tr> — display:flex destroys
+     table layout and the header and body columns stop lining up. */
   display: flex;
   align-items: center;
   gap: 10px;
@@ -793,4 +795,107 @@ code {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
+}
+
+/* ---- map / list view --------------------------------------------------- */
+
+.viewbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 14px;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.seg + .seg {
+  border-left: 1px solid var(--border-strong);
+}
+.seg:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.seg.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.seg:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.view-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.list-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  /* Clear of the summary strip pinned bottom-left. */
+  padding: 0 0 72px;
+}
+
+.table.locations {
+  font-size: 13px;
+}
+.table.locations thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.table.locations thead th:hover {
+  color: var(--ink);
+}
+.table.locations th.sorted {
+  color: var(--accent);
+}
+.caret {
+  margin-left: 5px;
+  font-size: 9px;
+}
+.table.locations td {
+  padding: 8px 14px;
+}
+.table.locations .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table.locations tbody .loc-row {
+  cursor: pointer;
+}
+.table.locations tbody .loc-row:hover {
+  background: var(--surface-2);
+}
+.table.locations tbody .loc-row.selected {
+  background: var(--accent-soft);
+}
+.table.locations tbody .loc-row.selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
