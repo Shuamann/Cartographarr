@@ -1,18 +1,34 @@
 # Cartographarr
 
-Maps Plex viewing history by location, and enforces device-level access control,
-on top of Tautulli.
+See where your Plex server is actually being watched from, and do something
+about it.
 
-Plex has no API to ban a shared user's device. `plex.tv/devices.xml` only lists
-devices on the token owner's own account, so a friend's Firestick is invisible to
-you. Blocking is therefore behavioural: match the live session on `machine_id`
-(Plex's `clientIdentifier`, stable across player renames) and terminate it.
+Cartographarr sits on top of Tautulli. It maps every play by location, tracks
+every device that has ever streamed, spots accounts being used in two places at
+once, and can stop a stream or block a specific device.
 
-## Status
+## Why it exists
 
-Working: first-run setup, a filterable map, live activity with stream termination,
-and enforceable device rules. Not built yet: auth, Plex sharing controls,
-integrations.
+Plex has no way to ban one device belonging to someone you share with. The
+device list at `plex.tv` only shows devices signed into your own account, so a
+friend's Firestick is invisible to you. Your only account-level options are to
+unshare them entirely or cut down which libraries they see.
+
+So Cartographarr blocks by behaviour instead. It watches live playback, matches
+a rule, and ends the stream with a message. Rules key on the Plex device id
+rather than the player name, because anyone can rename "Living Room TV".
+
+## What it does
+
+- **Map** every play, with the location's real uncertainty drawn around it
+- **Live activity** on the same map, with details and actions on hover
+- **Rules** that stop streams: by device, user, platform, IP range, transcode
+  decision, resolution, concurrent stream count, or how long something has sat
+  paused
+- **Shared account detection**: one account playing in two cities at once, or
+  moving faster than a plane between plays
+- **Devices, users and history**, all searchable and filterable
+- **Links out** to Plex, IMDb, TMDB and Trakt from any title
 
 ## Install
 
@@ -20,60 +36,78 @@ integrations.
 docker compose up -d --build
 ```
 
-Serves on `:6277`, data in `/mnt/user/appdata/cartographarr`, running as
-`99:100` (nobody:users) to match Unraid's appdata ownership. On Unraid's Docker
-template UI instead: map `/data` to your appdata path and publish container
-port 6277.
+Open `http://your-server:6277`, create the admin account, and follow the setup
+prompts. Nothing needs to be configured in advance and no keys go in your
+container config unless you want them there.
 
-**No configuration needed to start.** The container boots unconfigured and the
-UI walks you through first-run setup: Tautulli URL and API key, optionally a
-free MaxMind GeoLite2 account for the map. Credentials are validated before
-they're saved, stored in the app's own database, and editable afterwards in
-Settings. Nothing is baked into the image.
+You will need a Tautulli URL and API key. A free
+[MaxMind GeoLite2](https://www.maxmind.com/en/geolite2/signup) account is
+optional but there are no map pins without one.
 
-The first sync backfills your whole history. Expect a few minutes on a large
-library, almost entirely one-time metadata fetching; after that a cycle with no
-new plays costs about a tenth of a second.
+The first sync pulls your whole history. On a large library expect a few
+minutes, almost all of it fetching artwork and metadata once. After that a
+cycle with nothing new takes about a tenth of a second.
 
-### Configuring by environment variable instead
+### On Unraid
 
-Every setting can also be supplied as an env var, which is handy for Unraid
-templates. **An environment variable wins and renders read-only in the UI**,
-exactly how Radarr behaves. Leave one unset and the UI owns it.
+Data lives in `/mnt/user/appdata/cartographarr` and the container runs as
+`99:100` to match. Using the Docker template instead of compose: map `/data` to
+your appdata path and publish port 6277.
+
+### Configuring by environment variable
+
+Every setting can also come from the environment, which suits Unraid templates.
+**An environment variable wins and shows as read-only in Settings.** Leave one
+out and the UI owns it.
 
 | Variable | Notes |
 |---|---|
-| `TAUTULLI_URL` | Remote/fallback URL |
-| `TAUTULLI_API_KEY` | Tautulli → Settings → Web Interface |
-| `TAUTULLI_LOCAL_URL` | LAN address, preferred when reachable. Tried once with a short timeout, then it falls back for the life of the process |
-| `MAXMIND_ACCOUNT_ID`, `MAXMIND_LICENSE_KEY` | Free GeoLite2 account. Without them there are no map pins |
-| `PLEX_MACHINE_IDENTIFIER` | Enables the Plex deep-link button |
+| `TAUTULLI_URL` | The address Cartographarr can always reach |
+| `TAUTULLI_API_KEY` | Tautulli, Settings, Web Interface |
+| `TAUTULLI_LOCAL_URL` | A LAN address, preferred when reachable |
+| `MAXMIND_ACCOUNT_ID`, `MAXMIND_LICENSE_KEY` | For map locations |
+| `AUTH_PROXY_ENABLED`, `TRUSTED_PROXY_IPS` | See below |
 
-A newly issued MaxMind key can take a few minutes to become valid, so retry
-before assuming it's wrong.
+## Putting it behind a reverse proxy
 
-## Develop
+Cartographarr has its own login, so it is safe to expose without one. If you
+already run Authelia, Authentik or Cloudflare Access, turn on proxy sign-in in
+Settings and list the addresses allowed to send the header.
+
+The header is only trusted from those addresses. Local login stays available on
+purpose, so a broken proxy config cannot lock you out.
+
+## Blocking a device
+
+1. Find it under **Devices**, or hover its stream on the map
+2. Hit **Block**, which opens a rule with the device id filled in
+3. Leave dry run on and watch the enforcement log
+4. Turn dry run off when the log looks right
+
+Rules ship in dry run. They record what they would have done and stop nothing
+until you say so.
+
+**Already using JBOPS `kill_stream.py`?** Turn those notification agents off
+before enabling enforcement, or both will fire on the same stream.
+
+## A note on locations
+
+An IP address gives you a city, never an address. GeoLite2 reports its own
+margin of error, which ranges from about 5 km to 1000 km, and the map draws
+that margin rather than dropping a confident pin on a rooftop. A stream from a
+VPN is placed where the VPN is, and gets labelled as such.
+
+Treat a pin as a neighbourhood, not a house.
+
+## Development
 
 ```bash
-cd backend && python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]" && .venv/Scripts/python -m pytest -q
+cd backend && python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m pytest -q
 ```
-
-Confirm which data source your Tautulli supports:
 
 ```bash
-cd backend && .venv/Scripts/python -m scripts.probe_source
+cd frontend && npm install && npm run dev
 ```
 
-## Design notes
-
-- **Sync moves only the delta.** A watermark bounds the history pull, each IP is
-  geocoded once ever, each `rating_key` fetched once ever. Items deleted from
-  Plex get a tombstone row, otherwise they are re-requested on every sync forever.
-- **`get_stream_data` is never synced.** Codec/bitrate/resolution need a per-row
-  call, and rules read live `get_activity` which already carries them. Stream
-  detail fetches on demand, so nothing pays for rows nobody opens.
-- **Hosting/VPN detection excludes residential markers first.** `Google Fiber` is
-  an ISP, not a datacentre; matching `google` alone made 94% of flags false
-  positives on real data.
-- **One filter model.** `app/filters.py` feeds the map, history and stats alike,
-  so a filter added once works everywhere.
+Vite proxies the API to the backend on 6277.
