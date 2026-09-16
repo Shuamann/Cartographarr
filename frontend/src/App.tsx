@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, useApi, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
 import Setup from "./routes/Setup";
 import Map from "./routes/Map";
@@ -43,11 +44,13 @@ export default function App() {
         </header>
 
         <main>
-          {tab === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
-          {tab === "Map" && <Map geoipReady={setup.data.geoip_ready} />}
-          {tab === "Activity" && <Activity />}
-          {tab === "Rules" && <Rules />}
-          {tab === "Settings" && <SettingsStub />}
+          <ErrorBoundary name={tab} key={tab}>
+            {tab === "Dashboard" && <Dashboard onNavigate={(t) => setTab(t as Tab)} />}
+            {tab === "Map" && <Map geoipReady={setup.data.geoip_ready} />}
+            {tab === "Activity" && <Activity />}
+            {tab === "Rules" && <Rules />}
+            {tab === "Settings" && <SettingsStub />}
+          </ErrorBoundary>
         </main>
       </div>
     </CapabilityProvider>

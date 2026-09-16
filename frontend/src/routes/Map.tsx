@@ -23,13 +23,26 @@ export default function MapRoute({ geoipReady }: { geoipReady: boolean }) {
   // ---- create once -------------------------------------------------------
   useEffect(() => {
     if (!container.current || map.current) return;
-    const m = new maplibregl.Map({
-      container: container.current,
-      style: buildMapStyle(),
-      center: [-98, 39],
-      zoom: 3,
-      attributionControl: { compact: true },
-    });
+
+    let m: maplibregl.Map;
+    try {
+      m = new maplibregl.Map({
+        container: container.current,
+        style: buildMapStyle(),
+        center: [-98, 39],
+        zoom: 3,
+        attributionControl: { compact: true },
+      });
+    } catch (err) {
+      // No WebGL (headless browser, software rendering disabled, old GPU
+      // driver). The map is the only thing that needs it.
+      setMapError(
+        `This browser can't display the map: ${(err as Error).message}. ` +
+          "Everything else still works.",
+      );
+      return;
+    }
+
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     m.on("load", () => setReady(true));
     // MapLibre swallows style and tile failures by default, which turns a bad
