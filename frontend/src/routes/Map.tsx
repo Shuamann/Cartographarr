@@ -68,6 +68,7 @@ export default function MapRoute({
     () => localStorage.getItem("layer.accuracy") !== "off",
   );
   const [showLive, setShowLive] = useState(() => localStorage.getItem("layer.live") !== "off");
+  const [showHeat, setShowHeat] = useState(() => localStorage.getItem("layer.heat") === "on");
 
   const live = useApi<Activity>("/activity");
   useEffect(() => {
@@ -83,6 +84,7 @@ export default function MapRoute({
   const liveSessions = allLive.filter((s) => s.geo?.lat != null);
   const unplaceable = allLive.length - liveSessions.length;
   const [hovered, setHovered] = useState<Hover | null>(null);
+  const [pinned, setPinned] = useState(false);
 
   function toggleLayer(name: string, value: boolean, set: (v: boolean) => void) {
     set(value);
@@ -130,6 +132,14 @@ export default function MapRoute({
               />
               Accuracy
             </label>
+            <label className="check" title="Density instead of individual pins">
+              <input
+                type="checkbox"
+                checked={showHeat}
+                onChange={(e) => toggleLayer("heat", e.target.checked, setShowHeat)}
+              />
+              Heat
+            </label>
             <label className="check">
               <input
                 type="checkbox"
@@ -165,7 +175,12 @@ export default function MapRoute({
             showHistory={showHistory}
             showAccuracy={showAccuracy}
             liveSessions={showLive ? liveSessions : []}
-            onHoverLive={setHovered}
+            onHoverLive={(h) => {
+              // A pinned flyout stays put until it is dismissed.
+              if (!pinned) setHovered(h);
+            }}
+            onPinLive={() => setPinned(true)}
+            showHeat={showHeat}
           />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
@@ -197,7 +212,11 @@ export default function MapRoute({
             session={hovered.session}
             x={hovered.x}
             y={hovered.y}
-            onClose={() => setHovered(null)}
+            pinned={pinned}
+            onClose={() => {
+              setHovered(null);
+              setPinned(false);
+            }}
             onOpenUser={onOpenUser}
             onBlockDevice={onBlockDevice}
             onTerminated={live.reload}
@@ -248,6 +267,8 @@ function MapCanvas({
   showAccuracy,
   liveSessions,
   onHoverLive,
+  onPinLive,
+  showHeat,
 }: {
   features: MapPoint[];
   onSelect: (place: Place) => void;
@@ -255,6 +276,8 @@ function MapCanvas({
   showAccuracy: boolean;
   liveSessions: LiveSession[];
   onHoverLive: (hover: Hover | null) => void;
+  onPinLive: () => void;
+  showHeat: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -267,6 +290,8 @@ function MapCanvas({
   liveRef.current = liveSessions;
   const onHoverRef = useRef(onHoverLive);
   onHoverRef.current = onHoverLive;
+  const onPinRef = useRef(onPinLive);
+  onPinRef.current = onPinLive;
 
   useEffect(() => {
     if (!container.current || map.current) return;
@@ -351,6 +376,20 @@ function MapCanvas({
       });
     }
 
+    const heat = m.getSource("heat") as maplibregl.GeoJSONSource | undefined;
+    if (heat) heat.setData(showHeat ? data : { type: "FeatureCollection", features: [] });
+
+    for (const [id, visible] of [
+      ["heat", showHeat],
+      ["clusters", !showHeat],
+      ["cluster-count", !showHeat],
+      ["points", !showHeat],
+    ] as [string, boolean][]) {
+      if (m.getLayer(id)) {
+        m.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      }
+    }
+
     const existing = m.getSource("plays") as maplibregl.GeoJSONSource | undefined;
     if (existing) {
       existing.setData(data);
@@ -381,6 +420,32 @@ function MapCanvas({
         },
       },
       // Under the labels. On top of them, city names became unreadable.
+      firstSymbolLayer(m),
+    );
+
+    // Unclustered copy of the same points. A heatmap wants every point, not
+    // a handful of cluster centroids, which would produce a few hot blobs
+    // wherever clustering happened to land.
+    m.addSource("heat", { type: "geojson", data: emptyCollection() });
+    m.addLayer(
+      {
+        id: "heat",
+        type: "heatmap",
+        source: "heat",
+        layout: { visibility: "none" },
+        paint: {
+          // Weighted by plays, then flattened with a square root. Raw counts
+          // would let one city of 9,000 plays wash out everywhere else.
+          "heatmap-weight": [
+            "interpolate", ["linear"], ["sqrt", ["get", "plays"]],
+            0, 0,
+            100, 1,
+          ],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 12, 9, 40],
+          "heatmap-opacity": 0.75,
+        },
+      },
       firstSymbolLayer(m),
     );
 
@@ -471,7 +536,7 @@ function MapCanvas({
       m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
-  }, [ready, features, onSelect, showHistory, showAccuracy]);
+  }, [ready, features, onSelect, showHistory, showAccuracy, showHeat]);
 
   // ---- live streams ------------------------------------------------------
   useEffect(() => {
@@ -540,6 +605,12 @@ function MapCanvas({
     for (const layer of ["live-halo", "live-ring", "live-dot"]) {
       m.on("mouseenter", layer, show);
       m.on("mousemove", layer, show);
+      // Clicking pins it open, so the flyout survives the pointer wandering
+      // off on the way to a button.
+      m.on("click", layer, (e) => {
+        show(e);
+        onPinRef.current();
+      });
       m.on("mouseleave", layer, () => {
         m.getCanvas().style.cursor = "";
         // Deliberately left open: the flyout carries buttons, and closing the
@@ -837,6 +908,7 @@ function LiveFlyout({
   session,
   x,
   y,
+  pinned,
   onClose,
   onOpenUser,
   onBlockDevice,
@@ -845,6 +917,7 @@ function LiveFlyout({
   session: LiveSession;
   x: number;
   y: number;
+  pinned: boolean;
   onClose: () => void;
   onOpenUser?: (userId: number) => void;
   onBlockDevice?: (machineId: string, label: string) => void;
@@ -877,9 +950,9 @@ function LiveFlyout({
 
   return (
     <div
-      className="flyout"
+      className={pinned ? "flyout pinned" : "flyout"}
       style={{ left: x, top: y }}
-      onMouseLeave={onClose}
+      onMouseLeave={pinned ? undefined : onClose}
       role="dialog"
     >
       <div className="flyout-head">
