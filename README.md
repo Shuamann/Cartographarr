@@ -10,8 +10,9 @@ you. Blocking is therefore behavioural: match the live session on `machine_id`
 
 ## Status
 
-Backend through the read API. Map data, filters, stats and media deep links work.
-No UI yet — use `/docs`.
+Working: first-run setup, a filterable map, live activity with stream termination,
+and enforceable device rules. Not built yet: auth, Plex sharing controls,
+integrations.
 
 ## Install
 
@@ -19,10 +20,10 @@ No UI yet — use `/docs`.
 docker compose up -d --build
 ```
 
-Serves on `:8420`, data in `/mnt/user/appdata/cartographarr`, running as
+Serves on `:6277`, data in `/mnt/user/appdata/cartographarr`, running as
 `99:100` (nobody:users) to match Unraid's appdata ownership. On Unraid's Docker
 template UI instead: map `/data` to your appdata path and publish container
-port 8000.
+port 6277.
 
 **No configuration needed to start.** The container boots unconfigured and the
 UI walks you through first-run setup — Tautulli URL and API key, optionally a

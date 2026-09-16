@@ -10,7 +10,10 @@ services:
     user: "99:100"
 
     ports:
-      - "8420:8000"
+      # 6277 = "MAPS" on a phone keypad, and clear of the usual
+      # self-hosted stack (Sonarr 8989, Radarr 7878, Tautulli 8181,
+      # Bazarr 6767, Prowlarr 9696, Seerr 5055, Tdarr 8265 and friends).
+      - "6277:6277"
 
     volumes:
       - /mnt/user/appdata/cartographarr:/data

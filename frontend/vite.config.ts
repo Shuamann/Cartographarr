@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     // Dev server talks to the FastAPI backend so the app never needs to know
     // whether it's running from Vite or served out of the container.
-    proxy: { "/api": "http://127.0.0.1:8000" },
+    proxy: { "/api": "http://127.0.0.1:6277" },
   },
   build: { outDir: "dist", emptyOutDir: true },
 });
