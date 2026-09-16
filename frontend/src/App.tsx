@@ -11,22 +11,20 @@ import Setup from "./routes/Setup";
 // map arrives only when someone asks for it.
 const Map = lazy(() => import("./routes/Map"));
 import History from "./routes/History";
-import Users from "./routes/Users";
-import Devices from "./routes/Devices";
+import People, { type Selection } from "./routes/People";
 import Rules from "./routes/Rules";
 import Log from "./routes/Log";
 import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
-import type { Device, LiveSession, Rule } from "./lib/api";
-import { EMPTY } from "./lib/filters";
+import type { LiveSession, Rule } from "./lib/api";
+import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext } from "./lib/nav";
 
 const TABS = [
   "Dashboard",
   "Map",
   "History",
-  "Users",
-  "Devices",
+  "People",
   "Rules",
   "Log",
   "Sharing",
@@ -38,7 +36,9 @@ const ADMIN_TABS: Tab[] = ["Rules", "Log", "Sharing", "Settings"];
 export default function App() {
   const auth = useApi<AuthState>("/auth/state");
   const [tab, setTab] = useState<Tab>(() => {
-    const wanted = new URLSearchParams(window.location.search).get("tab");
+    let wanted = new URLSearchParams(window.location.search).get("tab");
+    // Users and Devices became one tab. Old bookmarks still land somewhere.
+    if (wanted === "Users" || wanted === "Devices") wanted = "People";
     return (TABS as readonly string[]).includes(wanted ?? "") ? (wanted as Tab) : "Dashboard";
   });
 
@@ -94,23 +94,24 @@ function SignedIn({
   // Cleared once the map has used it, or going back to the tab later would
   // yank the view somewhere unexpected.
   const [focusSession, setFocusSession] = useState<LiveSession | null>(null);
-  const [focusUser, setFocusUser] = useState<number | null>(null);
-  const [focusDevice, setFocusDevice] = useState<string | null>(null);
-
-  function openDevice(machineId: string) {
-    setFocusDevice(machineId);
-    setTab("Devices");
-  }
+  // Which user or device People opens on, when another page sent us there.
+  const [focusPerson, setFocusPerson] = useState<Selection | null>(null);
 
   function openUser(userId: number) {
-    setFocusUser(userId);
-    setTab("Users");
+    setFocusPerson({ kind: "user", id: userId });
+    setTab("People");
   }
 
-  // Blocking a device from the inventory opens the rule editor already filled
-  // in, so nobody has to copy a machine_id by hand.
-  function blockDevice(device: Device) {
-    blockMachine(device.machine_id, device.player || device.machine_id.slice(0, 8));
+  function openDevice(machineId: string) {
+    setFocusPerson({ kind: "device", id: machineId });
+    setTab("People");
+  }
+
+  // A profile's Map and History buttons: fresh filters narrowed to one
+  // person or device, rather than added to whatever was set before.
+  function filterTo(target: "Map" | "History", patch: Partial<FilterState>) {
+    setFilters({ ...EMPTY, ...patch });
+    setTab(target);
   }
 
   function showOnMap(session: LiveSession) {
@@ -153,6 +154,7 @@ function SignedIn({
           openDevice,
           showOnMap,
           blockDevice: isAdmin ? blockMachine : undefined,
+          filterTo,
         }}
       >
       <div className="app">
@@ -194,9 +196,11 @@ function SignedIn({
             {active === "History" && (
               <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
             )}
-            {active === "Users" && <Users focusUserId={focusUser} key={focusUser ?? "users"} />}
-            {active === "Devices" && (
-              <Devices me={user} onBlock={blockDevice} focusMachineId={focusDevice} key={focusDevice ?? "devices"} />
+            {active === "People" && (
+              <People
+                initial={focusPerson}
+                key={focusPerson ? `${focusPerson.kind}-${focusPerson.id}` : "people"}
+              />
             )}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
             {active === "Log" && <Log onOpenUser={openUser} />}

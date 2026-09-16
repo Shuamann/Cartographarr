@@ -66,6 +66,18 @@ export default function FilterBar({ value, onChange }: Props) {
         onChange={(v) => set("user_id", v as number[])}
       />
 
+      {/* Set from a device profile rather than picked here, since two hundred
+          device ids make a poor dropdown. Shown so it can be seen and cleared. */}
+      {value.machine_id.length > 0 && (
+        <button
+          className="ms-btn on"
+          title="Clear the device filter"
+          onClick={() => onChange({ ...value, machine_id: [], machineLabel: null })}
+        >
+          Device: {value.machineLabel ?? value.machine_id.length} ✕
+        </button>
+      )}
+
       <MultiSelect
         label="Library"
         options={(libraries.data ?? []).map((l) => ({

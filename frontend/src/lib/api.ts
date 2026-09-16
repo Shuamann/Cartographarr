@@ -374,7 +374,7 @@ export type Device = {
   is_new_unreviewed: boolean;
 };
 
-export type UserDetail = PlexUser & {
+export type Profile = {
   totals: {
     plays: number;
     seconds: number;
@@ -382,18 +382,73 @@ export type UserDetail = PlexUser & {
     ips: number;
     first_play: number | null;
     last_play: number | null;
+    users: number;
   };
-  devices: Device[];
   places: {
     city: string | null;
     region: string | null;
     country: string | null;
+    lat: number | null;
+    lon: number | null;
     is_hosting: boolean;
-    asn_org: string | null;
     plays: number;
+    last_play: number | null;
   }[];
-  top_media: { rating_key: number; title: string; plays: number }[];
+  addresses: {
+    ip_address: string;
+    asn_org: string | null;
+    city: string | null;
+    is_hosting: boolean;
+    location: string | null;
+    plays: number;
+    first_play: number | null;
+    last_play: number | null;
+  }[];
+  top_media: {
+    rating_key: number;
+    title: string | null;
+    media_type: string | null;
+    plays: number;
+    seconds: number;
+    last_play: number | null;
+  }[];
 };
+
+export type UserDetail = PlexUser & Profile & { devices: Device[] };
+
+export type DeviceDetail = Profile & {
+  machine_id: string;
+  player: string | null;
+  platform: string | null;
+  product: string | null;
+  first_seen: number | null;
+  last_seen: number | null;
+  is_new_unreviewed: boolean;
+  owners: { user_id: number; name: string; play_count: number; first_seen: number | null; last_seen: number | null }[];
+};
+
+export type PersonEvent =
+  | ({ kind: "stream"; at_epoch: number } & Enforcement)
+  | {
+      kind: "change";
+      at_epoch: number;
+      id: number;
+      actor: string | null;
+      action: string;
+      summary: string | null;
+      result: string | null;
+    }
+  | {
+      kind: "signal";
+      at_epoch: number;
+      id: number;
+      signal_kind: "concurrent" | "travel";
+      from_city: string | null;
+      to_city: string | null;
+      km: number | null;
+      kmh: number | null;
+      status: string;
+    };
 
 export type HistoryRow = {
   row_id: number;

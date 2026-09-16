@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+from datetime import UTC
 from typing import Annotated, Any
 
 import httpx
@@ -11,7 +12,7 @@ from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.auth.deps import AdminUser
+from app.auth.deps import AdminUser, CurrentUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
@@ -557,12 +558,12 @@ async def restore_in_tautulli(user_id: int, admin: AdminUser, db: Db) -> dict:
     return {"user_id": user_id, "deleted_in_tautulli": False}
 
 
-@router.get("/users/{user_id}")
-def user_detail(user_id: int, db: Db) -> dict:
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, "No such user")
+def _profile(db: Session, where: list) -> dict:
+    """Everything history says about one user or one device.
 
+    Shared by both profiles, so a person and a device are described the same
+    way: totals, where from, on which networks, and what they watched.
+    """
     totals = db.execute(
         select(
             func.count(),
@@ -571,43 +572,78 @@ def user_detail(user_id: int, db: Db) -> dict:
             func.count(func.distinct(History.ip_address)),
             func.min(History.started),
             func.max(History.started),
-        ).where(History.user_id == user_id)
+            func.count(func.distinct(History.user_id)),
+        ).where(*where)
     ).one()
-
-    devices = db.execute(
-        select(Device).where(Device.user_id == user_id).order_by(desc(Device.last_seen))
-    ).scalars().all()
 
     places = db.execute(
         select(
             IpLocation.city,
             IpLocation.region,
             IpLocation.country,
-            IpLocation.is_hosting,
-            IpLocation.asn_org,
+            func.max(IpLocation.lat).label("lat"),
+            func.max(IpLocation.lon).label("lon"),
+            func.max(IpLocation.is_hosting).label("is_hosting"),
             func.count().label("plays"),
+            func.max(History.started).label("last_play"),
         )
         .join(History, History.ip_address == IpLocation.ip)
-        .where(History.user_id == user_id)
+        .where(*where)
         .group_by(IpLocation.city, IpLocation.region, IpLocation.country)
         .order_by(desc(func.count()))
-        .limit(20)
+        .limit(25)
     ).all()
 
+    addresses = db.execute(
+        select(
+            History.ip_address,
+            func.max(IpLocation.asn_org).label("asn_org"),
+            func.max(IpLocation.city).label("city"),
+            func.max(IpLocation.is_hosting).label("is_hosting"),
+            func.max(History.location).label("location"),
+            func.count().label("plays"),
+            func.min(History.started).label("first_play"),
+            func.max(History.started).label("last_play"),
+        )
+        .join(IpLocation, IpLocation.ip == History.ip_address, isouter=True)
+        .where(*where, History.ip_address.is_not(None))
+        .group_by(History.ip_address)
+        .order_by(desc(func.max(History.started)))
+        .limit(50)
+    ).all()
+
+    # Grouped by show rather than episode, named from the cached show where
+    # there is one. History itself only stores the episode's own title.
+    show_key = func.coalesce(History.grandparent_rating_key, History.rating_key)
     top = db.execute(
         select(
-            func.coalesce(History.grandparent_rating_key, History.rating_key).label("key"),
-            func.max(func.coalesce(History.grandparent_title, History.full_title)).label("title"),
+            show_key.label("key"),
+            func.max(History.full_title).label("full_title"),
+            func.max(History.media_type).label("media_type"),
             func.count().label("plays"),
+            func.sum(History.play_duration).label("seconds"),
+            func.max(History.started).label("last_play"),
         )
-        .where(History.user_id == user_id)
-        .group_by("key")
+        .where(*where)
+        .group_by(show_key)
         .order_by(desc(func.count()))
-        .limit(10)
+        .limit(12)
     ).all()
+    names = {
+        m.rating_key: m.title
+        for m in db.execute(
+            select(MediaItem).where(MediaItem.rating_key.in_([t.key for t in top if t.key]))
+        ).scalars()
+    }
+
+    def title_of(t) -> str | None:
+        if t.key in names and names[t.key]:
+            return names[t.key]
+        # "Show - Episode" falls back to the show part.
+        full = t.full_title or ""
+        return full.split(" - ")[0] if t.media_type == "episode" else full or None
 
     return {
-        **{c.name: getattr(user, c.name) for c in User.__table__.columns},
         "totals": {
             "plays": totals[0],
             "seconds": totals[1] or 0,
@@ -615,23 +651,184 @@ def user_detail(user_id: int, db: Db) -> dict:
             "ips": totals[3],
             "first_play": totals[4],
             "last_play": totals[5],
+            "users": totals[6],
         },
+        "places": [
+            {
+                "city": x.city,
+                "region": x.region,
+                "country": x.country,
+                "lat": x.lat,
+                "lon": x.lon,
+                "is_hosting": bool(x.is_hosting),
+                "plays": x.plays,
+                "last_play": x.last_play,
+            }
+            for x in places
+        ],
+        "addresses": [
+            {
+                "ip_address": a.ip_address,
+                "asn_org": a.asn_org,
+                "city": a.city,
+                "is_hosting": bool(a.is_hosting),
+                "location": a.location,
+                "plays": a.plays,
+                "first_play": a.first_play,
+                "last_play": a.last_play,
+            }
+            for a in addresses
+        ],
+        "top_media": [
+            {
+                "rating_key": t.key,
+                "title": title_of(t),
+                "media_type": "show" if t.media_type == "episode" else t.media_type,
+                "plays": t.plays,
+                "seconds": t.seconds or 0,
+                "last_play": t.last_play,
+            }
+            for t in top
+        ],
+    }
+
+
+@router.get("/users/{user_id}")
+def user_detail(user_id: int, db: Db) -> dict:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "No such user")
+
+    devices = db.execute(
+        select(Device).where(Device.user_id == user_id).order_by(desc(Device.last_seen))
+    ).scalars().all()
+
+    return {
+        **{c.name: getattr(user, c.name) for c in User.__table__.columns},
+        **_profile(db, [History.user_id == user_id]),
         "devices": [
             {c.name: getattr(d, c.name) for c in Device.__table__.columns} for d in devices
         ],
-        "places": [
-            {
-                "city": p.city,
-                "region": p.region,
-                "country": p.country,
-                "is_hosting": p.is_hosting,
-                "asn_org": p.asn_org,
-                "plays": p.plays,
-            }
-            for p in places
-        ],
-        "top_media": [{"rating_key": t.key, "title": t.title, "plays": t.plays} for t in top],
     }
+
+
+@router.get("/devices/{machine_id}")
+def device_detail(machine_id: str, db: Db) -> dict:
+    """One device, across everyone who has used it. The same install can be
+    signed in to more than one account, which is itself worth seeing."""
+    rows = db.execute(
+        select(Device).where(Device.machine_id == machine_id).order_by(desc(Device.last_seen))
+    ).scalars().all()
+    if not rows:
+        raise HTTPException(404, "No such device")
+
+    names = {
+        u.user_id: u.friendly_name or u.username
+        for u in db.execute(select(User).where(User.user_id.in_([d.user_id for d in rows]))).scalars()
+    }
+    latest = rows[0]
+    return {
+        "machine_id": machine_id,
+        "player": latest.player,
+        "platform": latest.platform,
+        "product": latest.product,
+        "first_seen": min((d.first_seen for d in rows if d.first_seen), default=None),
+        "last_seen": max((d.last_seen for d in rows if d.last_seen), default=None),
+        "is_new_unreviewed": any(d.is_new_unreviewed for d in rows),
+        "owners": [
+            {
+                "user_id": d.user_id,
+                "name": names.get(d.user_id) or str(d.user_id),
+                "play_count": d.play_count,
+                "first_seen": d.first_seen,
+                "last_seen": d.last_seen,
+            }
+            for d in rows
+        ],
+        **_profile(db, [History.machine_id == machine_id]),
+    }
+
+
+@router.get("/people/activity")
+def person_activity(
+    db: Db,
+    user: CurrentUser,
+    user_id: int | None = None,
+    machine_id: str | None = None,
+    limit: int = Query(100, le=500),
+) -> list[dict]:
+    """Everything that happened to one user or device, newest first: sharing
+    signals, stream actions, and changes made about them.
+
+    Stream actions and changes are admin only, the same as the Log tab.
+    """
+    from app.models import AuditLog, EnforcementLog, TravelFlag
+
+    if user_id is None and machine_id is None:
+        raise HTTPException(400, "Give a user_id or a machine_id")
+
+    out: list[dict] = []
+
+    if user_id is not None:
+        for flag in db.execute(
+            select(TravelFlag).where(TravelFlag.user_id == user_id).order_by(desc(TravelFlag.to_started)).limit(limit)
+        ).scalars():
+            columns = {c.name: getattr(flag, c.name) for c in TravelFlag.__table__.columns}
+            # A flag has its own kind (travel or concurrent), which would
+            # otherwise overwrite the event kind this list is sorted by.
+            columns["signal_kind"] = columns.pop("kind")
+            out.append({**columns, "kind": "signal", "at": flag.to_started})
+
+    if user.role == "admin":
+        stream_where = []
+        if user_id is not None:
+            stream_where.append(EnforcementLog.user_id == user_id)
+        if machine_id is not None:
+            stream_where.append(EnforcementLog.machine_id == machine_id)
+        for row in db.execute(
+            select(EnforcementLog).where(*stream_where).order_by(desc(EnforcementLog.acted_at)).limit(limit)
+        ).scalars():
+            out.append(
+                {
+                    "kind": "stream",
+                    "at": row.acted_at,
+                    **{c.name: getattr(row, c.name) for c in EnforcementLog.__table__.columns},
+                }
+            )
+
+        targets = set()
+        if user_id is not None:
+            targets.add(str(user_id))
+            person = db.get(User, user_id)
+            if person and person.username:
+                targets.add(person.username)
+        if machine_id is not None:
+            targets.add(machine_id)
+        for row in db.execute(
+            select(AuditLog).where(AuditLog.target.in_(targets)).order_by(desc(AuditLog.created_at)).limit(limit)
+        ).scalars():
+            out.append(
+                {
+                    "kind": "change",
+                    "at": row.created_at,
+                    **{c.name: getattr(row, c.name) for c in AuditLog.__table__.columns},
+                }
+            )
+
+    def stamp(row: dict) -> float:
+        at = row["at"]
+        if at is None:
+            return 0
+        if isinstance(at, (int, float)):
+            return float(at)
+        return at.replace(tzinfo=at.tzinfo or UTC).timestamp()
+
+    for row in out:
+        # One clock for the page: signals store epoch seconds, the logs store
+        # datetimes.
+        row["at_epoch"] = stamp(row)
+    out.sort(key=lambda r: r["at_epoch"], reverse=True)
+    return out[:limit]
 
 
 @router.get("/devices")
