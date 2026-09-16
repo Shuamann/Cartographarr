@@ -104,7 +104,12 @@ main {
   position: relative;
   height: 100%;
 }
-.map {
+/* Specific on purpose. MapLibre adds .maplibregl-map to this same element and
+ * its stylesheet sets position: relative. Equal specificity means load order
+ * decides, and the map's CSS now arrives in the lazily loaded chunk, so it
+ * lands last and wins. A bare .map rule silently collapsed the container to
+ * zero height and the map never fetched a tile. */
+.view-body .map {
   position: absolute;
   inset: 0;
 }
