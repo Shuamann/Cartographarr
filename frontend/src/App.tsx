@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
 import Login from "./routes/Login";
 import Setup from "./routes/Setup";
-import Map from "./routes/Map";
+// MapLibre is most of the bundle and the app opens on the dashboard, so the
+// map arrives only when someone asks for it.
+const Map = lazy(() => import("./routes/Map"));
 import Activity from "./routes/Activity";
 import History from "./routes/History";
 import Users from "./routes/Users";
@@ -124,6 +126,7 @@ function SignedIn({
 
         <main>
           <ErrorBoundary name={active} key={active}>
+            <Suspense fallback={<div className="pad muted">Loading…</div>}>
             {active === "Dashboard" && (
               <Dashboard
                 onNavigate={(t) => setTab(t as Tab)}
@@ -144,6 +147,7 @@ function SignedIn({
             {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
             {active === "Settings" && <Settings isAdmin={isAdmin} />}
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
