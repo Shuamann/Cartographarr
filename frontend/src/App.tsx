@@ -19,6 +19,7 @@ import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
 import type { Device, LiveSession, Rule } from "./lib/api";
 import { EMPTY } from "./lib/filters";
+import { NavContext } from "./lib/nav";
 
 const TABS = [
   "Dashboard",
@@ -94,6 +95,12 @@ function SignedIn({
   // yank the view somewhere unexpected.
   const [focusSession, setFocusSession] = useState<LiveSession | null>(null);
   const [focusUser, setFocusUser] = useState<number | null>(null);
+  const [focusDevice, setFocusDevice] = useState<string | null>(null);
+
+  function openDevice(machineId: string) {
+    setFocusDevice(machineId);
+    setTab("Devices");
+  }
 
   function openUser(userId: number) {
     setFocusUser(userId);
@@ -139,6 +146,15 @@ function SignedIn({
 
   return (
     <CapabilityProvider value={caps}>
+      <NavContext.Provider
+        value={{
+          isAdmin,
+          openUser,
+          openDevice,
+          showOnMap,
+          blockDevice: isAdmin ? blockMachine : undefined,
+        }}
+      >
       <div className="app">
         <header className="topbar">
           <Brand />
@@ -161,8 +177,6 @@ function SignedIn({
                 onNavigate={(t) => setTab(t as Tab)}
                 isAdmin={isAdmin}
                 onOpenUser={openUser}
-                onBlockDevice={isAdmin ? blockMachine : undefined}
-                onShowOnMap={showOnMap}
                 filters={filters}
                 onFilters={setFilters}
               />
@@ -171,7 +185,6 @@ function SignedIn({
               <Map
                 geoipReady={setup.data?.geoip_ready ?? false}
                 onOpenUser={openUser}
-                onBlockDevice={isAdmin ? blockMachine : undefined}
                 focusSession={focusSession}
                 onFocusUsed={() => setFocusSession(null)}
                 filters={filters}
@@ -182,7 +195,9 @@ function SignedIn({
               <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
             )}
             {active === "Users" && <Users focusUserId={focusUser} key={focusUser ?? "users"} />}
-            {active === "Devices" && <Devices me={user} onBlock={blockDevice} />}
+            {active === "Devices" && (
+              <Devices me={user} onBlock={blockDevice} focusMachineId={focusDevice} key={focusDevice ?? "devices"} />
+            )}
             {active === "Rules" && <Rules prefill={prefill} key={prefill?.match_machine_id ?? "rules"} />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}
@@ -191,6 +206,7 @@ function SignedIn({
           </ErrorBoundary>
         </main>
       </div>
+      </NavContext.Provider>
     </CapabilityProvider>
   );
 }

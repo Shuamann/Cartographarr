@@ -1210,40 +1210,65 @@ label.locked .pill {
 .flyout {
   position: absolute;
   z-index: 5;
-  width: 330px;
+  width: 460px;
   max-width: calc(100% - 24px);
-  padding: 12px;
-  transform: translate(-50%, calc(-100% - 20px));
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
   border: 1px solid var(--live);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
-}
-.flyout-head {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
   cursor: grab;
   touch-action: none;
 }
 .flyout.dragging {
+  cursor: grabbing;
   user-select: none;
 }
-.flyout.dragging .flyout-head {
-  cursor: grabbing;
+.flyout.pinned {
+  border-width: 2px;
 }
-.flyout-head p {
-  margin: 1px 0 0;
+
+/* The shared stream card, sized for a popup. The popup is the frame, so the
+ * card drops its own. */
+.flyout .stream-detail {
+  margin: 0;
+  border: 0;
+  background: transparent;
 }
-.flyout .progress {
-  margin: 6px 0 10px;
+.stream-detail.compact {
+  padding: 12px;
 }
-.flyout-actions {
+.stream-detail.compact .stream-detail-body {
+  gap: 12px;
+}
+.stream-detail.compact .stream-detail-poster {
+  width: 92px;
+  height: 138px;
+}
+.stream-detail.compact h3 {
+  font-size: 15px;
+}
+.stream-detail.compact .stream-summary {
+  margin: 6px 0 8px;
+  font-size: 13px;
+}
+.stream-detail.compact .spec {
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin-top: 10px;
+  font-size: 12.5px;
+}
+.stream-detail.compact .stream-actions {
+  flex-wrap: wrap;
   gap: 8px;
 }
-.flyout-actions .btn {
-  padding: 6px 12px;
+.stream-detail.compact .btn {
+  padding: 6px 11px;
   font-size: 13px;
+}
+.stream-detail .linkrow {
+  margin-top: 8px;
+  gap: 6px;
 }
 .min0 {
   min-width: 0;
@@ -1279,9 +1304,6 @@ label.locked .pill {
   margin-top: 2px;
 }
 
-.flyout.pinned {
-  border-width: 2px;
-}
 
 /* ---- time scrubber ----------------------------------------------------- */
 

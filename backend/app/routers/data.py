@@ -311,6 +311,14 @@ def media_search(db: Db, q: str = Query(min_length=1), limit: int = Query(20, le
 @router.get("/media/{rating_key}")
 async def media_detail(rating_key: int, db: Db) -> dict:
     item = db.get(MediaItem, rating_key)
+    if item is None and is_configured():
+        # Something playing right now can be newer than the last sync. Fetch
+        # it once rather than leaving a live stream without its links.
+        from app.services.sync import cache_one
+
+        await cache_one(rating_key)
+        db.expire_all()
+        item = db.get(MediaItem, rating_key)
     if item is None or item.title is None:
         raise HTTPException(404, "Not cached, or no longer in Plex")
 

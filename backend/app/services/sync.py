@@ -341,6 +341,55 @@ def _split_guids(guids: list[str] | None) -> dict[str, str | None]:
     return out
 
 
+def _tombstone(rating_key: int) -> dict:
+    """A key that no longer exists in Plex 400s, and history keeps referencing
+    it forever. Without a tombstone the "not in media_items" filter would
+    re-request every deleted item on every single sync."""
+    return {"rating_key": rating_key, "synced_at": datetime.now(UTC)}
+
+
+async def metadata_row(client: TautulliClient, rating_key: int) -> dict:
+    """One media_items row from Tautulli, or a tombstone if Plex has no such item."""
+    try:
+        meta = await client.call("get_metadata", rating_key=rating_key)
+    except Exception as exc:  # noqa: BLE001 - one bad item shouldn't stop the batch
+        log.debug("metadata unavailable for %s: %s", rating_key, exc)
+        return _tombstone(rating_key)
+    if not meta or not meta.get("title"):
+        return _tombstone(rating_key)
+    return {
+        "rating_key": rating_key,
+        "parent_rating_key": _int(meta.get("parent_rating_key")),
+        "grandparent_rating_key": _int(meta.get("grandparent_rating_key")),
+        "section_id": _int(meta.get("section_id")),
+        "media_type": meta.get("media_type") or None,
+        "title": meta.get("title") or None,
+        "full_title": meta.get("full_title") or None,
+        "year": _int(meta.get("year")),
+        "thumb": meta.get("thumb") or None,
+        "grandparent_thumb": meta.get("grandparent_thumb") or None,
+        "parent_thumb": meta.get("parent_thumb") or None,
+        "art": meta.get("art") or None,
+        "duration": _int(meta.get("duration")),
+        "content_rating": meta.get("content_rating") or None,
+        "summary": meta.get("summary") or None,
+        **_split_guids(meta.get("guids")),
+        "synced_at": datetime.now(UTC),
+    }
+
+
+async def cache_one(rating_key: int) -> None:
+    """Fetch and store one item now, for something playing that history has
+    not caught up with yet."""
+    client = TautulliClient(current_settings())
+    try:
+        row = await metadata_row(client, rating_key)
+    finally:
+        await client.aclose()
+    with session_scope() as session:
+        _upsert(session, MediaItem, [row])
+
+
 async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
     """Fetch metadata for rating_keys never seen before.
 
@@ -365,40 +414,9 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
 
     semaphore = asyncio.Semaphore(settings.metadata_concurrency)
 
-    # A key that no longer exists in Plex 400s, and history keeps referencing
-    # it forever. Without a tombstone the "not in media_items" filter would
-    # re-request every deleted item on every single sync.
-    def tombstone(rating_key: int) -> dict:
-        return {"rating_key": rating_key, "synced_at": datetime.now(UTC)}
-
     async def fetch(rating_key: int) -> dict | None:
         async with semaphore:
-            try:
-                meta = await client.call("get_metadata", rating_key=rating_key)
-            except Exception as exc:  # noqa: BLE001 - one bad item shouldn't stop the batch
-                log.debug("metadata unavailable for %s: %s", rating_key, exc)
-                return tombstone(rating_key)
-        if not meta or not meta.get("title"):
-            return tombstone(rating_key)
-        return {
-            "rating_key": rating_key,
-            "parent_rating_key": _int(meta.get("parent_rating_key")),
-            "grandparent_rating_key": _int(meta.get("grandparent_rating_key")),
-            "section_id": _int(meta.get("section_id")),
-            "media_type": meta.get("media_type") or None,
-            "title": meta.get("title") or None,
-            "full_title": meta.get("full_title") or None,
-            "year": _int(meta.get("year")),
-            "thumb": meta.get("thumb") or None,
-            "grandparent_thumb": meta.get("grandparent_thumb") or None,
-            "parent_thumb": meta.get("parent_thumb") or None,
-            "art": meta.get("art") or None,
-            "duration": _int(meta.get("duration")),
-            "content_rating": meta.get("content_rating") or None,
-            "summary": meta.get("summary") or None,
-            **_split_guids(meta.get("guids")),
-            "synced_at": datetime.now(UTC),
-        }
+            return await metadata_row(client, rating_key)
 
     results = [r for r in await asyncio.gather(*(fetch(k) for k in missing)) if r]
 

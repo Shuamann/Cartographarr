@@ -7,11 +7,20 @@ import DataTable, { type Column, when } from "../components/DataTable";
  * This replaces hunting for a machine_id by hand, which is what writing a block
  * rule used to mean. Copy it, or go straight to a pre-filled rule.
  */
-export default function DevicesRoute({ me, onBlock }: { me: AppUser | null; onBlock: (d: Device) => void }) {
+export default function DevicesRoute({
+  me,
+  onBlock,
+  focusMachineId,
+}: {
+  me: AppUser | null;
+  onBlock: (d: Device) => void;
+  /* Opened from somewhere else to look at one device. */
+  focusMachineId?: string | null;
+}) {
   const devices = useApi<Device[]>("/devices");
   const users = useApi<PlexUser[]>("/users");
   const [newOnly, setNewOnly] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(focusMachineId ?? "");
   const [copied, setCopied] = useState<string | null>(null);
 
   const isAdmin = me?.role === "admin";

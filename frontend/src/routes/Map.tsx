@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
-  api,
   useApi,
   type Activity,
   type LiveSession,
@@ -14,8 +13,8 @@ import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
 import { buildMapStyle } from "../theme/mapStyle";
 import MediaPanel from "../components/MediaPanel";
+import StreamDetail from "../components/StreamDetail";
 import TimeScrubber from "../components/TimeScrubber";
-import { useIsAvailable } from "../components/Gated";
 import type { HistoryPage, LocationDetail } from "../lib/api";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
@@ -38,7 +37,6 @@ function webglAvailable(): boolean {
 export default function MapRoute({
   geoipReady,
   onOpenUser,
-  onBlockDevice,
   focusSession,
   onFocusUsed,
   filters,
@@ -46,7 +44,6 @@ export default function MapRoute({
 }: {
   geoipReady: boolean;
   onOpenUser?: (userId: number) => void;
-  onBlockDevice?: (machineId: string, label: string) => void;
   focusSession?: LiveSession | null;
   onFocusUsed?: () => void;
   filters: FilterState;
@@ -242,8 +239,6 @@ export default function MapRoute({
               setHovered(null);
               setPinned(false);
             }}
-            onOpenUser={onOpenUser}
-            onBlockDevice={onBlockDevice}
             onTerminated={live.reload}
           />
         )}
@@ -980,10 +975,11 @@ function Drawer({
 }
 
 
-/* Stream details, pinned next to its map pin.
+/* A live stream's popup, next to its map pin.
  *
- * Positioned in React rather than a MapLibre popup so the actions are real
- * buttons wired to the same API calls the rest of the app uses.
+ * The content is the shared StreamDetail, the same one the dashboard shows,
+ * so the facts, links and actions match wherever a stream is opened. This
+ * only adds what a popup needs: a position, dragging, and closing.
  */
 function LiveFlyout({
   session,
@@ -991,8 +987,6 @@ function LiveFlyout({
   y,
   pinned,
   onClose,
-  onOpenUser,
-  onBlockDevice,
   onTerminated,
 }: {
   session: LiveSession;
@@ -1000,16 +994,10 @@ function LiveFlyout({
   y: number;
   pinned: boolean;
   onClose: () => void;
-  onOpenUser?: (userId: number) => void;
-  onBlockDevice?: (machineId: string, label: string) => void;
   onTerminated?: () => void;
 }) {
-  const plexPass = useIsAvailable("plex_pass");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Dragged by its header, because it opens over the pin it describes and
-  // that is exactly the part of the map you want to look at.
+  // Dragged by any part that is not a control, because it opens over the pin
+  // it describes and that is exactly the part of the map you want to look at.
   const [offset, setOffset] = useState({ dx: 0, dy: 0 });
   const [dragging, setDragging] = useState(false);
   const from = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
@@ -1017,8 +1005,7 @@ function LiveFlyout({
   useEffect(() => setOffset({ dx: 0, dy: 0 }), [session.session_key]);
 
   function startDrag(e: React.PointerEvent) {
-    // Let the close and action buttons keep their clicks.
-    if ((e.target as HTMLElement).closest("button")) return;
+    if ((e.target as HTMLElement).closest("button, a, input, textarea, select, .stream-summary, .ms")) return;
     from.current = { x: e.clientX, y: e.clientY, dx: offset.dx, dy: offset.dy };
     setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -1027,126 +1014,41 @@ function LiveFlyout({
   function moveDrag(e: React.PointerEvent) {
     const start = from.current;
     if (!start) return;
-    setOffset({
-      dx: start.dx + e.clientX - start.x,
-      dy: start.dy + e.clientY - start.y,
-    });
+    setOffset({ dx: start.dx + e.clientX - start.x, dy: start.dy + e.clientY - start.y });
   }
 
   function endDrag(e: React.PointerEvent) {
+    if (!from.current) return;
     from.current = null;
     setDragging(false);
     e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  const who = session.friendly_name || session.username || "Unknown";
-  const where = session.geo
-    ? [session.geo.city, session.geo.region].filter(Boolean).join(", ")
-    : session.ip_address;
-  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
   const moved = offset.dx !== 0 || offset.dy !== 0;
-
-  async function stop() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post(`/activity/${session.session_key}/terminate`, {
-        message: "This device is not permitted to stream. Contact the server owner.",
-      });
-      onTerminated?.();
-      onClose();
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  }
+  // The card is tall, so a pin near the top of the map opens it below the pin
+  // rather than off the top of the screen.
+  const below = y < 360;
 
   return (
     <div
-      className={[
-        "flyout",
-        // Once it has been moved it stays put: dragging something away only to
-        // have it close when the pointer leaves would be useless.
-        pinned || moved ? "pinned" : "",
-        dragging ? "dragging" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={["flyout", pinned || moved ? "pinned" : "", dragging ? "dragging" : ""].filter(Boolean).join(" ")}
       style={{
         left: x,
         top: y,
-        transform: `translate(calc(-50% + ${offset.dx}px), calc(-100% - 20px + ${offset.dy}px))`,
+        transform: below
+          ? `translate(calc(-50% + ${offset.dx}px), calc(20px + ${offset.dy}px))`
+          : `translate(calc(-50% + ${offset.dx}px), calc(-100% - 20px + ${offset.dy}px))`,
       }}
+      // Once it has been moved it stays put: dragging something away only to
+      // have it close when the pointer leaves would be useless.
       onMouseLeave={pinned || moved || dragging ? undefined : onClose}
+      onPointerDown={startDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       role="dialog"
     >
-      <div
-        className="flyout-head"
-        onPointerDown={startDrag}
-        onPointerMove={moveDrag}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        {session.rating_key && (
-          <img
-            className="stream-poster"
-            src={`/api/media/${session.rating_key}/image?width=120&height=180`}
-            alt=""
-            onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-          />
-        )}
-        <div className="min0">
-          <strong>{session.full_title}</strong>
-          <p className="muted small">
-            {session.user_id != null && onOpenUser ? (
-              <button className="linkish" onClick={() => onOpenUser(session.user_id as number)}>
-                {who}
-              </button>
-            ) : (
-              who
-            )}
-          </p>
-          <p className="muted small">
-            {session.player} · {session.platform}
-          </p>
-          <p className="muted small">
-            {where}
-            {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
-          </p>
-        </div>
-        <button className="tab" onClick={onClose} aria-label="Close">
-          ✕
-        </button>
-      </div>
-
-      <p className="muted small">
-        <span className="pill">{session.transcode_decision}</span>
-        {session.video_full_resolution && <span className="pill">{session.video_full_resolution}</span>}
-        {session.state && <span className="pill">{session.state}</span>}
-        {Math.round(progress)}%
-      </p>
-      <div className="progress">
-        <div className="progress-fill" style={{ width: `${progress}%` }} />
-      </div>
-
-      {error && <p className="note bad-note">{error}</p>}
-
-      <div className="row wrap flyout-actions">
-        <button className="btn danger" onClick={stop} disabled={busy || !plexPass.ok}>
-          {busy ? "Stopping…" : "Stop stream"}
-        </button>
-        {onBlockDevice && session.machine_id && (
-          <button
-            className="btn danger"
-            onClick={() =>
-              onBlockDevice(session.machine_id as string, session.player || "this device")
-            }
-          >
-            Ban device
-          </button>
-        )}
-      </div>
-      {!plexPass.ok && <p className="muted small">{plexPass.reason}</p>}
+      <StreamDetail session={session} onClose={onClose} onChanged={onTerminated} compact onMap />
     </div>
   );
 }
