@@ -1,0 +1,36 @@
+[project]
+name = "cartographarr"
+version = "0.1.0"
+description = "Tautulli geo-intelligence and Plex access control"
+requires-python = ">=3.12"
+
+# Deps get added as their phase lands. Nothing here for a feature that
+# doesn't exist yet: plexapi (sharing), apprise (notify), argon2 (local auth)
+# arrive with phases 10, 12, 13.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0.36",
+    "httpx>=0.28",
+    "apscheduler>=3.10",
+    "geoip2>=4.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "respx>=0.21", "ruff>=0.8"]
+
+# Without this, setuptools' flat-layout autodiscovery sees app/ alongside
+# data/ (the runtime volume) and refuses to guess. Only app/ is the package.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

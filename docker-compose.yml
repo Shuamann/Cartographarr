@@ -1,0 +1,28 @@
+services:
+  cartographarr:
+    build: .
+    image: cartographarr:latest
+    container_name: cartographarr
+    restart: unless-stopped
+
+    # Unraid's appdata is owned by nobody:users. Running as that pair keeps the
+    # container off root without the volume going read-only on it.
+    user: "99:100"
+
+    ports:
+      - "8420:8000"
+
+    volumes:
+      - /mnt/user/appdata/cartographarr:/data
+
+    # One secrets file, shared with local dev. Anything set here wins over the
+    # UI and renders read-only in Settings; omit a key entirely to let the UI
+    # own it and persist to the database. See app/settings_store.py.
+    env_file:
+      - backend/.env
+
+    environment:
+      # Explicit, and last word: env_file carries DATA_DIR=./data for running
+      # outside a container, which would be wrong in here.
+      DATA_DIR: /data
+      TZ: ${TZ:-America/Chicago}
