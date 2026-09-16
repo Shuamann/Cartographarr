@@ -61,7 +61,7 @@ export function StreamEntry({
         </span>
         <span className="log-by muted small clip">{by}</span>
         <span className="log-result">
-          <span className={e.dry_run ? "pill" : "pill warn"}>{e.dry_run ? "dry run" : "acted"}</span>
+          <span className={e.dry_run ? "pill" : "pill warn"}>{e.dry_run ? "recorded only" : "acted"}</span>
           <span className="small">{e.result}</span>
         </span>
         <span className="log-caret" aria-hidden="true">
@@ -147,7 +147,7 @@ function Detail({
           <Field label="Rule">{e.source === "manual" ? "None, done by hand" : e.rule_name}</Field>
           <Field label="Action">
             {e.action}
-            {e.dry_run ? " (dry run, nothing was stopped)" : ""}
+            {e.dry_run ? " (record only, nothing was done)" : ""}
           </Field>
           <Field label="Result">{e.result}</Field>
         </dl>

@@ -137,10 +137,9 @@ const AREAS: Area[] = [
       },
       {
         title: "Rules and live activity",
-        note: "Dry run records what rules would have done without stopping anything. Turn it off once the enforcement log looks right.",
+        note: "Whether rules run at all, and how often live activity is checked. Each rule, and the ban list, has its own record only switch on the Rules page.",
         keys: [
           "enforce_enabled",
-          "enforce_dry_run",
           "enforce_cooldown_seconds",
           "activity_poll_seconds",
           "ban_message",

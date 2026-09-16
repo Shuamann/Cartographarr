@@ -147,9 +147,13 @@ export default function DashboardRoute({
             </button>
           )}
         </div>
-        {d.settings.enforce_dry_run && (
-          <p className="muted small">Dry run is on, so rules record but don't act.</p>
-        )}
+        {d.settings.dry_run_locked ? (
+          <p className="muted small">ENFORCE_DRY_RUN is set, so every rule records only.</p>
+        ) : d.settings.record_only_rules > 0 ? (
+          <p className="muted small">
+            {d.settings.record_only_rules} of {d.settings.enabled_rules} rules record only and do not act.
+          </p>
+        ) : null}
         <EnforcementLog entries={d.recent_enforcement} onOpenUser={onOpenUser} />
       </section>
       </div>

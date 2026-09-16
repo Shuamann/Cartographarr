@@ -2383,3 +2383,12 @@ label.locked .pill {
   justify-content: space-between;
   gap: 12px;
 }
+
+.mode-switch .seg {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.mode-switch .seg.on.act {
+  background: var(--warn);
+  color: var(--bg);
+}

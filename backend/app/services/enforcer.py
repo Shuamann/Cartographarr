@@ -22,7 +22,7 @@ from app.actions import registry
 from app.db import session_scope
 from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
 from app.services import conditions
-from app.settings_store import current, is_configured
+from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
@@ -302,6 +302,22 @@ def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
 BAN_RULE_NAME = "Banned devices"
 
 
+def dry_run_locked() -> bool:
+    """ENFORCE_DRY_RUN=true in the container config forces every rule to
+    record only, whatever the Rules page says. A way to make certain nothing
+    gets stopped, for example while testing a new install."""
+    return "enforce_dry_run" in locked_keys() and bool(current().enforce_dry_run)
+
+
+def record_only(rule: Rule) -> bool:
+    """Whether a rule only records what it would have done."""
+    if dry_run_locked():
+        return True
+    settings = current()
+    value = settings.ban_record_only if rule.id == 0 else rule.record_only
+    return bool(settings.enforce_dry_run) if value is None else bool(value)
+
+
 def ban_rule() -> Rule | None:
     """The ban list as a rule, or None when nothing is banned.
 
@@ -368,7 +384,6 @@ async def run_once() -> dict[str, Any]:
     if any("requested_by_viewer" in conditions.fields_used(rule_tree(r)) for r in usable):
         await _add_requests(sessions, context)
 
-    dry_run = settings.enforce_dry_run
     now = time.monotonic()
 
     matched = acted = 0
@@ -385,6 +400,7 @@ async def run_once() -> dict[str, Any]:
                 break
             _recent[cooldown_key] = now
 
+            dry_run = record_only(rule)
             steps = rule_actions(rule)
             specs = [(step, registry.get(str(step.get("name")))) for step in steps]
             unknown = [str(step.get("name")) for step, spec in specs if spec is None]
@@ -423,6 +439,6 @@ async def run_once() -> dict[str, Any]:
         "checked": len(sessions),
         "matched": matched,
         "acted": acted,
-        "dry_run": dry_run,
+        "dry_run_locked": dry_run_locked(),
         "refused": refused,
     }

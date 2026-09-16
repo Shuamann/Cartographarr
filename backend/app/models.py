@@ -246,6 +246,10 @@ class Rule(Base):
     conditions: Mapped[str | None] = mapped_column(Text)
     actions: Mapped[str | None] = mapped_column(Text)
 
+    record_only: Mapped[bool | None] = mapped_column(Boolean)
+    """Match and log, but do not act. Null on rules saved before the switch
+    existed, which then follow the old global dry run setting."""
+
     created_at: Mapped[datetime | None] = mapped_column()
 
 

@@ -128,7 +128,7 @@ function SignedIn({
   async function banMachine(machineId: string, label: string): Promise<boolean> {
     const reason = window.prompt(
       `Ban ${label}?\n\nAny stream from this device will be stopped while rules are on ` +
-        `(and only recorded while dry run is on). You can unban it from People.\n\n` +
+        `(or only recorded, if the ban list is set to record only on the Rules page). You can unban it from People.\n\n` +
         `Reason, for the log (optional):`,
       "",
     );

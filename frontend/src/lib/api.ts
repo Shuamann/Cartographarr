@@ -239,6 +239,8 @@ export type Rule = {
   conditions?: CondGroup;
   actions?: RuleStep[];
   unmet?: string[];
+  record_only?: boolean | null;
+  record_only_effective?: boolean;
 };
 
 export type CondLeaf = { type: "condition"; field: string; op: string; value: unknown };
@@ -306,7 +308,12 @@ export type Enforcement = {
 
 export type Dashboard = {
   capabilities: Capabilities;
-  settings: { enforce_enabled: boolean; enforce_dry_run: boolean };
+  settings: {
+    enforce_enabled: boolean;
+    dry_run_locked: boolean;
+    record_only_rules: number;
+    enabled_rules: number;
+  };
   totals: {
     plays: number;
     users: number;

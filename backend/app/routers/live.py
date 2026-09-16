@@ -204,6 +204,7 @@ def _rule_dict(rule: Rule) -> dict:
     out["conditions"] = enforcer.rule_tree(rule)
     out["actions"] = enforcer.rule_actions(rule)
     out["unmet"] = enforcer.unmet_requirements(out["conditions"])
+    out["record_only_effective"] = enforcer.record_only(rule)
     return out
 
 
@@ -216,6 +217,9 @@ def list_rules(db: Db) -> list[dict]:
 @router.post("/rules")
 def create_rule(admin: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
     payload = _validate_rule(values)
+    # A new rule records only until someone decides it should act, the same
+    # caution the whole app used to apply with its single dry run switch.
+    payload.setdefault("record_only", True)
     with session_scope() as db:
         rule = Rule(**payload, created_at=datetime.now(UTC))
         db.add(rule)
@@ -241,9 +245,22 @@ def update_rule(rule_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
         db.flush()
         saved = _rule_dict(rule)
 
-    changed = {k: {"before": before.get(k), "after": v} for k, v in saved.items() if before.get(k) != v}
+    # Stored fields only. The rule dict also carries values worked out on read
+    # (the effective record only state, unmet requirements), which are not edits.
+    columns = {c.name for c in Rule.__table__.columns}
+    changed = {
+        k: {"before": before.get(k), "after": v}
+        for k, v in saved.items()
+        if k in columns and before.get(k) != v
+    }
     if set(changed) == {"enabled"}:
         summary = f"{'Enabled' if saved['enabled'] else 'Disabled'} rule {saved['name']!r}"
+    elif set(changed) == {"record_only"}:
+        summary = (
+            f"Set rule {saved['name']!r} to record only"
+            if saved["record_only"]
+            else f"Set rule {saved['name']!r} to act"
+        )
     else:
         summary = f"Edited rule {saved['name']!r}: {', '.join(sorted(changed)) or 'no changes'}"
     audit.record(admin, "rule.update", summary, target=str(rule_id), detail=changed)
@@ -417,6 +434,27 @@ def list_bans(db: Db) -> list[dict]:
         }
         for b in bans
     ]
+
+
+@router.get("/bans/settings")
+def ban_settings(_: AdminUser) -> dict:
+    return {
+        "record_only": enforcer.record_only(enforcer.Rule(id=0, name=enforcer.BAN_RULE_NAME)),
+        "dry_run_locked": enforcer.dry_run_locked(),
+    }
+
+
+@router.put("/bans/settings")
+def set_ban_settings(admin: AdminUser, record_only: bool = Body(..., embed=True)) -> dict:
+    from app.settings_store import save
+
+    save({"ban_record_only": record_only})
+    audit.record(
+        admin, "rule.update",
+        "Set the ban list to record only" if record_only else "Set the ban list to act",
+        target="0", detail={"record_only": {"after": record_only}},
+    )
+    return ban_settings(admin)
 
 
 @router.post("/bans")
@@ -1182,7 +1220,15 @@ async def dashboard(db: Db, filters: Filt) -> dict:
         "capabilities": capabilities.as_map(),
         "settings": {
             "enforce_enabled": current().enforce_enabled,
-            "enforce_dry_run": current().enforce_dry_run,
+            "dry_run_locked": enforcer.dry_run_locked(),
+            "record_only_rules": sum(
+                1
+                for r in db.execute(select(Rule).where(Rule.enabled.is_(True))).scalars()
+                if enforcer.record_only(r)
+            ),
+            "enabled_rules": db.execute(
+                select(func.count()).select_from(Rule).where(Rule.enabled.is_(True))
+            ).scalar_one(),
         },
         "totals": {
             "plays": totals[0],

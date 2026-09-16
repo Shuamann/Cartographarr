@@ -74,13 +74,20 @@ class Settings(BaseSettings):
 
     enforce_enabled: bool = True
     enforce_dry_run: bool = True
-    """Ships ON. Rules log what they *would* have done without doing it.
-    Turning this off is a deliberate act after reading the enforcement log."""
+    """No longer set in the UI: each rule, and the ban list, has its own record
+    only switch on the Rules page. Two jobs remain. It is the starting value
+    for rules saved before that switch existed. And set as an environment
+    variable to true, it is a safety lock forcing every rule to record only."""
 
     enforce_cooldown_seconds: int = 60
+    """Per rule, per session, to stop a stubborn client from filling the log."""
+
     ban_message: str = "This device is not permitted to stream. Contact the server owner."
     """Shown to a banned device when its stream is stopped."""
-    """Per rule, per session, to stop a stubborn client from filling the log."""
+
+    ban_record_only: bool | None = None
+    """The ban list's own record only switch. Unset means it follows the old
+    global dry run setting, so upgrading changes nothing until someone chooses."""
 
     # ---- Integrations ------------------------------------------------------
     radarr_url: str = ""

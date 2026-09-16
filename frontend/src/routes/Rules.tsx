@@ -19,6 +19,7 @@ type Draft = {
   id?: number;
   name: string;
   enabled: boolean;
+  recordOnly: boolean;
   conditions: CondGroup;
   actions: RuleStep[];
 };
@@ -75,6 +76,7 @@ function toDraft(rule: Partial<Rule> & { name: string }): Draft {
     id: rule.id,
     name: rule.name,
     enabled: rule.enabled ?? true,
+    recordOnly: rule.record_only_effective ?? rule.record_only ?? true,
     conditions,
     actions: rule.actions?.length ? rule.actions : [{ name: rule.action ?? "terminate", params: {} }],
   };
@@ -100,9 +102,11 @@ export default function RulesRoute({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setting = (key: string) => settings.data?.find((s) => s.key === key)?.value;
-  const enforcing = setting("enforce_enabled") !== false;
-  const dryRun = setting("enforce_dry_run") !== false;
+  const setting = (key: string) => settings.data?.find((s) => s.key === key);
+  const enforcing = setting("enforce_enabled")?.value !== false;
+  // Set in the container config to true, dry run forces every rule to record
+  // only. It is not editable here, only explained.
+  const locked = setting("enforce_dry_run")?.source === "environment" && setting("enforce_dry_run")?.value === true;
 
   async function remove(rule: Rule) {
     if (!confirm(`Delete "${rule.name}"?`)) return;
@@ -112,6 +116,12 @@ export default function RulesRoute({
 
   async function toggle(rule: Rule) {
     await api.put(`/rules/${rule.id}`, { enabled: !rule.enabled });
+    rules.reload();
+  }
+
+  async function setRecordOnly(rule: Rule, recordOnly: boolean) {
+    if (!recordOnly && !confirm(`Let "${rule.name}" act? It will stop streams and send notifications, not just record them.`)) return;
+    await api.put(`/rules/${rule.id}`, { record_only: recordOnly });
     rules.reload();
   }
 
@@ -126,6 +136,7 @@ export default function RulesRoute({
               setDraft({
                 name: "",
                 enabled: true,
+                recordOnly: true,
                 conditions: emptyGroup(),
                 actions: [{ name: "log_only", params: {} }],
               })
@@ -137,17 +148,18 @@ export default function RulesRoute({
 
         <p className="muted">
           Plex cannot ban one device belonging to someone you share with, so rules watch live
-          playback and act on a match. Rules are checked in order and the first match wins. What
-          they did is in the Log tab.
+          playback and act on a match. Rules are checked in order and the first match wins. Each
+          rule can <strong>record only</strong>, logging what it would have done without doing it,
+          until its entries in the Log look right. What they did is in the Log tab.
         </p>
 
         {!enforcing && (
           <p className="note warn-note">Rules are switched off in Settings, so none of these run.</p>
         )}
-        {enforcing && dryRun && (
+        {locked && (
           <p className="note warn-note">
-            Dry run is on, so rules only record what they would have done. Turn it off in Settings
-            once the log looks right.
+            ENFORCE_DRY_RUN is set in the container configuration, so every rule records only,
+            whatever it is set to here. Remove it to let rules act.
           </p>
         )}
 
@@ -175,6 +187,11 @@ export default function RulesRoute({
                 <div className="row">
                   <h2>{r.name}</h2>
                   {!r.enabled && <span className="pill">off</span>}
+                  {r.enabled && (
+                    <span className={r.record_only_effective ? "pill" : "pill warn"}>
+                      {r.record_only_effective ? "records only" : "acts"}
+                    </span>
+                  )}
                   {r.unmet && r.unmet.length > 0 && (
                     <span className="pill warn" title={`Needs ${needs(r.unmet)}`}>
                       paused: needs {needs(r.unmet)}
@@ -197,6 +214,11 @@ export default function RulesRoute({
                 </p>
               </div>
               <div className="row">
+                <ModeSwitch
+                  recordOnly={Boolean(r.record_only_effective)}
+                  locked={locked}
+                  onChange={(v) => setRecordOnly(r, v)}
+                />
                 <button className="tab" onClick={() => toggle(r)}>
                   {r.enabled ? "Disable" : "Enable"}
                 </button>
@@ -225,6 +247,13 @@ function BanListCard({ onRulesChanged }: { onRulesChanged: () => void }) {
   const [open, setOpen] = useState(false);
   // Rules left over from the old Block button, which only stop devices.
   const convertible = useApi<Convertible[]>(nav.isAdmin ? "/bans/convertible" : null);
+  const banMode = useApi<{ record_only: boolean; dry_run_locked: boolean }>(nav.isAdmin ? "/bans/settings" : null);
+
+  async function setBanRecordOnly(recordOnly: boolean) {
+    if (!recordOnly && !confirm("Let the ban list act? Streams from banned devices will be stopped, not just recorded.")) return;
+    await api.put("/bans/settings", { record_only: recordOnly });
+    banMode.reload();
+  }
   const [converting, setConverting] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
@@ -268,6 +297,11 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
           <h2>Banned devices</h2>
           <span className="pill">built in, runs first</span>
           <span className={bans.list.length ? "pill banned" : "pill"}>{bans.list.length} banned</span>
+          {banMode.data && (
+            <span className={banMode.data.record_only ? "pill" : "pill warn"}>
+              {banMode.data.record_only ? "records only" : "acts"}
+            </span>
+          )}
         </div>
         <p className="small">
           <span className="muted">When </span>the device is on the ban list
@@ -312,10 +346,43 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
         )}
       </div>
       <div className="row">
+        {banMode.data && (
+          <ModeSwitch
+            recordOnly={banMode.data.record_only}
+            locked={banMode.data.dry_run_locked}
+            onChange={setBanRecordOnly}
+          />
+        )}
         <button className="tab" onClick={() => setOpen(!open)}>
           {open ? "Hide list" : "Show list"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* Record only, or act. Two states side by side rather than a checkbox, so
+ * which one a rule is in reads at a glance. */
+function ModeSwitch({
+  recordOnly,
+  locked,
+  onChange,
+}: {
+  recordOnly: boolean;
+  locked: boolean;
+  onChange: (recordOnly: boolean) => void;
+}) {
+  return (
+    <div
+      className="segmented mode-switch"
+      title={locked ? "Locked to record only by ENFORCE_DRY_RUN in the container configuration" : undefined}
+    >
+      <button className={recordOnly ? "seg on" : "seg"} onClick={() => !recordOnly && onChange(true)} disabled={locked}>
+        Record only
+      </button>
+      <button className={!recordOnly ? "seg on act" : "seg"} onClick={() => recordOnly && onChange(false)} disabled={locked}>
+        Act
+      </button>
     </div>
   );
 }
@@ -347,6 +414,7 @@ function Editor({
       const body = {
         name: draft.name,
         enabled: draft.enabled,
+        record_only: draft.recordOnly,
         conditions: draft.conditions,
         actions: draft.actions,
       };
@@ -404,6 +472,17 @@ function Editor({
                 <option value="true">On</option>
                 <option value="false">Off</option>
               </select>
+            </label>
+            <label>
+              When it matches
+              <select
+                value={draft.recordOnly ? "record" : "act"}
+                onChange={(e) => onChange({ ...draft, recordOnly: e.target.value === "record" })}
+              >
+                <option value="record">Record only, do nothing</option>
+                <option value="act">Act</option>
+              </select>
+              <small>Start with record only and check the Log before letting a rule act.</small>
             </label>
           </div>
         </section>

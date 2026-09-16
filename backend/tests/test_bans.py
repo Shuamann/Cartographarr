@@ -95,3 +95,35 @@ def test_only_device_only_rules_convert_into_the_ban_list(client):
     assert result == {"rules_removed": 1, "devices_banned": 2}
     assert sorted(x["machine_id"] for x in client.get("/api/bans").json()) == ["dev-a", "dev-b"]
     assert sorted(r["id"] for r in client.get("/api/rules").json()) == sorted([b["id"], c["id"]])
+
+
+def test_record_only_is_per_rule_and_new_rules_start_recording_only(client):
+    from app.models import Rule
+    from app.services import enforcer
+
+    claim(client)
+    tree = {"type": "group", "op": "and", "items": [{"type": "condition", "field": "stream", "op": "any", "value": ["transcode"]}]}
+    created = client.post("/api/rules", json={"name": "No transcodes", "conditions": tree, "actions": [{"name": "terminate"}]}).json()
+    assert created["record_only"] is True and created["record_only_effective"] is True
+
+    acting = client.put(f"/api/rules/{created['id']}", json={"record_only": False}).json()
+    assert acting["record_only_effective"] is False
+
+    # A rule saved before the switch existed follows the old global setting.
+    assert enforcer.record_only(Rule(id=99, name="old", record_only=None)) is True
+
+    assert client.get("/api/bans/settings").json()["record_only"] is True
+    assert client.put("/api/bans/settings", json={"record_only": False}).json()["record_only"] is False
+    summaries = [e["summary"] for e in client.get("/api/log?kind=changes").json()]
+    assert "Set rule 'No transcodes' to act" in summaries
+    assert "Set the ban list to act" in summaries
+
+
+def test_environment_dry_run_locks_every_rule_to_record_only(client, monkeypatch):
+    import app.settings_store as store
+    from app.models import Rule
+    from app.services import enforcer
+
+    monkeypatch.setattr(store, "locked_keys", lambda: frozenset({"enforce_dry_run"}))
+    monkeypatch.setattr(enforcer, "locked_keys", lambda: frozenset({"enforce_dry_run"}))
+    assert enforcer.record_only(Rule(id=5, name="acting", record_only=False)) is True
