@@ -10,6 +10,7 @@ Ships in dry run. Turning that off is a deliberate act after reading the log.
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -19,7 +20,8 @@ from sqlalchemy import select
 
 from app.actions import registry
 from app.db import session_scope
-from app.models import EnforcementLog, IpLocation, Rule
+from app.models import Device, EnforcementLog, IpLocation, Rule, TravelFlag
+from app.services import conditions
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 
@@ -48,45 +50,52 @@ def _equal(left: Any, right: Any) -> bool:
     return str(left).strip().lower() == str(right).strip().lower()
 
 
+def rule_tree(rule: Rule) -> conditions.Tree:
+    if rule.conditions:
+        try:
+            return json.loads(rule.conditions)
+        except ValueError:
+            log.warning("rule %s has unreadable conditions, treating as empty", rule.id)
+            return {"type": "group", "op": "and", "items": []}
+    return conditions.from_legacy(rule)
+
+
+def rule_actions(rule: Rule) -> list[dict[str, Any]]:
+    if rule.actions:
+        try:
+            parsed = json.loads(rule.actions)
+            if isinstance(parsed, list):
+                return parsed
+        except ValueError:
+            log.warning("rule %s has unreadable actions", rule.id)
+            return []
+    return [{"name": rule.action, "params": {"message": rule.message}}]
+
+
 def matches(rule: Rule, session: Session, context: dict[str, Any]) -> bool:
-    """Every matcher that is set must hold. A rule with none set matches
-    nothing. An empty rule silently killing every stream would be the worst
+    """Whether a rule matches a session. A rule with no conditions matches
+    nothing: an empty rule silently killing every stream would be the worst
     possible default."""
-    checks: list[bool] = []
+    return conditions.evaluate(rule_tree(rule), session, context)
 
-    def require(condition: bool) -> None:
-        checks.append(condition)
 
-    if rule.match_user_id is not None:
-        require(_equal(rule.match_user_id, session.get("user_id")))
-    if rule.match_machine_id:
-        require(_equal(rule.match_machine_id, session.get("machine_id")))
-    if rule.match_player:
-        require(_equal(rule.match_player, session.get("player")))
-    if rule.match_platform:
-        require(_equal(rule.match_platform, session.get("platform")))
-    if rule.match_product:
-        require(_equal(rule.match_product, session.get("product")))
-    if rule.match_ip_cidr:
-        require(_ip_in_cidr(session.get("ip_address"), rule.match_ip_cidr))
-    if rule.match_transcode_decision:
-        require(_equal(rule.match_transcode_decision, session.get("transcode_decision")))
-    if rule.match_video_resolution:
-        require(
-            _equal(rule.match_video_resolution, session.get("video_full_resolution"))
-            or _equal(rule.match_video_resolution, session.get("video_resolution"))
-        )
-    if rule.match_location:
-        require(_equal(rule.match_location, session.get("location")))
-    if rule.match_is_hosting is not None:
-        require(bool(context.get("is_hosting")) is bool(rule.match_is_hosting))
-    if rule.match_concurrent_streams_gt is not None:
-        require(context.get("user_stream_count", 0) > rule.match_concurrent_streams_gt)
-    if rule.match_paused_minutes_gt is not None:
-        paused = context.get("paused_minutes")
-        require(paused is not None and paused > rule.match_paused_minutes_gt)
+def unmet_requirements(tree: conditions.Tree) -> list[str]:
+    """Requirements of the fields a tree uses that are not met right now."""
+    needed = {
+        requirement
+        for key in conditions.fields_used(tree)
+        if (spec := conditions.BY_KEY.get(key))
+        for requirement in spec.requires
+    }
+    missing = []
+    if "geoip" in needed and not (current().geoip_dir / "city.mmdb").exists():
+        missing.append("geoip")
+    if "integration:seerr" in needed:
+        from app.integrations.seerr import seerr
 
-    return bool(checks) and all(checks)
+        if not seerr.configured():
+            missing.append("integration:seerr")
+    return sorted(missing)
 
 
 def _hosting_ips(ips: set[str]) -> set[str]:
@@ -115,20 +124,103 @@ def _paused_minutes(session: Session) -> float | None:
 
 
 def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
+    """What conditions need beyond the session itself, per session_key."""
     per_user: dict[Any, int] = {}
     for s in sessions:
         per_user[s.get("user_id")] = per_user.get(s.get("user_id"), 0) + 1
 
-    hosting = _hosting_ips({s["ip_address"] for s in sessions if s.get("ip_address")})
+    ips = {s["ip_address"] for s in sessions if s.get("ip_address")}
+    users = {_int(s.get("user_id")) for s in sessions} - {None}
+    machines = {s.get("machine_id") for s in sessions if s.get("machine_id")}
 
+    with session_scope() as db:
+        places = {
+            row.ip: {
+                "city": row.city,
+                "region": row.region,
+                "country": row.country,
+                "country_code": row.country_code,
+                "is_hosting": row.is_hosting,
+                "asn_org": row.asn_org,
+            }
+            for row in db.execute(select(IpLocation).where(IpLocation.ip.in_(ips))).scalars()
+        } if ips else {}
+        flagged = {
+            uid
+            for (uid,) in db.execute(
+                select(TravelFlag.user_id).where(
+                    TravelFlag.user_id.in_(users), TravelFlag.status == "new"
+                )
+            ).all()
+        } if users else set()
+        unreviewed = {
+            (mid, uid)
+            for mid, uid in db.execute(
+                select(Device.machine_id, Device.user_id).where(
+                    Device.machine_id.in_(machines), Device.is_new_unreviewed.is_(True)
+                )
+            ).all()
+        } if machines else set()
+
+    now = datetime.now()
     return {
         str(s.get("session_key")): {
             "user_stream_count": per_user.get(s.get("user_id"), 0),
-            "is_hosting": s.get("ip_address") in hosting,
+            "server_stream_count": len(sessions),
+            "geo": places.get(s.get("ip_address")),
+            "is_hosting": bool((places.get(s.get("ip_address")) or {}).get("is_hosting")),
             "paused_minutes": _paused_minutes(s),
+            "open_travel_flag": _int(s.get("user_id")) in flagged,
+            "device_unreviewed": (s.get("machine_id"), _int(s.get("user_id"))) in unreviewed,
+            "now": now,
         }
         for s in sessions
     }
+
+
+async def _add_requests(sessions: list[Session], context: dict[str, dict[str, Any]]) -> None:
+    """Whether the person watching is who asked for it in Seerr.
+
+    Only looked up when a rule uses it, since it costs a Seerr call per stream.
+    """
+    from app.integrations.seerr import seerr
+    from app.models import MediaItem
+
+    if not seerr.configured():
+        return
+    for s in sessions:
+        key = _int(s.get("grandparent_rating_key")) or _int(s.get("rating_key"))
+        if key is None:
+            continue
+        with session_scope() as db:
+            item = db.get(MediaItem, key)
+            if item is not None:
+                db.expunge(item)
+        if item is None:
+            continue
+        request = await seerr.request_for(item)
+        viewer = {
+            str(v).strip().lower()
+            for v in (s.get("friendly_name"), s.get("username"))
+            if v
+        }
+        requester = str((request or {}).get("requested_by") or "").strip().lower()
+        context[str(s.get("session_key"))]["requested_by_viewer"] = (
+            bool(requester) and requester in viewer if request is not None else False
+        )
+
+
+async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str | None]:
+    """Current sessions and their context, for the enforcer and for previews."""
+    client = TautulliClient(current())
+    try:
+        activity = await client.call("get_activity") or {}
+    except Exception as exc:  # noqa: BLE001
+        return [], {}, str(exc)
+    finally:
+        await client.aclose()
+    sessions: list[Session] = activity.get("sessions") or []
+    return sessions, _build_context(sessions), None
 
 
 def _int(value: Any) -> int | None:
@@ -185,16 +277,21 @@ def snapshot(session: Session) -> dict[str, Any]:
 
 
 def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
+    steps = rule_actions(rule)
+    message = next(
+        (step.get("params", {}).get("message") for step in steps if step.get("name") == "terminate"),
+        None,
+    )
     with session_scope() as db:
         db.add(
             EnforcementLog(
                 **snapshot(session),
                 rule_id=rule.id,
                 rule_name=rule.name,
-                action=rule.action,
+                action=", ".join(str(step.get("name")) for step in steps) or rule.action,
                 source="rule",
                 actor=f"Rule: {rule.name}",
-                message=rule.message,
+                message=message or rule.message,
                 dry_run=dry_run,
                 result=result,
                 acted_at=datetime.now(UTC),
@@ -213,24 +310,33 @@ async def run_once() -> dict[str, Any]:
     if not rules:
         return {"checked": 0, "matched": 0, "acted": 0}
 
-    client = TautulliClient(settings)
-    try:
-        activity = await client.call("get_activity") or {}
-    except Exception as exc:  # noqa: BLE001
-        log.warning("enforcer could not read activity: %s", exc)
-        return {"checked": 0, "matched": 0, "acted": 0, "error": str(exc)}
-    finally:
-        await client.aclose()
+    sessions, context, error = await live_context()
+    if error:
+        log.warning("enforcer could not read activity: %s", error)
+        return {"checked": 0, "matched": 0, "acted": 0, "error": error}
 
-    sessions: list[Session] = activity.get("sessions") or []
-    context = _build_context(sessions)
+    # Refuse rules that lean on something missing. Evaluating them with that
+    # condition dropped would make them match more than was written.
+    usable = []
+    refused = []
+    for rule in rules:
+        missing = unmet_requirements(rule_tree(rule))
+        if missing:
+            refused.append({"rule": rule.name, "requires": missing})
+            log.warning("rule %r skipped: requires %s", rule.name, ", ".join(missing))
+        else:
+            usable.append(rule)
+
+    if any("requested_by_viewer" in conditions.fields_used(rule_tree(r)) for r in usable):
+        await _add_requests(sessions, context)
+
     dry_run = settings.enforce_dry_run
     now = time.monotonic()
 
     matched = acted = 0
     for session in sessions:
         key = str(session.get("session_key"))
-        for rule in rules:
+        for rule in usable:
             if not matches(rule, session, context.get(key, {})):
                 continue
             matched += 1
@@ -241,28 +347,32 @@ async def run_once() -> dict[str, Any]:
                 break
             _recent[cooldown_key] = now
 
-            action = registry.get(rule.action)
-            if action is None:
-                _record(rule, session, dry_run, f"unknown action {rule.action!r}")
+            steps = rule_actions(rule)
+            specs = [(step, registry.get(str(step.get("name")))) for step in steps]
+            unknown = [str(step.get("name")) for step, spec in specs if spec is None]
+            if unknown or not specs:
+                _record(rule, session, dry_run, f"unknown action {', '.join(unknown) or '(none)'}")
                 break
 
-            missing = registry.unmet(action)
+            missing = sorted({m for _, spec in specs for m in registry.unmet(spec)})
             if missing:
                 # Refused, not silently skipped, and the log says why.
                 _record(rule, session, dry_run, f"refused: requires {', '.join(missing)}")
                 break
 
             if dry_run:
-                _record(rule, session, True, f"would {action.name}")
+                _record(rule, session, True, "would " + ", ".join(spec.name for _, spec in specs))
                 break
 
-            try:
-                result = await action.execute(session, {"message": rule.message})
-                acted += 1
-            except Exception as exc:  # noqa: BLE001 - one failure mustn't stop the sweep
-                result = f"failed: {exc}"
-                log.warning("action %s failed: %s", action.name, exc)
-            _record(rule, session, False, result)
+            results = []
+            for step, spec in specs:
+                try:
+                    results.append(await spec.execute(session, step.get("params") or {}))
+                    acted += 1
+                except Exception as exc:  # noqa: BLE001 - one failure mustn't stop the sweep
+                    results.append(f"{spec.name} failed: {exc}")
+                    log.warning("action %s failed: %s", spec.name, exc)
+            _record(rule, session, False, "; ".join(results))
             break  # first matching rule wins; don't double-act on one session
 
     # Keep the cooldown map from growing forever.
@@ -271,4 +381,10 @@ async def run_once() -> dict[str, Any]:
         if seen < cutoff:
             del _recent[k]
 
-    return {"checked": len(sessions), "matched": matched, "acted": acted, "dry_run": dry_run}
+    return {
+        "checked": len(sessions),
+        "matched": matched,
+        "acted": acted,
+        "dry_run": dry_run,
+        "refused": refused,
+    }

@@ -196,7 +196,15 @@ EDITABLE = {c.name for c in Rule.__table__.columns} - {"id", "created_at"}
 
 
 def _rule_dict(rule: Rule) -> dict:
-    return {c.name: getattr(rule, c.name) for c in Rule.__table__.columns}
+    """A rule as the UI edits it: always a condition tree and an action list,
+    whether it was saved that way or with the older flat columns."""
+    import json
+
+    out = {c.name: getattr(rule, c.name) for c in Rule.__table__.columns}
+    out["conditions"] = enforcer.rule_tree(rule)
+    out["actions"] = enforcer.rule_actions(rule)
+    out["unmet"] = enforcer.unmet_requirements(out["conditions"])
+    return out
 
 
 @router.get("/rules")
@@ -258,23 +266,63 @@ def delete_rule(rule_id: int, admin: AdminUser) -> dict:
 
 
 def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, Any]:
+    import json
+
+    from app.services import conditions as cond
+
     unknown = set(values) - EDITABLE
     if unknown:
         raise HTTPException(400, f"Unknown fields: {', '.join(sorted(unknown))}")
 
-    payload = {k: v for k, v in values.items() if k in EDITABLE}
-    if not partial and not payload.get("name"):
-        raise HTTPException(400, "A rule needs a name")
+    payload = {k: v for k, v in values.items() if k in EDITABLE and k not in ("conditions", "actions")}
 
-    action_name = payload.get("action", "terminate")
-    if registry.get(action_name) is None:
+    if not partial and not str(values.get("name") or "").strip():
+        raise HTTPException(400, "Give the rule a name")
+
+    if "action" in payload and "actions" not in values and registry.get(str(payload["action"])) is None:
         known = ", ".join(a.name for a in registry.all_actions())
-        raise HTTPException(400, f"Unknown action {action_name!r}. Known: {known}")
+        raise HTTPException(400, f"Unknown action {payload['action']!r}. Known: {known}")
 
-    # A rule with no matchers would match every stream. Refusing here is the
-    # difference between a blocklist and an outage.
-    if not partial and not any(k.startswith("match_") and v not in (None, "") for k, v in payload.items()):
-        raise HTTPException(400, "A rule needs at least one condition, or it would match everything")
+    if "conditions" in values:
+        tree = values["conditions"]
+        if isinstance(tree, str):
+            try:
+                tree = json.loads(tree)
+            except ValueError as exc:
+                raise HTTPException(400, "Conditions are not readable") from exc
+        try:
+            tree = cond.validate(tree)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if not cond.count(tree):
+            raise HTTPException(400, "Add at least one condition. An empty rule would match every stream.")
+        payload["conditions"] = json.dumps(tree)
+        # The tree replaces the flat columns, so none are left to disagree with it.
+        for column in [c for c in EDITABLE if c.startswith("match_")]:
+            payload[column] = None
+    elif not partial and not any(values.get(c) not in (None, "") for c in EDITABLE if c.startswith("match_")):
+        raise HTTPException(400, "Add at least one condition. An empty rule would match every stream.")
+
+    if "actions" in values:
+        steps = values["actions"]
+        if isinstance(steps, str):
+            try:
+                steps = json.loads(steps)
+            except ValueError as exc:
+                raise HTTPException(400, "Actions are not readable") from exc
+        if not isinstance(steps, list) or not steps:
+            raise HTTPException(400, "Choose at least one action")
+        clean = []
+        for step in steps:
+            name = str((step or {}).get("name") or "")
+            if registry.get(name) is None:
+                raise HTTPException(400, f"Unknown action {name!r}")
+            params = (step or {}).get("params") or {}
+            if not isinstance(params, dict):
+                raise HTTPException(400, f"{name}: settings are not readable")
+            clean.append({"name": name, "params": {k: v for k, v in params.items() if v not in (None, "")}})
+        payload["actions"] = json.dumps(clean)
+        payload["action"] = clean[0]["name"]
 
     return payload
 
@@ -329,6 +377,102 @@ def combined_log(
         ]
     out.sort(key=lambda r: r["at"] or datetime.min, reverse=True)
     return out[:limit]
+
+
+@router.get("/rules/fields")
+def rule_fields(db: Db) -> dict:
+    """Everything the rule builder needs to draw its dropdowns."""
+    from app.models import Library
+    from app.services import conditions as cond
+
+    unmet_by_requirement = {
+        "geoip": enforcer.unmet_requirements(
+            {"type": "group", "items": [{"type": "condition", "field": "country"}]}
+        ),
+        "integration:seerr": enforcer.unmet_requirements(
+            {"type": "group", "items": [{"type": "condition", "field": "requested_by_viewer"}]}
+        ),
+    }
+    fields = []
+    for spec in cond.catalogue():
+        missing = sorted({m for r in spec["requires"] for m in unmet_by_requirement.get(r, [])})
+        fields.append({**spec, "unmet": missing})
+
+    def distinct(column):
+        return [v for (v,) in db.execute(select(column).where(column.is_not(None)).distinct().order_by(column)).all() if v != ""]
+
+    users = db.execute(select(User).order_by(func.lower(func.coalesce(User.friendly_name, User.username)))).scalars()
+    devices = db.execute(select(Device).order_by(desc(Device.last_seen))).scalars()
+    names = {u.user_id: u.friendly_name or u.username for u in db.execute(select(User)).scalars()}
+    countries = db.execute(
+        select(IpLocation.country_code, func.max(IpLocation.country))
+        .where(IpLocation.country_code.is_not(None))
+        .group_by(IpLocation.country_code)
+        .order_by(func.max(IpLocation.country))
+    ).all()
+
+    seen_devices: set[str] = set()
+    device_options = []
+    for d in devices:
+        if d.machine_id in seen_devices:
+            continue
+        seen_devices.add(d.machine_id)
+        owner = names.get(d.user_id)
+        label = " \u00b7 ".join(x for x in (d.player or d.machine_id[:12], d.platform, owner) if x)
+        device_options.append({"value": d.machine_id, "label": label})
+
+    return {
+        "fields": fields,
+        "options": {
+            "users": [{"value": u.user_id, "label": u.friendly_name or u.username or str(u.user_id)} for u in users],
+            "devices": device_options,
+            "platforms": [{"value": v, "label": v} for v in distinct(History.platform)],
+            "products": [{"value": v, "label": v} for v in distinct(History.product)],
+            "libraries": [
+                {"value": lib.section_id, "label": lib.name or str(lib.section_id)}
+                for lib in db.execute(select(Library).order_by(Library.name)).scalars()
+            ],
+            "countries": [{"value": code, "label": name or code} for code, name in countries],
+            "content_ratings": [{"value": v, "label": v} for v in distinct(MediaItem.content_rating)],
+        },
+    }
+
+
+@router.post("/rules/preview")
+async def preview_rule(_: AdminUser, conditions: dict[str, Any] = Body(..., embed=True)) -> dict:
+    """Which of the streams playing right now a set of conditions would catch.
+
+    Nothing is acted on and nothing is logged: this is for checking a rule
+    before trusting it.
+    """
+    from app.services import conditions as cond
+
+    try:
+        tree = cond.validate(conditions)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    missing = enforcer.unmet_requirements(tree)
+    sessions, context, error = await enforcer.live_context()
+    if error:
+        return {"error": error, "sessions": [], "unmet": missing}
+    if "requested_by_viewer" in cond.fields_used(tree):
+        await enforcer._add_requests(sessions, context)
+
+    return {
+        "unmet": missing,
+        "sessions": [
+            {
+                "session_key": s.get("session_key"),
+                "full_title": s.get("full_title"),
+                "user": s.get("friendly_name") or s.get("username"),
+                "player": s.get("player"),
+                "platform": s.get("platform"),
+                "matched": not missing and cond.evaluate(tree, s, context.get(str(s.get("session_key")), {})),
+            }
+            for s in sessions
+        ],
+    }
 
 
 @router.post("/rules/run")

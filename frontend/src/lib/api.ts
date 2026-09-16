@@ -236,6 +236,32 @@ export type Rule = {
   match_is_hosting: boolean | null;
   match_concurrent_streams_gt: number | null;
   match_paused_minutes_gt: number | null;
+  conditions?: CondGroup;
+  actions?: RuleStep[];
+  unmet?: string[];
+};
+
+export type CondLeaf = { type: "condition"; field: string; op: string; value: unknown };
+export type CondGroup = { type: "group"; op: "and" | "or"; negate?: boolean; items: (CondLeaf | CondGroup)[] };
+export type RuleStep = { name: string; params?: Record<string, unknown> };
+
+export type RuleField = {
+  key: string;
+  label: string;
+  group: string;
+  type: "choice" | "text" | "number" | "bool" | "cidr" | "time" | "weekday";
+  ops: { value: string; label: string }[];
+  requires: string[];
+  unmet: string[];
+  hint: string | null;
+  options: string | null;
+  fixed: { value: string; label: string }[];
+  unit: string | null;
+};
+
+export type RuleFields = {
+  fields: RuleField[];
+  options: Record<string, { value: string | number; label: string }[]>;
 };
 
 export type Enforcement = {

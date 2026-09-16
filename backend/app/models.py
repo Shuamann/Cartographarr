@@ -237,6 +237,12 @@ class Rule(Base):
     action: Mapped[str] = mapped_column(String(32), default="terminate")
     message: Mapped[str | None] = mapped_column(Text)
 
+    # JSON. The condition tree (services/conditions.py) and the list of
+    # actions to run. When empty, the match_* columns and action above are
+    # the rule, as saved before these existed, and are converted on read.
+    conditions: Mapped[str | None] = mapped_column(Text)
+    actions: Mapped[str | None] = mapped_column(Text)
+
     created_at: Mapped[datetime | None] = mapped_column()
 
 

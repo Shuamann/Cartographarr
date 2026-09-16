@@ -18,6 +18,13 @@ type Props = {
  */
 export default function MultiSelect({ label, options, selected, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  // Only offered on long lists. A dozen platforms scan fine, two hundred
+  // devices do not.
+  const [search, setSearch] = useState("");
+  const searchable = options.length > 10;
+  const shown = search
+    ? options.filter((o) => o.label.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,8 +62,18 @@ export default function MultiSelect({ label, options, selected, onChange }: Prop
 
       {open && (
         <div className="ms-menu">
+          {searchable && (
+            <input
+              className="ms-search"
+              placeholder="Search"
+              value={search}
+              autoFocus
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          )}
           {options.length === 0 && <p className="muted ms-empty">Nothing to choose yet.</p>}
-          {options.map((o) => (
+          {searchable && shown.length === 0 && <p className="muted ms-empty">No match.</p>}
+          {shown.map((o) => (
             <label key={String(o.value)} className="ms-item">
               <input
                 type="checkbox"
