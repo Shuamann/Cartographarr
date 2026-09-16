@@ -39,6 +39,22 @@
   --live: #b45309;
   --live-ink: #ffffff;
 
+  /* Meanings with a colour of their own, used the same way everywhere: pills,
+   * map pins, cards, notes. Change one here and every reference follows. */
+  --vpn: #7c3aed;
+  --vpn-ink: #ffffff;
+  --vpn-soft: #efe7fd;
+  --banned: #b91c1c;
+  --banned-ink: #ffffff;
+
+  /* Map data layers. Pins, the heat ramp from faint to hot. */
+  --map-point: #0e7490;
+  --map-heat-1: rgb(14 116 144 / 0);
+  --map-heat-2: #38bdf8;
+  --map-heat-3: #a78bfa;
+  --map-heat-4: #f472b6;
+  --map-heat-5: #fde047;
+
   --pad-page: 24px;
   --radius: 8px;
   --radius-sm: 5px;
@@ -80,6 +96,19 @@
   --map-accuracy: #7fb4d8;
   --live: #fbbf24;
   --live-ink: #1a1206;
+
+  --vpn: #a78bfa;
+  --vpn-ink: #160b2e;
+  --vpn-soft: #221a36;
+  --banned: #f85149;
+  --banned-ink: #1a0506;
+
+  --map-point: #22d3ee;
+  --map-heat-1: rgb(34 211 238 / 0);
+  --map-heat-2: #22d3ee;
+  --map-heat-3: #818cf8;
+  --map-heat-4: #f472b6;
+  --map-heat-5: #fde047;
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35);
 }

@@ -170,7 +170,7 @@ export default function StreamDetail({
           <Jump onClick={canMap ? () => nav.showOnMap?.(session) : undefined} title="Show on the map">
             {[session.ip_address, where].filter(Boolean).join(" · ")}
           </Jump>
-          {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
+          {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
         </Spec>
         <Spec label="Network">
           {session.geo?.asn_org ?? "Unknown"}

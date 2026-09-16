@@ -75,6 +75,10 @@ export default function MapRoute({
   );
   const [showLive, setShowLive] = useState(() => localStorage.getItem("layer.live") !== "off");
   const [showHeat, setShowHeat] = useState(() => localStorage.getItem("layer.heat") === "on");
+  const [heatMetric, setHeatMetric] = useState<HeatMetric>(() => {
+    const saved = localStorage.getItem("layer.heatMetric");
+    return saved === "devices" || saved === "users" ? saved : "plays";
+  });
 
   const live = useApi<Activity>("/activity");
   useEffect(() => {
@@ -166,6 +170,27 @@ export default function MapRoute({
               />
               Heat
             </label>
+            {showHeat && (
+              <div className="segmented heat-metric" title="What the heat counts at each place">
+                {(["plays", "devices", "users"] as HeatMetric[]).map((metric) => (
+                  <button
+                    key={metric}
+                    className={heatMetric === metric ? "seg on" : "seg"}
+                    onClick={() => {
+                      setHeatMetric(metric);
+                      localStorage.setItem("layer.heatMetric", metric);
+                    }}
+                    title={
+                      metric === "plays"
+                        ? "Every play counts"
+                        : `Distinct ${metric} seen at each place. One seen in several places counts in each.`
+                    }
+                  >
+                    {metric === "plays" ? "Plays" : metric === "devices" ? "Devices" : "Users"}
+                  </button>
+                ))}
+              </div>
+            )}
             <label className="check">
               <input
                 type="checkbox"
@@ -209,6 +234,7 @@ export default function MapRoute({
             focusSession={focusSession}
             onFocusUsed={onFocusUsed}
             showHeat={showHeat}
+            heatMetric={heatMetric}
           />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
@@ -303,6 +329,7 @@ function MapCanvas({
   focusSession,
   onFocusUsed,
   showHeat,
+  heatMetric,
 }: {
   features: MapPoint[];
   onSelect: (feature: MapPoint) => void;
@@ -314,6 +341,7 @@ function MapCanvas({
   focusSession?: LiveSession | null;
   onFocusUsed?: () => void;
   showHeat: boolean;
+  heatMetric: HeatMetric;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -471,12 +499,14 @@ function MapCanvas({
         source: "heat",
         layout: { visibility: "none" },
         paint: {
-          // Weighted by plays, then flattened with a square root. Raw counts
-          // would let one city of 9,000 plays wash out everywhere else.
-          "heatmap-weight": [
-            "interpolate", ["linear"], ["sqrt", ["get", "plays"]],
-            0, 0,
-            100, 1,
+          "heatmap-weight": heatWeight("plays"),
+          "heatmap-color": [
+            "interpolate", ["linear"], ["heatmap-density"],
+            0, css("--map-heat-1", "rgba(34,211,238,0)"),
+            0.2, css("--map-heat-2", "#22d3ee"),
+            0.45, css("--map-heat-3", "#818cf8"),
+            0.7, css("--map-heat-4", "#f472b6"),
+            1, css("--map-heat-5", "#fde047"),
           ],
           "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
           "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 12, 9, 40],
@@ -506,12 +536,13 @@ function MapCanvas({
       source: "plays",
       filter: ["has", "point_count"],
       paint: {
-        // Red only when every location inside is a hosting/VPN origin.
+        // The VPN colour only when every location inside is a hosting or VPN
+        // origin, so a mixed cluster never hides ordinary plays.
         "circle-color": [
           "case",
           ["==", ["get", "hosting"], ["get", "point_count"]],
-          css("--danger", "#b91c1c"),
-          css("--accent", "#0e7490"),
+          css("--vpn", "#a78bfa"),
+          css("--map-point", "#22d3ee"),
         ],
         "circle-opacity": 0.85,
         "circle-stroke-width": 2,
@@ -542,8 +573,8 @@ function MapCanvas({
         "circle-color": [
           "case",
           ["get", "is_hosting"],
-          css("--danger", "#b91c1c"),
-          css("--accent", "#0e7490"),
+          css("--vpn", "#a78bfa"),
+          css("--map-point", "#22d3ee"),
         ],
         "circle-opacity": 0.9,
         "circle-stroke-width": 2,
@@ -579,6 +610,12 @@ function MapCanvas({
       m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
     }
   }, [ready, features, onSelect, showHistory, showAccuracy, showHeat]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !m.getLayer("heat")) return;
+    m.setPaintProperty("heat", "heatmap-weight", heatWeight(heatMetric));
+  }, [ready, heatMetric]);
 
   // ---- fly to one stream -------------------------------------------------
   useEffect(() => {
@@ -781,7 +818,7 @@ function LocationList({
               >
                 <td>
                   {placeName(p)}
-                  {p.is_hosting && <span className="pill warn">VPN</span>}
+                  {p.is_hosting && <span className="pill vpn">VPN</span>}
                 </td>
                 <td className="muted">{p.asn_org}</td>
                 <td className="num">{p.plays.toLocaleString()}</td>
@@ -855,7 +892,7 @@ function Drawer({
       </header>
 
       {place.is_hosting && (
-        <p className="note warn-note">
+        <p className="note vpn-note">
           This traffic comes from a hosting or VPN provider, so the location is where the server
           is, not where the viewer is.
         </p>
@@ -936,7 +973,7 @@ function Drawer({
                   <div key={a.ip_address} className="mini">
                     <div>
                       <code>{a.ip_address}</code>
-                      {a.is_hosting && <span className="pill warn">VPN</span>}
+                      {a.is_hosting && <span className="pill vpn">VPN</span>}
                       <p className="muted small">{a.asn_org}</p>
                     </div>
                     <span className="muted">{a.plays.toLocaleString()}</span>
@@ -1094,6 +1131,23 @@ function Tile({ label, value }: { label: string; value: number }) {
       <span className="summary-label">{label}</span>
     </div>
   );
+}
+
+type HeatMetric = "plays" | "devices" | "users";
+
+/* How much each place adds to the heat.
+ *
+ * Flattened with a square root and scaled per measure, so a city with 9,000
+ * plays does not wash out everywhere else, and a count of devices (usually a
+ * handful per place) still shows up at all. Devices and users are distinct
+ * counts per place within the current filters: one device seen in three
+ * cities warms all three, which is what "devices seen here" means.
+ */
+function heatWeight(metric: HeatMetric): maplibregl.ExpressionSpecification {
+  // The square root at which a place counts as fully hot. Plays keep the
+  // scale the map always used; the distinct counts are far smaller numbers.
+  const hot = metric === "plays" ? 100 : metric === "devices" ? 5 : 4;
+  return ["interpolate", ["linear"], ["sqrt", ["get", metric]], 0, 0, hot, 1];
 }
 
 /* Pin colours come from the same tokens as the basemap. */

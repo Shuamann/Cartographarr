@@ -88,7 +88,7 @@ export default function DashboardRoute({
           big={d.totals.hosting_ips}
           label="VPN origins"
           sub={`of ${d.totals.ip_locations} addresses`}
-          warn={d.totals.hosting_ips > 0}
+          vpn={d.totals.hosting_ips > 0}
           onClick={() => onNavigate("Map")}
         />
         <Card
@@ -261,7 +261,7 @@ function StreamCard({
           {session.transcode_decision === "transcode" && (
             <span className="pill warn">transcode</span>
           )}
-          {session.geo?.is_hosting && <span className="pill warn">VPN</span>}
+          {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
         </span>
         <span className="progress">
           <span className="progress-fill" style={{ width: `${progress}%` }} />
@@ -278,6 +278,7 @@ function Card({
   onClick,
   accent,
   warn,
+  vpn,
 }: {
   big: number;
   label: string;
@@ -285,8 +286,9 @@ function Card({
   onClick?: () => void;
   accent?: boolean;
   warn?: boolean;
+  vpn?: boolean;
 }) {
-  const className = ["card", accent && big > 0 ? "accent" : "", warn ? "warn" : ""]
+  const className = ["card", accent && big > 0 ? "accent" : "", warn ? "warn" : "", vpn ? "vpn" : ""]
     .filter(Boolean)
     .join(" ");
   return (

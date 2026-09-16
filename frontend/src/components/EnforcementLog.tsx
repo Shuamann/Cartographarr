@@ -125,7 +125,7 @@ function Detail({
           <Field label="Where">
             {where || null}
             {e.location && <span className="pill">{e.location}</span>}
-            {e.is_hosting && <span className="pill warn">VPN / hosting</span>}
+            {e.is_hosting && <span className="pill vpn">VPN / hosting</span>}
           </Field>
           <Field label="Address">
             {e.ip_address}

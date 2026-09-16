@@ -71,7 +71,7 @@ export default function TravelFlags({
               <p className="muted small">
                 <span className="pill">{f.kind === "concurrent" ? "at once" : "too fast"}</span>
                 {f.hosting_involved && (
-                  <span className="pill warn" title="A VPN explains this without a shared password">
+                  <span className="pill vpn" title="A VPN explains this without a shared password">
                     VPN involved
                   </span>
                 )}

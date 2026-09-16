@@ -634,6 +634,9 @@ code {
 .card.warn {
   border-color: var(--warn);
 }
+.card.vpn {
+  border-color: var(--vpn);
+}
 .card-big {
   font-size: 28px;
   font-weight: 650;
@@ -2109,4 +2112,31 @@ label.locked .pill {
   .profile-head {
     flex-direction: column;
   }
+}
+
+/* ---- meanings with their own colour ------------------------------------------ */
+
+.pill.vpn {
+  border: 1px solid var(--vpn);
+  background: var(--vpn-soft);
+  color: var(--vpn);
+}
+.pill.banned {
+  border: 1px solid var(--banned);
+  background: transparent;
+  color: var(--banned);
+}
+.vpn-note {
+  border-left: 3px solid var(--vpn);
+  background: var(--vpn-soft);
+}
+
+.heat-metric .seg {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.ms-btn.vpn.on {
+  background: var(--vpn);
+  border-color: var(--vpn);
+  color: var(--vpn-ink);
 }

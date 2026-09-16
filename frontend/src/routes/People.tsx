@@ -575,7 +575,7 @@ function Overview({ profile: p, extra = [] }: { profile: Profile; extra?: [strin
       </dl>
       <p className="muted small">
         First play {when(p.totals.first_play)}, last {when(p.totals.last_play)}.
-        {vpn > 0 && <span className="pill warn">{vpn} VPN or hosting address{vpn === 1 ? "" : "es"}</span>}
+        {vpn > 0 && <span className="pill vpn">{vpn} VPN or hosting address{vpn === 1 ? "" : "es"}</span>}
       </p>
 
       <div className="dash-cols">
@@ -623,7 +623,7 @@ function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) 
             <div className="min0">
               <code>{a.ip_address}</code>
               {a.location && <span className="pill">{a.location.toUpperCase()}</span>}
-              {a.is_hosting && <span className="pill warn">VPN</span>}
+              {a.is_hosting && <span className="pill vpn">VPN</span>}
               <p className="muted small">
                 {[a.asn_org, a.city].filter(Boolean).join(" · ") || "Unknown network"} · first {when(a.first_play)} · last {ago(a.last_play)}
               </p>
@@ -644,7 +644,7 @@ function PlaceList({ places }: { places: Profile["places"] }) {
         <div key={i} className="mini">
           <div className="min0">
             <span className="clip">{[x.city, x.region, x.country].filter(Boolean).join(", ") || "Unknown"}</span>
-            {x.is_hosting && <span className="pill warn">VPN</span>}
+            {x.is_hosting && <span className="pill vpn">VPN</span>}
             <p className="muted small">last {ago(x.last_play)}</p>
           </div>
           <span className="muted">{x.plays.toLocaleString()}</span>

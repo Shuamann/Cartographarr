@@ -110,7 +110,7 @@ export default function FilterBar({ value, onChange }: Props) {
       />
 
       <button
-        className={value.is_hosting ? "ms-btn on" : "ms-btn"}
+        className={value.is_hosting ? "ms-btn on vpn" : "ms-btn vpn"}
         title="Only streams coming from a hosting or VPN provider"
         onClick={() => set("is_hosting", value.is_hosting ? null : true)}
       >
