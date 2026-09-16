@@ -18,6 +18,35 @@ def test_real_hosts_and_vpns_still_flagged():
     assert _is_hosting("Mullvad VPN AB") is True
 
 
+def test_providers_that_slipped_through_real_data():
+    # Found by clicking a pin: a Toronto location fronted by NordVPN's hosting
+    # arm was showing as an ordinary viewer.
+    assert _is_hosting("PacketHub S.A.") is True
+    assert _is_hosting("velia.net Internetdienste GmbH") is True
+    assert _is_hosting("Equinix (EMEA) Acquisition Enterprises B.V.") is True
+
+
+def test_generic_words_do_not_excuse_a_datacentre():
+    # The residential list must stay specific. "services" once excluded AWS.
+    assert _is_hosting("Amazon Web Services") is True
+    assert _is_hosting("Microsoft Azure Cloud Services") is True
+
+
+def test_consumer_carriers_stay_unflagged():
+    # These all appear in real history and must never be flagged.
+    for org in (
+        "AT&T Enterprises, LLC",
+        "T-Mobile USA, Inc.",
+        "Verizon Business",
+        "Cox Communications Inc.",
+        "Space Exploration Technologies Corporation",  # Starlink
+        "United Electric Cooperative",
+        "Cincinnati Bell Telephone Company LLC",
+        "IdeaTek Telcom, LLC",
+    ):
+        assert _is_hosting(org) is False, org
+
+
 def test_unknown_org_is_not_hosting():
     assert _is_hosting(None) is False
     assert _is_hosting("") is False

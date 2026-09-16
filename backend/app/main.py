@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
 from app.geo.lookup import ensure_databases
@@ -88,3 +90,25 @@ app.include_router(admin.router)
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+def _static_dir() -> Path | None:
+    """Built SPA, if there is one.
+
+    /srv/static in the container; the sibling frontend/dist when running from a
+    checkout. Absent during backend-only development, which is fine — Vite
+    serves the UI then and proxies /api here.
+    """
+    for candidate in (Path("/srv/static"), Path(__file__).resolve().parents[2] / "frontend" / "dist"):
+        if (candidate / "index.html").exists():
+            return candidate
+    return None
+
+
+_static = _static_dir()
+if _static is not None:
+    # Mounted last so every /api route still wins. html=True sends index.html
+    # for unknown paths, which is what a client-side app needs.
+    app.mount("/", StaticFiles(directory=_static, html=True), name="ui")
+else:
+    log.info("No built frontend found; serving API only")

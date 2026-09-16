@@ -1,3 +1,13 @@
+FROM node:22-slim AS ui
+
+WORKDIR /ui
+# Lockfile first so a source edit doesn't re-resolve every package.
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -14,6 +24,9 @@ COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/scripts ./scripts
 RUN pip install --no-cache-dir .
+
+# main.py looks here for the built UI and serves API-only if it's absent.
+COPY --from=ui /ui/dist /srv/static
 
 VOLUME ["/data"]
 EXPOSE 8000

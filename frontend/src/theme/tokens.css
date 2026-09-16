@@ -1,0 +1,78 @@
+/* Design tokens.
+ *
+ * mapStyle.ts reads the --map-* values off the computed root style and builds
+ * the MapLibre basemap from them, so the map and the UI chrome can't drift
+ * apart. Change a colour here and the land, water and labels follow.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --surface-3: #e3e8ef;
+  --border: #d8dee7;
+  --border-strong: #b9c3d0;
+
+  --ink: #10151c;
+  --ink-2: #5a6675;
+  --ink-3: #8894a5;
+
+  --accent: #0e7490;
+  --accent-hover: #0c5f77;
+  --accent-ink: #ffffff;
+  --accent-soft: #e0f2f7;
+
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --danger-soft: #fdeaea;
+
+  --map-water: #d6e3ef;
+  --map-land: #eef1f5;
+  --map-road: #ffffff;
+  --map-border: #c3ccd8;
+  --map-label: #5a6675;
+  --map-label-halo: #ffffff;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgb(16 21 28 / 0.06), 0 4px 16px rgb(16 21 28 / 0.08);
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0d1117;
+  --surface: #151b23;
+  --surface-2: #1c232d;
+  --surface-3: #242d39;
+  --border: #2a3440;
+  --border-strong: #3a4654;
+
+  --ink: #e6edf3;
+  --ink-2: #9aa7b6;
+  --ink-3: #6e7d8f;
+
+  --accent: #22d3ee;
+  --accent-hover: #67e8f9;
+  --accent-ink: #062028;
+  --accent-soft: #0e2b33;
+
+  --ok: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --danger-soft: #2a1516;
+
+  --map-water: #0a1620;
+  --map-land: #121a23;
+  --map-road: #1e2832;
+  --map-border: #2d3947;
+  --map-label: #8b98a8;
+  --map-label-halo: #0a0f14;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35);
+}

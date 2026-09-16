@@ -36,6 +36,8 @@ and log line."""
 HOSTING_HINTS = frozenset(
     """amazon aws googlecloud cloud microsoft azure digitalocean linode vultr
     choopa ovh hetzner contabo leaseweb m247 datacamp oracle scaleway upcloud
+    equinix packethub velia netcup hostwinds worldstream zenlayer frantech
+    psychz quickpacket serverius rackspace softlayer
     mullvad nordvpn expressvpn surfshark privateinternetaccess protonvpn
     cyberghost ipvanish torguard windscribe datacenter hosting colocation
     vpn""".split()
@@ -44,9 +46,12 @@ HOSTING_HINTS = frozenset(
 # Checked FIRST, and it matters: "Google Fiber Inc." is a residential ISP that
 # matched `google` and made 94% of flagged IPs false positives. Consumer ISPs
 # love borrowing cloud-sounding words, so the residential marker wins.
+# Deliberately specific. Generic words belong nowhere near this list: an
+# earlier version had "internet" and "services", which excluded both
+# "velia.net Internetdienste GmbH" and "Amazon Web Services".
 RESIDENTIAL_HINTS = frozenset(
-    """fiber fibre broadband cable telecom telecommunication communications
-    wireless dsl cablevision internet services isp networks-inc""".split()
+    """fiber fibre broadband cable cablevision telecom telecommunication
+    communications telephone wireless dsl cooperative co-op municipal""".split()
 )
 
 
