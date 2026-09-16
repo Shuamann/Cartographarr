@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -76,9 +77,23 @@ async def lifespan(app: FastAPI):
     )
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(_cycle, "interval", minutes=settings.sync_interval_minutes, id="sync")
+    # Both run once straight away as well as on their interval. An interval job
+    # otherwise waits a full interval before its first run, so after every
+    # restart or image update names stayed stale for up to an hour.
+    soon = datetime.now()
     scheduler.add_job(
-        _slow_cycle, "interval", minutes=settings.slow_sync_interval_minutes, id="slow_sync"
+        _slow_cycle,
+        "interval",
+        minutes=settings.slow_sync_interval_minutes,
+        id="slow_sync",
+        next_run_time=soon,
+    )
+    scheduler.add_job(
+        _cycle,
+        "interval",
+        minutes=settings.sync_interval_minutes,
+        id="sync",
+        next_run_time=soon + timedelta(seconds=20),
     )
     scheduler.add_job(
         _enforce_cycle, "interval", seconds=settings.activity_poll_seconds, id="enforce"

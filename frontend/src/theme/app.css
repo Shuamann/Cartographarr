@@ -1883,3 +1883,11 @@ label.locked .pill {
 .action-row p {
   margin: 6px 0;
 }
+
+.sync-now {
+  gap: 10px;
+  margin-top: 12px;
+}
+.bad-text {
+  color: var(--danger);
+}

@@ -434,6 +434,7 @@ function SettingsForm() {
               </div>
               {section.note && <p className="muted small">{section.note}</p>}
               <div className="grid2">{section.keys.map(field)}</div>
+              {section.title === "Syncing" && <SyncNow />}
             </section>
           ))}
         </Area>
@@ -615,6 +616,44 @@ function TestButton({ name, values }: { name: string; values: Record<string, unk
       <button type="button" className="btn" onClick={run} disabled={busy}>
         {busy ? "Testing\u2026" : "Test"}
       </button>
+    </div>
+  );
+}
+
+/* Run both syncs now instead of waiting for the timers: users and libraries,
+ * then history, metadata, devices and locations. Handy after restoring a user
+ * in Tautulli, or after changing a connection. */
+function SyncNow() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    setResult(null);
+    setFailed(false);
+    try {
+      const r = await api.post<Record<string, number>>("/sync/run");
+      setResult(
+        `Done: ${r.users ?? 0} users, ${r.history ?? 0} new plays, ${r.metadata ?? 0} titles, ${r.ips ?? 0} addresses placed.`,
+      );
+    } catch (err) {
+      setFailed(true);
+      setResult((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="row sync-now">
+      <button type="button" className="btn" onClick={run} disabled={busy}>
+        {busy ? "Syncing…" : "Sync now"}
+      </button>
+      {result && <span className={failed ? "small bad-text" : "muted small"}>{result}</span>}
+      {!result && (
+        <span className="muted small">Users and libraries, then history. Runs by itself at startup and on the timers above.</span>
+      )}
     </div>
   );
 }
