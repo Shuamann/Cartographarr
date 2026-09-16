@@ -10,7 +10,7 @@ type Section = {
   test?: string;
   /* Where it usually listens, so a URL can be guessed from the server the
    * rest of the stack is already on. */
-  guess?: { key: string; port: number; slug: string; path?: string };
+  guess?: { key: string; port: number; slug: string; path?: string; publicKey?: string };
 };
 type Area = { area: string; blurb?: string; sections: Section[] };
 
@@ -65,24 +65,24 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Radarr",
-        note: "Films link straight to their Radarr page.",
+        note: "Films link straight to their Radarr page. Cartographarr talks to the local URL; the buttons open the remote URL, so they work away from home.",
         test: "radarr",
-        guess: { key: "radarr_url", port: 7878, slug: "radarr" },
-        keys: ["radarr_url", "radarr_api_key"],
+        guess: { key: "radarr_url", port: 7878, slug: "radarr", publicKey: "radarr_public_url" },
+        keys: ["radarr_url", "radarr_public_url", "radarr_api_key"],
       },
       {
         title: "Sonarr",
-        note: "Shows and episodes link straight to their Sonarr page.",
+        note: "Shows and episodes link straight to their Sonarr page. Cartographarr talks to the local URL; the buttons open the remote URL.",
         test: "sonarr",
-        guess: { key: "sonarr_url", port: 8989, slug: "sonarr" },
-        keys: ["sonarr_url", "sonarr_api_key"],
+        guess: { key: "sonarr_url", port: 8989, slug: "sonarr", publicKey: "sonarr_public_url" },
+        keys: ["sonarr_url", "sonarr_public_url", "sonarr_api_key"],
       },
       {
         title: "Seerr",
-        note: "Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into.",
+        note: "Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into. Cartographarr talks to the local URL; the buttons open the remote URL.",
         test: "seerr",
-        guess: { key: "seerr_url", port: 5055, slug: "seerr" },
-        keys: ["seerr_url", "seerr_api_key"],
+        guess: { key: "seerr_url", port: 5055, slug: "seerr", publicKey: "seerr_public_url" },
+        keys: ["seerr_url", "seerr_public_url", "seerr_api_key"],
       },
       {
         title: "TMDB",
@@ -221,15 +221,18 @@ const LABELS: Record<string, string> = {
   proxy_user_header: "Username header",
   proxy_email_header: "Email header",
   proxy_default_role: "Role for new proxy users",
-  radarr_url: "Radarr URL",
-  radarr_api_key: "Radarr API key",
-  sonarr_url: "Sonarr URL",
-  sonarr_api_key: "Sonarr API key",
+  radarr_url: "Local URL",
+  radarr_public_url: "Remote URL, for buttons",
+  radarr_api_key: "API key",
+  sonarr_url: "Local URL",
+  sonarr_public_url: "Remote URL, for buttons",
+  sonarr_api_key: "API key",
   app_name: "App name",
   tmdb_api_key: "TMDB API key",
   uptime_kuma_push_url: "Uptime Kuma push URL",
-  seerr_url: "Seerr URL",
-  seerr_api_key: "Seerr API key",
+  seerr_url: "Local URL",
+  seerr_public_url: "Remote URL, for buttons",
+  seerr_api_key: "API key",
   apprise_urls: "Apprise URLs",
   webhook_url: "Webhook URL",
   impossible_kmh: "Flag faster than (km/h)",
@@ -326,17 +329,34 @@ function SettingsForm() {
     return typeof v === "string" ? v : "";
   }
 
-  // A direct address wins over a proxied one when both are set: it is what
-  // the container can most likely reach, and the port guess is the surer one.
-  const candidates = ["tautulli_local_url", "tautulli_url", "radarr_url", "sonarr_url", "seerr_url"]
+  // Two guesses from what is already set. Local URLs come from a direct
+  // address (an IP or a port), which the container can reach. Remote URLs come
+  // from a proxied domain, which a browser away from home can reach. A local
+  // guess falls back to a domain when that is all there is; a remote guess
+  // is only offered when there is a domain to base it on.
+  const candidates = [
+    "tautulli_local_url",
+    "tautulli_url",
+    "radarr_url",
+    "sonarr_url",
+    "seerr_url",
+    "radarr_public_url",
+    "sonarr_public_url",
+    "seerr_public_url",
+  ]
     .map((k) => parse(valueOf(k)))
     .filter((u): u is URL => u !== null && /^https?:$/.test(u.protocol));
-  const base = candidates.find(isDirect) ?? candidates[0] ?? null;
+  const localBase = candidates.find(isDirect) ?? candidates[0] ?? null;
+  const remoteBase = candidates.find((u) => !isDirect(u)) ?? null;
 
   const guesses = new Map<string, string>();
   for (const area of AREAS) {
     for (const section of area.sections) {
-      if (section.guess && base) guesses.set(section.guess.key, guessUrl(base, section.guess));
+      if (!section.guess) continue;
+      if (localBase) guesses.set(section.guess.key, guessUrl(localBase, section.guess));
+      if (section.guess.publicKey && remoteBase) {
+        guesses.set(section.guess.publicKey, guessUrl(remoteBase, section.guess));
+      }
     }
   }
 

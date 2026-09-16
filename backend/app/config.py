@@ -90,9 +90,15 @@ class Settings(BaseSettings):
     global dry run setting, so upgrading changes nothing until someone chooses."""
 
     # ---- Integrations ------------------------------------------------------
+    # Each app has two addresses. The URL is the one Cartographarr calls, best
+    # a local address inside the network. The public URL is where the buttons
+    # send a person's browser, which is usually the reverse proxy address;
+    # left empty, buttons use the URL.
     radarr_url: str = ""
+    radarr_public_url: str = ""
     radarr_api_key: str = ""
     sonarr_url: str = ""
+    sonarr_public_url: str = ""
     sonarr_api_key: str = ""
 
     tmdb_api_key: str = ""
@@ -103,6 +109,7 @@ class Settings(BaseSettings):
     than the container being up, which is the thing that actually breaks."""
 
     seerr_url: str = ""
+    seerr_public_url: str = ""
     seerr_api_key: str = ""
     """Seerr, the project Overseerr and Jellyseerr merged into. An older
     Overseerr instance should work too, the API shape is inherited."""

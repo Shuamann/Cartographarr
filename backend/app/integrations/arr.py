@@ -32,6 +32,13 @@ class ArrIntegration:
         return str(getattr(current(), f"{self.name}_url", "") or "").rstrip("/")
 
     @property
+    def link_base(self) -> str:
+        """Where a person's browser should go, which is not always where this
+        app can reach: local for the API, the proxy address for people."""
+        public = str(getattr(current(), f"{self.name}_public_url", "") or "").rstrip("/")
+        return public or self.base_url
+
+    @property
     def api_key(self) -> str:
         return str(getattr(current(), f"{self.name}_api_key", "") or "")
 
@@ -100,9 +107,9 @@ class ArrIntegration:
                         setattr(stored, self.slug_field, slug)
 
         if slug:
-            return f"{self.base_url}/{self.path}/{slug}"
+            return f"{self.link_base}/{self.path}/{slug}"
         prefix = "tmdb" if self.id_param == "tmdbId" else "tvdb"
-        return f"{self.base_url}/add/new?term={prefix}%3A{external_id}"
+        return f"{self.link_base}/add/new?term={prefix}%3A{external_id}"
 
 
 radarr = ArrIntegration("radarr", "Radarr", "movie", "tmdbId", "radarr_slug")

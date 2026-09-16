@@ -29,6 +29,11 @@ class SeerrIntegration:
         return (current().seerr_url or "").rstrip("/")
 
     @property
+    def link_base(self) -> str:
+        """The address for a person's browser, falling back to the API URL."""
+        return (current().seerr_public_url or "").rstrip("/") or self.base_url
+
+    @property
     def api_key(self) -> str:
         return current().seerr_api_key or ""
 
@@ -55,7 +60,7 @@ class SeerrIntegration:
     def link_for(self, item: MediaItem) -> str | None:
         if not (self.configured() and item.tmdb_id):
             return None
-        return f"{self.base_url}/{self._kind(item.media_type)}/{item.tmdb_id}"
+        return f"{self.link_base}/{self._kind(item.media_type)}/{item.tmdb_id}"
 
     async def request_for(self, item: MediaItem) -> dict | None:
         """Who asked for this, if anyone.

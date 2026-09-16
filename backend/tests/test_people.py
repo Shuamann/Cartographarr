@@ -108,3 +108,21 @@ def test_address_profile_lists_accounts_and_devices_and_filters_history(client):
     assert client.get("/api/addresses/198.51.100.1").status_code == 404
     # History narrows to one address the same way it narrows to a device.
     assert client.get("/api/history?ip_address=203.0.113.9").json()["total"] == 3
+
+
+def test_buttons_use_the_remote_url_while_the_api_uses_the_local_one(client):
+    from app.db import session_scope
+    from app.integrations import seerr
+    from app.models import MediaItem
+    from app.settings_store import trial
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=700, title="A Film", media_type="movie", tmdb_id="603"))
+        item = db.get(MediaItem, 700)
+        db.expunge(item)
+    with trial({"seerr_url": "http://192.0.2.10:5055", "seerr_public_url": "https://seerr.example.com", "seerr_api_key": "k"}):
+        assert seerr.seerr.base_url == "http://192.0.2.10:5055"
+        assert seerr.seerr.link_for(item) == "https://seerr.example.com/movie/603"
+    with trial({"seerr_url": "http://192.0.2.10:5055", "seerr_public_url": "", "seerr_api_key": "k"}):
+        assert seerr.seerr.link_for(item) == "http://192.0.2.10:5055/movie/603"
