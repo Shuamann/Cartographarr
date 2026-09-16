@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import type { LiveSession } from "./api";
 import type { FilterState } from "./filters";
+import type { PeopleFilter } from "./tabs";
 
 /* Ways to go and look at something, available anywhere.
  *
@@ -20,6 +21,8 @@ export type Nav = {
   unbanDevice?: (machineId: string, label: string) => Promise<boolean>;
   /* Open Map or History with the filters narrowed, for example to one user. */
   filterTo?: (tab: "Map" | "History", patch: Partial<FilterState>) => void;
+  /* Open People, optionally with one of its list filters switched on. */
+  openPeople?: (filter?: PeopleFilter) => void;
 };
 
 export const NavContext = createContext<Nav>({ isAdmin: false });

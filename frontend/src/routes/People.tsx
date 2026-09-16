@@ -16,6 +16,7 @@ import {
   type UserDetail,
 } from "../lib/api";
 import { useNav } from "../lib/nav";
+import type { PeopleFilter } from "../lib/tabs";
 import { useBans } from "../lib/bans";
 
 /* Users and their devices, in one place.
@@ -33,9 +34,13 @@ type Sort = "last_seen" | "plays" | "name";
 export default function PeopleRoute({
   initial,
   onInitialUsed,
+  initialFilter,
+  onInitialFilterUsed,
 }: {
   initial?: Selection | null;
   onInitialUsed?: () => void;
+  initialFilter?: PeopleFilter | null;
+  onInitialFilterUsed?: () => void;
 }) {
   const users = useApi<PlexUser[]>("/users");
   const devices = useApi<Device[]>("/devices");
@@ -53,6 +58,19 @@ export default function PeopleRoute({
   const [onlyLive, setOnlyLive] = useState(false);
   const [onlyBanned, setOnlyBanned] = useState(false);
   const bans = useBans();
+
+  // Opened from a dashboard card with a filter in mind. New devices live on
+  // devices, so that one also switches the list to devices.
+  useEffect(() => {
+    if (!initialFilter) return;
+    setOnlyNew(initialFilter === "new");
+    setOnlyBanned(initialFilter === "banned");
+    setOnlyDeleted(initialFilter === "deleted");
+    setOnlyLive(initialFilter === "live");
+    if (initialFilter === "new" || initialFilter === "banned") setMode("devices");
+    onInitialFilterUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFilter]);
 
   // Opened on someone from elsewhere (a History row, a stream card). Applied
   // then cleared, so coming back to People later does not jump to them again.

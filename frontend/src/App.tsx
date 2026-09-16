@@ -21,18 +21,7 @@ import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext } from "./lib/nav";
 import { ban, unban } from "./lib/bans";
 
-const TABS = [
-  "Dashboard",
-  "Map",
-  "History",
-  "People",
-  "Rules",
-  "Log",
-  "Sharing",
-  "Settings",
-] as const;
-type Tab = (typeof TABS)[number];
-const ADMIN_TABS: Tab[] = ["Rules", "Log", "Sharing", "Settings"];
+import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
 
 export default function App() {
   const auth = useApi<AuthState>("/auth/state");
@@ -96,6 +85,12 @@ function SignedIn({
   const [focusSession, setFocusSession] = useState<LiveSession | null>(null);
   // Which user or device People opens on, when another page sent us there.
   const [focusPerson, setFocusPerson] = useState<Selection | null>(null);
+  const [peopleFilter, setPeopleFilter] = useState<PeopleFilter | null>(null);
+
+  function openPeople(filter?: PeopleFilter) {
+    setPeopleFilter(filter ?? null);
+    setTab("People");
+  }
 
   function openUser(userId: number) {
     setFocusPerson({ kind: "user", id: userId });
@@ -178,6 +173,7 @@ function SignedIn({
           blockDevice: isAdmin ? banMachine : undefined,
           unbanDevice: isAdmin ? unbanMachine : undefined,
           filterTo,
+          openPeople,
         }}
       >
       <div className="app">
@@ -199,7 +195,7 @@ function SignedIn({
             <Suspense fallback={<div className="pad muted">Loading…</div>}>
             {active === "Dashboard" && (
               <Dashboard
-                onNavigate={(t) => setTab(t as Tab)}
+                onNavigate={setTab}
                 isAdmin={isAdmin}
                 onOpenUser={openUser}
                 filters={filters}
@@ -220,7 +216,12 @@ function SignedIn({
               <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
             )}
             {active === "People" && (
-              <People initial={focusPerson} onInitialUsed={() => setFocusPerson(null)} />
+              <People
+                initial={focusPerson}
+                onInitialUsed={() => setFocusPerson(null)}
+                initialFilter={peopleFilter}
+                onInitialFilterUsed={() => setPeopleFilter(null)}
+              />
             )}
             {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}

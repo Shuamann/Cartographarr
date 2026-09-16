@@ -5,6 +5,8 @@ import StreamDetail from "../components/StreamDetail";
 import EnforcementLog from "../components/EnforcementLog";
 import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
+import { useNav } from "../lib/nav";
+import type { Tab } from "../lib/tabs";
 
 /* The landing screen.
  *
@@ -20,12 +22,13 @@ export default function DashboardRoute({
   filters,
   onFilters,
 }: {
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: Tab) => void;
   isAdmin?: boolean;
   onOpenUser?: (userId: number) => void;
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
+  const nav = useNav();
   const query = useMemo(() => toQuery(filters), [filters]);
   const data = useApi<Dashboard>(`/dashboard${query}`);
   // Streams move faster than the rest of the page, and /dashboard is a much
@@ -83,25 +86,31 @@ export default function DashboardRoute({
           sub={d.filtered ? "matching filters" : "all time"}
           onClick={() => onNavigate("Map")}
         />
-        <Card big={d.totals.users} label="users" sub={`${d.totals.devices} devices`} />
+        <Card
+          big={d.totals.users}
+          label="users"
+          sub={`${d.totals.devices} devices`}
+          onClick={() => nav.openPeople?.()}
+        />
         <Card
           big={d.totals.hosting_ips}
           label="VPN origins"
           sub={`of ${d.totals.ip_locations} addresses`}
           vpn={d.totals.hosting_ips > 0}
-          onClick={() => onNavigate("Map")}
+          onClick={() => nav.filterTo?.("Map", { is_hosting: true })}
         />
         <Card
           big={d.totals.new_devices}
           label="new devices"
           sub="not yet reviewed"
           warn={d.totals.new_devices > 0}
-          onClick={() => onNavigate("Devices")}
+          onClick={() => nav.openPeople?.("new")}
         />
         <Card
           big={d.totals.travel_flags}
           label="sharing signals"
           sub="unreviewed"
+          onClick={() => document.getElementById("signals")?.scrollIntoView({ behavior: "smooth", block: "start" })}
           warn={d.totals.travel_flags > 0}
         />
       </section>
@@ -125,7 +134,9 @@ export default function DashboardRoute({
         </section>
       </div>
 
-      <TravelFlags isAdmin={Boolean(isAdmin)} onOpenUser={onOpenUser} />
+      <div id="signals">
+        <TravelFlags isAdmin={Boolean(isAdmin)} onOpenUser={onOpenUser} />
+      </div>
 
       <section>
         <div className="row-between">

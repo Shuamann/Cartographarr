@@ -212,7 +212,7 @@ async def sync_missing_users(client: TautulliClient, also: set[int] | None = Non
     by id.
 
     A user Tautulli has no record of at all still gets a row, so their history
-    stays reachable from the Users page rather than vanishing with them.
+    stays reachable from People rather than vanishing with them.
     """
     with session_scope() as session:
         missing = {
