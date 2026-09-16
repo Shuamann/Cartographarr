@@ -42,6 +42,7 @@ class Filters:
         player: ListParam = None,
         product: ListParam = None,
         machine_id: ListParam = None,
+        ip_address: ListParam = None,
         section_id: IntListParam = None,
         rating_key: int | None = None,
         transcode_decision: ListParam = None,
@@ -66,6 +67,7 @@ class Filters:
         self.player = player
         self.product = product
         self.machine_id = machine_id
+        self.ip_address = ip_address
         self.section_id = section_id
         self.rating_key = rating_key
         self.transcode_decision = transcode_decision
@@ -98,6 +100,7 @@ class Filters:
             (History.player, self.player),
             (History.product, self.product),
             (History.machine_id, self.machine_id),
+            (History.ip_address, self.ip_address),
             (History.section_id, self.section_id),
             (History.transcode_decision, self.transcode_decision),
         ):

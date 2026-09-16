@@ -102,6 +102,11 @@ function SignedIn({
     setTab("People");
   }
 
+  function openAddress(ip: string) {
+    setFocusPerson({ kind: "address", id: ip });
+    setTab("People");
+  }
+
   // A profile's Map and History buttons: fresh filters narrowed to one
   // person or device, rather than added to whatever was set before.
   function filterTo(target: "Map" | "History", patch: Partial<FilterState>) {
@@ -169,6 +174,7 @@ function SignedIn({
           isAdmin,
           openUser,
           openDevice,
+          openAddress,
           showOnMap,
           blockDevice: isAdmin ? banMachine : undefined,
           unbanDevice: isAdmin ? unbanMachine : undefined,

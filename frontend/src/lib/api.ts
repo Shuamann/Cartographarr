@@ -438,6 +438,24 @@ export type DeviceDetail = Profile & {
   }[];
 };
 
+export type AddressDetail = Profile & {
+  ip_address: string;
+  place: {
+    city: string | null;
+    region: string | null;
+    country: string | null;
+    lat: number | null;
+    lon: number | null;
+    accuracy_km: number | null;
+    asn: number | null;
+    asn_org: string | null;
+    is_hosting: boolean | null;
+    is_private: boolean | null;
+  } | null;
+  accounts: { user_id: number; name: string; plays: number; seconds: number; first_play: number | null; last_play: number | null }[];
+  devices: { machine_id: string; player: string | null; platform: string | null; user_id: number | null; user_name: string | null; plays: number; last_play: number | null }[];
+};
+
 export type PersonEvent =
   | ({ kind: "stream"; at_epoch: number } & Enforcement)
   | {

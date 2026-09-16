@@ -33,9 +33,13 @@ def client(monkeypatch, tmp_path):
 
     # Reloaded in place, so routers holding a reference to the module see the
     # session factory for this test's database rather than the last one's.
-    import app.audit
+    import app.audit, app.filters
 
     importlib.reload(app.audit)
+    # Filters build their conditions from the model classes, so they must see
+    # this test's reloaded models, or a filtered query names two copies of the
+    # same table.
+    importlib.reload(app.filters)
 
     import app.auth.deps, app.routers.auth, app.main
     import app.routers.admin, app.routers.branding, app.routers.data, app.routers.live

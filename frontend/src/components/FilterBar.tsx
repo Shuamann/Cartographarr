@@ -77,6 +77,15 @@ export default function FilterBar({ value, onChange }: Props) {
           Device: {value.machineLabel ?? value.machine_id.length} ✕
         </button>
       )}
+      {value.ip_address.length > 0 && (
+        <button
+          className="ms-btn on"
+          title="Clear the address filter"
+          onClick={() => onChange({ ...value, ip_address: [] })}
+        >
+          Address: {value.ip_address.join(", ")} ✕
+        </button>
+      )}
 
       <MultiSelect
         label="Library"

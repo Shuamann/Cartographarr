@@ -931,6 +931,7 @@ function Drawer({
   onFilterToTitle?: (ratingKey: number, title: string) => void;
   onOpenUser?: (userId: number) => void;
 }) {
+  const nav = useNav();
   const [openMedia, setOpenMedia] = useState<number | null>(null);
   const [tab, setTab] = useState<"who" | "watched">("who");
   const [focus, setFocus] = useState<"users" | "devices" | "addresses" | null>(null);
@@ -1030,7 +1031,13 @@ function Drawer({
                 {detail.data?.devices.map((d) => (
                   <div key={d.machine_id} className="mini">
                     <div>
-                      {d.player || "Unnamed"}
+                      {nav.openDevice ? (
+                        <button className="linkish" onClick={() => nav.openDevice?.(d.machine_id)}>
+                          {d.player || "Unnamed"}
+                        </button>
+                      ) : (
+                        d.player || "Unnamed"
+                      )}
                       <p className="muted small">
                         {d.platform} · <code>{d.machine_id.slice(0, 14)}…</code>
                       </p>
@@ -1045,7 +1052,13 @@ function Drawer({
                 {detail.data?.addresses.map((a) => (
                   <div key={a.ip_address} className="mini">
                     <div>
-                      <code>{a.ip_address}</code>
+                      {nav.openAddress ? (
+                        <button className="linkish" onClick={() => nav.openAddress?.(a.ip_address)}>
+                          <code>{a.ip_address}</code>
+                        </button>
+                      ) : (
+                        <code>{a.ip_address}</code>
+                      )}
                       {a.is_hosting && <span className="pill vpn">VPN</span>}
                       <p className="muted small">{a.asn_org}</p>
                     </div>

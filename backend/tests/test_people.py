@@ -95,3 +95,16 @@ def test_device_users_tab_breaks_down_each_account(client):
     assert owners[8]["play_count"] == 1
     assert owners[7]["places"][0]["city"] == "Springfield"
     assert owners[7]["last_watched"]["title"] == "A Show - Pilot"
+
+
+def test_address_profile_lists_accounts_and_devices_and_filters_history(client):
+    claim(client)
+    seed()
+    body = client.get("/api/addresses/203.0.113.9").json()
+    assert body["totals"]["plays"] == 3
+    assert {a["user_id"] for a in body["accounts"]} == {7, 8}
+    assert [d["machine_id"] for d in body["devices"]] == ["dev-1"]
+    assert body["place"]["city"] == "Springfield"
+    assert client.get("/api/addresses/198.51.100.1").status_code == 404
+    # History narrows to one address the same way it narrows to a device.
+    assert client.get("/api/history?ip_address=203.0.113.9").json()["total"] == 3

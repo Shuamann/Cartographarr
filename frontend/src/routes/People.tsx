@@ -7,6 +7,7 @@ import {
   api,
   useApi,
   type Activity,
+  type AddressDetail,
   type Device,
   type DeviceDetail,
   type HistoryPage,
@@ -26,7 +27,10 @@ import { useBans } from "../lib/bans";
  * their devices, and selecting either shows its profile beside the list.
  */
 
-export type Selection = { kind: "user"; id: number } | { kind: "device"; id: string };
+export type Selection =
+  | { kind: "user"; id: number }
+  | { kind: "device"; id: string }
+  | { kind: "address"; id: string };
 
 type Mode = "users" | "devices";
 type Sort = "last_seen" | "plays" | "name";
@@ -78,7 +82,7 @@ export default function PeopleRoute({
   useEffect(() => {
     if (!initial) return;
     setSelected(initial);
-    setMode(initial.kind === "device" ? "devices" : "users");
+    if (initial.kind !== "address") setMode(initial.kind === "device" ? "devices" : "users");
     if (initial.kind === "user") setExpanded((prev) => new Set([...prev, initial.id]));
     onInitialUsed?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -307,6 +311,17 @@ export default function PeopleRoute({
             live={live.data}
             onSelectDevice={(id) => setSelected({ kind: "device", id })}
             onChanged={reload}
+          />
+        )}
+        {selected?.kind === "address" && (
+          <AddressProfile
+            key={`a-${selected.id}`}
+            ip={selected.id}
+            onSelectUser={(id) => {
+              setSelected({ kind: "user", id });
+              setExpanded(new Set([...expanded, id]));
+            }}
+            onSelectDevice={(id) => setSelected({ kind: "device", id })}
           />
         )}
         {selected?.kind === "device" && (
@@ -657,6 +672,140 @@ function DeviceProfile({
   );
 }
 
+// ---- address -------------------------------------------------------------------
+
+function AddressProfile({
+  ip,
+  onSelectUser,
+  onSelectDevice,
+}: {
+  ip: string;
+  onSelectUser: (userId: number) => void;
+  onSelectDevice: (machineId: string) => void;
+}) {
+  const nav = useNav();
+  const detail = useApi<AddressDetail>(`/addresses/${encodeURIComponent(ip)}`);
+  const [tab, setTab] = useState<"overview" | "history">("overview");
+
+  if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
+  if (!detail.data) return <p className="muted pad">Loading…</p>;
+  const a = detail.data;
+  const where = a.place ? [a.place.city, a.place.region, a.place.country].filter(Boolean).join(", ") : "";
+
+  return (
+    <div className="profile">
+      <header className="profile-head">
+        <div className="min0">
+          <h1 className="clip">
+            <code>{ip}</code>
+          </h1>
+          <p className="muted small">
+            {[where || null, a.place?.asn_org, a.place?.asn ? `AS${a.place.asn}` : null].filter(Boolean).join(" · ") ||
+              "No location for this address"}
+          </p>
+          <div className="row person-pills">
+            {a.place?.is_hosting && <span className="pill vpn">VPN or hosting</span>}
+            {a.place?.is_private && <span className="pill">local network</span>}
+            {a.place?.accuracy_km ? <span className="pill">±{a.place.accuracy_km} km</span> : null}
+            {a.accounts.length > 1 && <span className="pill warn">used by {a.accounts.length} accounts</span>}
+          </div>
+        </div>
+        <div className="row wrap profile-actions">
+          {nav.filterTo && (
+            <>
+              <button className="btn" onClick={() => nav.filterTo?.("Map", { ip_address: [ip] })}>
+                Map
+              </button>
+              <button className="btn" onClick={() => nav.filterTo?.("History", { ip_address: [ip] })}>
+                History
+              </button>
+            </>
+          )}
+        </div>
+      </header>
+
+      <nav className="profile-tabs segmented">
+        <button className={tab === "overview" ? "seg on" : "seg"} onClick={() => setTab("overview")}>
+          Overview
+        </button>
+        <button className={tab === "history" ? "seg on" : "seg"} onClick={() => setTab("history")}>
+          History
+        </button>
+      </nav>
+
+      <div className="profile-body">
+        {tab === "overview" && (
+          <>
+            <dl className="stats">
+              <Stat label="Plays" value={a.totals.plays.toLocaleString()} />
+              <Stat label="Watched" value={duration(a.totals.seconds)} />
+              <Stat label="Accounts" value={String(a.accounts.length)} />
+              <Stat label="Devices" value={String(a.devices.length)} />
+            </dl>
+            <p className="muted small">
+              First play {when(a.totals.first_play)}, last {when(a.totals.last_play)}.
+            </p>
+            <div className="dash-cols">
+              <section className="profile-section">
+                <h3>Accounts</h3>
+                <div className="mini-list">
+                  {a.accounts.map((u) => (
+                    <button key={u.user_id} className="mini mini-button" onClick={() => onSelectUser(u.user_id)}>
+                      <div className="min0">
+                        <span>{u.name}</span>
+                        <p className="muted small">
+                          {duration(u.seconds)} · first {when(u.first_play)} · last {ago(u.last_play)}
+                        </p>
+                      </div>
+                      <span className="muted">{u.plays.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section className="profile-section">
+                <h3>Devices</h3>
+                <div className="mini-list">
+                  {a.devices.length === 0 && <p className="muted">No devices recorded.</p>}
+                  {a.devices.map((d) => (
+                    <button key={d.machine_id} className="mini mini-button" onClick={() => onSelectDevice(d.machine_id)}>
+                      <div className="min0">
+                        <span>{d.player || "Unnamed"}</span>
+                        <p className="muted small">
+                          {[d.platform, d.user_name].filter(Boolean).join(" · ")} · last {ago(d.last_play)}
+                        </p>
+                      </div>
+                      <span className="muted">{d.plays.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+            <section className="profile-section">
+              <h3>Most watched from here</h3>
+              <div className="mini-list">
+                {a.top_media.map((m) => (
+                  <div key={m.rating_key} className="mini">
+                    <span className="clip">{m.title ?? "Unknown"}</span>
+                    <span className="muted">{m.plays.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+        {tab === "history" && (
+          <RecentPlays
+            query={`ip_address=${encodeURIComponent(ip)}`}
+            onOpenAll={() => nav.filterTo?.("History", { ip_address: [ip] })}
+            showUser
+            showDevice
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---- shared sections -----------------------------------------------------------
 
 function Overview({ profile: p, extra = [] }: { profile: Profile; extra?: [string, string][] }) {
@@ -705,6 +854,7 @@ function Overview({ profile: p, extra = [] }: { profile: Profile; extra?: [strin
 }
 
 function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) {
+  const nav = useNav();
   return (
     <>
       <div className="row-between">
@@ -720,7 +870,13 @@ function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) 
         {p.addresses.map((a) => (
           <div key={a.ip_address} className="mini">
             <div className="min0">
-              <code>{a.ip_address}</code>
+              {nav.openAddress ? (
+                <button className="linkish" onClick={() => nav.openAddress?.(a.ip_address)}>
+                  <code>{a.ip_address}</code>
+                </button>
+              ) : (
+                <code>{a.ip_address}</code>
+              )}
               {a.location && <span className="pill">{a.location.toUpperCase()}</span>}
               {a.is_hosting && <span className="pill vpn">VPN</span>}
               <p className="muted small">

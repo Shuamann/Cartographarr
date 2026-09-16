@@ -832,6 +832,85 @@ def device_detail(machine_id: str, db: Db) -> dict:
     }
 
 
+@router.get("/addresses/{ip}")
+def address_detail(ip: str, db: Db) -> dict:
+    """One IP address: where it is, whose network, and everyone and every
+    device that has played from it."""
+    plays = db.execute(select(func.count()).where(History.ip_address == ip)).scalar_one()
+    if not plays:
+        raise HTTPException(404, "No plays from that address")
+    loc = db.get(IpLocation, ip)
+
+    names = {u.user_id: u.friendly_name or u.username for u in db.execute(select(User)).scalars()}
+    accounts = db.execute(
+        select(
+            History.user_id,
+            func.count(),
+            func.sum(History.play_duration),
+            func.min(History.started),
+            func.max(History.started),
+        )
+        .where(History.ip_address == ip)
+        .group_by(History.user_id)
+        .order_by(desc(func.max(History.started)))
+    ).all()
+    devices = db.execute(
+        select(
+            History.machine_id,
+            func.max(History.player),
+            func.max(History.platform),
+            func.max(History.user_id),
+            func.count(),
+            func.max(History.started),
+        )
+        .where(History.ip_address == ip, History.machine_id.is_not(None))
+        .group_by(History.machine_id)
+        .order_by(desc(func.max(History.started)))
+    ).all()
+
+    return {
+        "ip_address": ip,
+        "place": None
+        if loc is None
+        else {
+            "city": loc.city,
+            "region": loc.region,
+            "country": loc.country,
+            "lat": loc.lat,
+            "lon": loc.lon,
+            "accuracy_km": loc.accuracy_radius,
+            "asn": loc.asn,
+            "asn_org": loc.asn_org,
+            "is_hosting": loc.is_hosting,
+            "is_private": loc.is_private,
+        },
+        **_profile(db, [History.ip_address == ip]),
+        "accounts": [
+            {
+                "user_id": uid,
+                "name": names.get(uid) or str(uid),
+                "plays": count,
+                "seconds": seconds or 0,
+                "first_play": first,
+                "last_play": last,
+            }
+            for uid, count, seconds, first, last in accounts
+        ],
+        "devices": [
+            {
+                "machine_id": mid,
+                "player": player,
+                "platform": platform,
+                "user_id": uid,
+                "user_name": names.get(uid),
+                "plays": count,
+                "last_play": last,
+            }
+            for mid, player, platform, uid, count, last in devices
+        ],
+    }
+
+
 @router.get("/people/activity")
 def person_activity(
     db: Db,

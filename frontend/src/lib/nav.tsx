@@ -15,6 +15,7 @@ export type Nav = {
   isAdmin: boolean;
   openUser?: (userId: number) => void;
   openDevice?: (machineId: string) => void;
+  openAddress?: (ip: string) => void;
   showOnMap?: (session: LiveSession) => void;
   /* Ask, then add to the ban list. Resolves true if it was banned. */
   blockDevice?: (machineId: string, label: string) => Promise<boolean>;

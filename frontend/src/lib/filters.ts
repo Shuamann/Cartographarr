@@ -19,6 +19,7 @@ export type FilterState = {
   ratingKeyLabel: string | null;
   machine_id: string[];
   machineLabel: string | null;
+  ip_address: string[];
 };
 
 export const EMPTY: FilterState = {
@@ -35,6 +36,7 @@ export const EMPTY: FilterState = {
   ratingKeyLabel: null,
   machine_id: [],
   machineLabel: null,
+  ip_address: [],
 };
 
 export function toQuery(f: FilterState): string {
@@ -50,6 +52,7 @@ export function toQuery(f: FilterState): string {
   if (f.search.trim()) p.set("search", f.search.trim());
   if (f.rating_key !== null) p.set("rating_key", String(f.rating_key));
   for (const v of f.machine_id) p.append("machine_id", v);
+  for (const v of f.ip_address) p.append("ip_address", v);
   const q = p.toString();
   return q ? `?${q}` : "";
 }
@@ -66,7 +69,8 @@ export function activeCount(f: FilterState): number {
     (f.is_hosting !== null ? 1 : 0) +
     (f.search.trim() ? 1 : 0) +
     (f.rating_key !== null ? 1 : 0) +
-    f.machine_id.length
+    f.machine_id.length +
+    f.ip_address.length
   );
 }
 
@@ -92,5 +96,6 @@ export function fromQuery(search: string): FilterState {
     ratingKeyLabel: p.has("rating_key") ? "selected title" : null,
     machine_id: p.getAll("machine_id"),
     machineLabel: p.has("machine_id") ? "selected device" : null,
+    ip_address: p.getAll("ip_address"),
   };
 }
