@@ -1172,3 +1172,9 @@ label.locked .pill {
   min-width: 0;
   flex: 1;
 }
+
+.pill.ok {
+  border: 1px solid var(--ok);
+  background: transparent;
+  color: var(--ok);
+}

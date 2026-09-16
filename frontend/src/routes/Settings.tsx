@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, useApi, type AppUser, type Setting } from "../lib/api";
+import { api, useApi, type AppUser, type IntegrationStatus, type Setting } from "../lib/api";
 
 const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
   {
@@ -24,6 +24,11 @@ const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
     title: "Rules and live activity",
     note: "Dry run records what rules would have done without stopping anything. Turn it off once the enforcement log looks right.",
     keys: ["enforce_enabled", "enforce_dry_run", "enforce_cooldown_seconds", "activity_poll_seconds"],
+  },
+  {
+    title: "Radarr and Sonarr",
+    note: "Optional. Adds a link from any title straight to it in Radarr or Sonarr. Films go to Radarr, anything episodic to Sonarr.",
+    keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
   },
   {
     title: "Reverse proxy sign in",
@@ -60,6 +65,10 @@ const LABELS: Record<string, string> = {
   proxy_user_header: "Username header",
   proxy_email_header: "Email header",
   proxy_default_role: "Role for new proxy users",
+  radarr_url: "Radarr URL",
+  radarr_api_key: "Radarr API key",
+  sonarr_url: "Sonarr URL",
+  sonarr_api_key: "Sonarr API key",
   session_ttl_hours: "Stay signed in for (hours)",
   session_cookie_secure: "Only send the cookie over HTTPS",
 };
@@ -76,6 +85,7 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="pad scroll">
       <SettingsForm />
+      <Integrations />
       <Accounts />
       <ChangePassword />
     </div>
@@ -200,6 +210,52 @@ function SettingsForm() {
         </section>
       ))}
     </>
+  );
+}
+
+function Integrations() {
+  const list = useApi<IntegrationStatus[]>("/integrations");
+  const [testing, setTesting] = useState<string | null>(null);
+
+  async function test(name: string) {
+    setTesting(name);
+    try {
+      await api.post(`/integrations/${name}/test`);
+    } finally {
+      setTesting(null);
+      list.reload();
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="section-head">Connections</h2>
+      <div className="mini-list">
+        {list.data?.map((i) => (
+          <div key={i.name} className="mini">
+            <div>
+              <strong>{i.label}</strong>
+              <p className="muted small">
+                {i.detail}
+                {i.version ? ` (${i.version})` : ""}
+              </p>
+            </div>
+            <div className="row">
+              <span className={i.ok ? "pill ok" : i.configured ? "pill warn" : "pill"}>
+                {i.ok ? "connected" : i.configured ? "not reachable" : "not set up"}
+              </span>
+              <button
+                className="tab"
+                disabled={!i.configured || testing === i.name}
+                onClick={() => test(i.name)}
+              >
+                {testing === i.name ? "Testing…" : "Test"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

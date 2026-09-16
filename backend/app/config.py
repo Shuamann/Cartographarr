@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     enforce_cooldown_seconds: int = 60
     """Per rule, per session, to stop a stubborn client from filling the log."""
 
+    # ---- Integrations ------------------------------------------------------
+    radarr_url: str = ""
+    radarr_api_key: str = ""
+    sonarr_url: str = ""
+    sonarr_api_key: str = ""
+
     # ---- Impossible travel -------------------------------------------------
     impossible_kmh: float = 900.0
     """Faster than a commercial flight, so not one person moving."""

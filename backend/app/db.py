@@ -11,7 +11,11 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+import logging
+
 from app.config import get_settings
+
+log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -54,3 +58,36 @@ def init_db() -> None:
     import app.models  # noqa: F401  (registers the tables on Base)
 
     Base.metadata.create_all(engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """Add columns that exist on the models but not yet in the database.
+
+    create_all only creates missing tables, never alters existing ones, so
+    adding a field to a model would silently do nothing on an install that
+    already has data. This covers the only schema change SQLite makes easy,
+    which so far is all that has been needed. Anything harder than adding a
+    nullable column is the point to reach for a real migration tool.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            have = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in have:
+                    continue
+                if not column.nullable and column.default is None:
+                    log.warning(
+                        "Cannot add required column %s.%s automatically", table.name, column.name
+                    )
+                    continue
+                ddl = f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column.type.compile(engine.dialect)}"
+                conn.execute(text(ddl))
+                log.info("Added column %s.%s", table.name, column.name)

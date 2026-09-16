@@ -13,6 +13,7 @@ from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
+from app.integrations import arr
 from app.services import capabilities
 from app.services.sync import geocode_ips
 from app.settings_store import current, is_configured
@@ -267,13 +268,24 @@ def media_search(db: Db, q: str = Query(min_length=1), limit: int = Query(20, le
 
 
 @router.get("/media/{rating_key}")
-def media_detail(rating_key: int, db: Db) -> dict:
+async def media_detail(rating_key: int, db: Db) -> dict:
     item = db.get(MediaItem, rating_key)
     if item is None or item.title is None:
         raise HTTPException(404, "Not cached, or no longer in Plex")
+
+    links = _deep_links(item, current())
+
+    # Radarr and Sonarr link by slug, not by id, so this may need a lookup the
+    # first time a title is opened. The result is cached on the item.
+    service = arr.for_media_type(item.media_type)
+    if service.configured():
+        link = await service.link_for(item)
+        if link:
+            links[service.name] = link
+
     return {
         **{c.name: getattr(item, c.name) for c in MediaItem.__table__.columns},
-        "links": _deep_links(item, current()),
+        "links": links,
     }
 
 

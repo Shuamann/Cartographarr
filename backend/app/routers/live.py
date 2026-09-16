@@ -10,6 +10,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.actions import registry
+from app.integrations import arr
 from app.auth.deps import AdminUser
 from app.db import SessionLocal, session_scope
 from app.models import (
@@ -244,6 +245,38 @@ def enforcement_log(db: Db, limit: int = 100) -> list[dict]:
 async def run_rules_now(_: AdminUser) -> dict:
     """Evaluate rules immediately instead of waiting for the next sweep."""
     return await enforcer.run_once()
+
+
+# ---- integrations ----------------------------------------------------------
+
+INTEGRATIONS = {i.name: i for i in (arr.radarr, arr.sonarr)}
+
+
+@router.get("/integrations")
+async def list_integrations() -> list[dict]:
+    out = []
+    for integration in INTEGRATIONS.values():
+        health = await integration.health() if integration.configured() else None
+        out.append(
+            {
+                "name": integration.name,
+                "label": integration.label,
+                "configured": integration.configured(),
+                "ok": bool(health and health.ok),
+                "detail": health.detail if health else "Not set up",
+                "version": health.version if health else None,
+            }
+        )
+    return out
+
+
+@router.post("/integrations/{name}/test")
+async def test_integration(name: str, _: AdminUser) -> dict:
+    integration = INTEGRATIONS.get(name)
+    if integration is None:
+        raise HTTPException(404, f"No integration called {name!r}")
+    health = await integration.health()
+    return {"ok": health.ok, "detail": health.detail, "version": health.version}
 
 
 # ---- impossible travel -----------------------------------------------------

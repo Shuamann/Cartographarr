@@ -402,3 +402,12 @@ export type TravelFlag = {
   hosting_involved: boolean;
   status: "new" | "reviewed" | "ignored";
 };
+
+export type IntegrationStatus = {
+  name: string;
+  label: string;
+  configured: boolean;
+  ok: boolean;
+  detail: string;
+  version: string | null;
+};

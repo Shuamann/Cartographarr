@@ -135,6 +135,8 @@ class MediaItem(Base):
     imdb_id: Mapped[str | None] = mapped_column(String(32))
     tmdb_id: Mapped[str | None] = mapped_column(String(32))
     tvdb_id: Mapped[str | None] = mapped_column(String(32))
+    radarr_slug: Mapped[str | None] = mapped_column(String(255))
+    sonarr_slug: Mapped[str | None] = mapped_column(String(255))
     synced_at: Mapped[datetime | None] = mapped_column()
 
 
