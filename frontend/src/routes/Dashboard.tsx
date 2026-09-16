@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useApi, type Dashboard, type LiveSession } from "../lib/api";
+import { api, useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
+import { useIsAvailable } from "../components/Gated";
 import TravelFlags from "../components/TravelFlags";
 import FilterBar from "../components/FilterBar";
 import { toQuery, type FilterState } from "../lib/filters";
@@ -15,21 +16,31 @@ export default function DashboardRoute({
   onNavigate,
   isAdmin,
   onOpenUser,
+  onBlockDevice,
   filters,
   onFilters,
 }: {
   onNavigate: (tab: string) => void;
   isAdmin?: boolean;
   onOpenUser?: (userId: number) => void;
+  onBlockDevice?: (machineId: string, label: string) => void;
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
   const query = useMemo(() => toQuery(filters), [filters]);
   const data = useApi<Dashboard>(`/dashboard${query}`);
+  // Streams move faster than the rest of the page, and /dashboard is a much
+  // heavier query, so live activity gets its own quicker poll instead of
+  // dragging every count and chart along with it.
+  const activity = useApi<Activity>("/activity");
 
   useEffect(() => {
-    const timer = setInterval(data.reload, 15000);
-    return () => clearInterval(timer);
+    const slow = setInterval(data.reload, 15000);
+    const fast = setInterval(activity.reload, 5000);
+    return () => {
+      clearInterval(slow);
+      clearInterval(fast);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -37,7 +48,7 @@ export default function DashboardRoute({
   if (!data.data) return <div className="pad muted">Loading…</div>;
 
   const d = data.data;
-  const live = d.live;
+  const live = activity.data ?? d.live;
 
   return (
     <div className="dash-page">
@@ -54,14 +65,19 @@ export default function DashboardRoute({
 
       {live.error && <p className="note bad-note">{live.error}</p>}
 
-      <NowPlaying sessions={live.sessions} onOpen={() => onNavigate("Activity")} />
+      <NowPlaying
+        sessions={live.sessions}
+        transcoding={live.transcode_count}
+        onChanged={activity.reload}
+        onBlockDevice={onBlockDevice}
+        onOpenUser={onOpenUser}
+      />
 
       <section className="cards">
         <Card
-          big={live.stream_count}
+          big={live.stream_count ?? 0}
           label={live.stream_count === 1 ? "stream now" : "streams now"}
           sub={live.transcode_count ? `${live.transcode_count} transcoding` : "all direct"}
-          onClick={() => onNavigate("Activity")}
           accent
         />
         <Card
@@ -152,25 +168,42 @@ const VISIBLE = 4;
  * Collapsed to a single row when there are more than fit, because a busy
  * evening should not push the rest of the dashboard off the screen.
  */
+/* Every live stream, and everything you can do to one.
+ *
+ * This used to be a tab of its own. Splitting a handful of sessions across two
+ * screens meant the dashboard could only ever be a teaser for the real page,
+ * so the real page moved in here.
+ */
 function NowPlaying({
   sessions,
-  onOpen,
+  transcoding,
+  onChanged,
+  onBlockDevice,
+  onOpenUser,
 }: {
   sessions: LiveSession[];
-  onOpen: () => void;
+  transcoding: number | null;
+  onChanged: () => void;
+  onBlockDevice?: (machineId: string, label: string) => void;
+  onOpenUser?: (userId: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
 
   if (sessions.length === 0) {
     return (
       <section className="now-playing empty">
-        <p className="muted">Nothing streaming right now.</p>
+        <h2 className="section-head">Now playing</h2>
+        <p className="muted">
+          Nothing streaming right now. Sessions appear within a few seconds of playback starting.
+        </p>
       </section>
     );
   }
 
   const shown = expanded ? sessions : sessions.slice(0, VISIBLE);
   const hidden = sessions.length - shown.length;
+  const current = sessions.find((s) => s.session_key === open) ?? null;
 
   return (
     <section className="now-playing">
@@ -180,20 +213,25 @@ function NowPlaying({
           <span className="pill">{sessions.length}</span>
         </h2>
         <div className="row">
+          <span className="muted small">
+            {transcoding ? `${transcoding} transcoding` : "all direct play"}
+          </span>
           {sessions.length > VISIBLE && (
             <button className="tab" onClick={() => setExpanded(!expanded)}>
               {expanded ? "Show fewer" : `Show all ${sessions.length}`}
             </button>
           )}
-          <button className="tab" onClick={onOpen}>
-            Activity
-          </button>
         </div>
       </div>
 
       <div className="stream-strip">
         {shown.map((s) => (
-          <StreamCard key={s.session_key} session={s} onClick={onOpen} />
+          <StreamCard
+            key={s.session_key}
+            session={s}
+            selected={s.session_key === open}
+            onClick={() => setOpen(open === s.session_key ? null : s.session_key)}
+          />
         ))}
         {!expanded && hidden > 0 && (
           <button className="stream-card more" onClick={() => setExpanded(true)}>
@@ -202,16 +240,34 @@ function NowPlaying({
           </button>
         )}
       </div>
+
+      {current && (
+        <StreamDetail
+          session={current}
+          onClose={() => setOpen(null)}
+          onChanged={onChanged}
+          onBlockDevice={onBlockDevice}
+          onOpenUser={onOpenUser}
+        />
+      )}
     </section>
   );
 }
 
-function StreamCard({ session, onClick }: { session: LiveSession; onClick: () => void }) {
+function StreamCard({
+  session,
+  selected,
+  onClick,
+}: {
+  session: LiveSession;
+  selected: boolean;
+  onClick: () => void;
+}) {
   const progress = Math.min(Number(session.progress_percent ?? 0), 100);
   const who = session.friendly_name || session.username || "Unknown";
 
   return (
-    <button className="stream-card" onClick={onClick}>
+    <button className={selected ? "stream-card on" : "stream-card"} onClick={onClick}>
       {session.rating_key ? (
         <img
           className="stream-poster"
@@ -222,7 +278,6 @@ function StreamCard({ session, onClick }: { session: LiveSession; onClick: () =>
       ) : (
         <div className="stream-poster" />
       )}
-
       <span className="stream-body">
         <strong className="clip">{session.full_title}</strong>
         <span className="muted small clip">{who}</span>
@@ -238,6 +293,180 @@ function StreamCard({ session, onClick }: { session: LiveSession; onClick: () =>
         </span>
       </span>
     </button>
+  );
+}
+
+function StreamDetail({
+  session,
+  onClose,
+  onChanged,
+  onBlockDevice,
+  onOpenUser,
+}: {
+  session: LiveSession;
+  onClose: () => void;
+  onChanged: () => void;
+  onBlockDevice?: (machineId: string, label: string) => void;
+  onOpenUser?: (userId: number) => void;
+}) {
+  const [stopping, setStopping] = useState(false);
+  const who = session.friendly_name || session.username || "Unknown";
+  const where = session.geo
+    ? [session.geo.city, session.geo.region, session.geo.country].filter(Boolean).join(", ")
+    : session.ip_address;
+  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+
+  return (
+    <article className="stream-detail">
+      <div className="row-between">
+        <h3>{session.full_title}</h3>
+        <button className="icon-btn" onClick={onClose} aria-label="Close">
+          &times;
+        </button>
+      </div>
+
+      <dl className="kv">
+        <div>
+          <dt>Who</dt>
+          <dd>
+            {session.user_id && onOpenUser ? (
+              <button className="linkish" onClick={() => onOpenUser(session.user_id as number)}>
+                {who}
+              </button>
+            ) : (
+              who
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Device</dt>
+          <dd>
+            {session.player}
+            {session.platform ? ` (${session.platform})` : ""}
+          </dd>
+        </div>
+        <div>
+          <dt>Where</dt>
+          <dd>
+            {where}
+            {session.location && <span className="pill">{session.location}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>Playback</dt>
+          <dd>
+            {session.transcode_decision}
+            {session.video_full_resolution ? ` \u00b7 ${session.video_full_resolution}` : ""}
+            {session.state && <span className="pill">{session.state}</span>}
+          </dd>
+        </div>
+        <div>
+          <dt>Progress</dt>
+          <dd>{progress}%</dd>
+        </div>
+        {session.library_name && (
+          <div>
+            <dt>Library</dt>
+            <dd>{session.library_name}</dd>
+          </div>
+        )}
+      </dl>
+
+      {session.geo?.is_hosting && (
+        <p className="note warn-note">
+          Coming from {session.geo.asn_org}, which looks like a VPN or a hosting provider rather
+          than a home connection.
+        </p>
+      )}
+
+      <div className="progress">
+        <span className="progress-fill" style={{ width: `${progress}%` }} />
+      </div>
+
+      <div className="row">
+        <button className="btn" onClick={() => setStopping((v) => !v)}>
+          {stopping ? "Cancel" : "Stop stream"}
+        </button>
+        {onBlockDevice && session.machine_id && (
+          <button
+            className="btn"
+            onClick={() =>
+              onBlockDevice(
+                session.machine_id as string,
+                session.player || (session.machine_id as string).slice(0, 8),
+              )
+            }
+          >
+            Ban device
+          </button>
+        )}
+      </div>
+
+      {stopping && (
+        <StopForm
+          session={session}
+          onDone={() => {
+            setStopping(false);
+            onChanged();
+          }}
+        />
+      )}
+    </article>
+  );
+}
+
+const DEFAULT_MESSAGE = "This device is not permitted to stream. Contact the server owner.";
+
+function StopForm({ session, onDone }: { session: LiveSession; onDone: () => void }) {
+  const [message, setMessage] = useState(DEFAULT_MESSAGE);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const plexPass = useIsAvailable("plex_pass");
+
+  async function stop() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/activity/${session.session_key}/terminate`, { message });
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stop-form">
+      <label>
+        Message shown to the viewer
+        <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
+      </label>
+
+      {/* Plex composes the on-screen text itself; only the middle is ours.
+          Showing the whole thing avoids a round of "why does it say that". */}
+      <div className="preview">
+        <span className="preview-label">They will see</span>
+        <p>
+          <span className="fixed">
+            Your Plex account name asked to stop your playback from this server:{" "}
+          </span>
+          <span className="ours">{message}</span>
+          <span className="fixed"> {session.session_key}</span>
+        </p>
+        <small className="muted">
+          Only the highlighted part is editable. Plex adds the rest and it cannot be changed.
+        </small>
+      </div>
+
+      {error && <p className="note bad-note">{error}</p>}
+
+      <div className="row">
+        <button className="btn danger" onClick={stop} disabled={busy || !plexPass.ok}>
+          {busy ? "Stopping\u2026" : `Stop ${session.friendly_name || session.username}'s stream`}
+        </button>
+        {!plexPass.ok && <span className="muted small">{plexPass.reason}</span>}
+      </div>
+    </div>
   );
 }
 

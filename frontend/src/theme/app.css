@@ -1106,6 +1106,54 @@ label.locked .pill {
   gap: 0;
   border-style: dashed;
 }
+.stream-card.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Everything the old Activity tab showed, opened under the strip rather than
+ * on its own screen. */
+.stream-detail {
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.stream-detail h3 {
+  margin: 0;
+}
+.stream-detail .progress {
+  margin: 10px 0;
+}
+.stream-detail .stop-form {
+  margin-top: 12px;
+}
+
+/* Scoped to the detail panel: dl is used elsewhere for the map drawer stats,
+ * which want boxes rather than label-and-value rows. */
+.stream-detail .kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px 18px;
+  margin: 12px 0 0;
+}
+.stream-detail .kv > div {
+  min-width: 0;
+}
+.stream-detail .kv dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+.stream-detail .kv dd {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 
 .stream-poster {
   width: 48px;
@@ -1159,6 +1207,14 @@ label.locked .pill {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  cursor: grab;
+  touch-action: none;
+}
+.flyout.dragging {
+  user-select: none;
+}
+.flyout.dragging .flyout-head {
+  cursor: grabbing;
 }
 .flyout-head p {
   margin: 1px 0 0;
@@ -1353,4 +1409,51 @@ label.locked .pill {
 /* Briefly marks the section a stat tile jumped to. */
 .drawer h3.lit {
   color: var(--accent);
+}
+
+/* ---- settings layout --------------------------------------------------- */
+
+.settings {
+  max-width: 1100px;
+}
+
+.area {
+  margin: 0 0 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.area > header {
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.area > header h2 {
+  font-size: 16px;
+}
+.area > header p {
+  margin: 2px 0 0;
+}
+.area-body {
+  padding: 4px 18px 18px;
+}
+
+/* Each setting group inside an area, separated by a hairline rather than
+   another box, so the nesting stays one level deep. */
+.card-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.card-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+.card-section > h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.card-section > p {
+  margin: 0 0 12px;
+  max-width: 70ch;
 }

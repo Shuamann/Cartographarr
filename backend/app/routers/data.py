@@ -95,6 +95,11 @@ def map_points(filters: Filt, db: Db) -> dict:
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [row.lon, row.lat]},
             "properties": {
+                # Repeated from the geometry because MapLibre quantises a
+                # clicked feature's coordinates to the tile grid, and the
+                # detail lookup matches on the stored value exactly.
+                "lat": row.lat,
+                "lon": row.lon,
                 "city": row.city,
                 "region": row.region,
                 "country": row.country,
@@ -221,9 +226,14 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
         raise HTTPException(409, "Tautulli is not configured")
 
     art = item.poster_thumb
-    if art is None and item.media_type in ("episode", "season"):
-        # Cached before show posters were stored. Fetch the missing field once
-        # rather than making everyone resync years of metadata.
+    if (
+        item.media_type in ("episode", "season")
+        and item.grandparent_thumb is None
+        and item.parent_thumb is None
+    ):
+        # Cached before show posters were stored, so poster_thumb is falling
+        # back to the episode still. Fetch the missing field once rather than
+        # making everyone resync years of metadata.
         art = await _backfill_poster(item)
     if not art:
         raise HTTPException(404, "No artwork for that item")
@@ -268,12 +278,13 @@ async def _backfill_poster(item: MediaItem) -> str | None:
         await client.aclose()
 
     art = meta.get("grandparent_thumb") or meta.get("parent_thumb") or None
-    if art:
-        with session_scope() as db:
-            stored = db.get(MediaItem, item.rating_key)
-            if stored is not None:
-                stored.grandparent_thumb = meta.get("grandparent_thumb") or None
-                stored.parent_thumb = meta.get("parent_thumb") or None
+    # Written even when Plex has neither, as an empty string, so an item that
+    # genuinely has no show poster is not looked up again on every panel open.
+    with session_scope() as db:
+        stored = db.get(MediaItem, item.rating_key)
+        if stored is not None:
+            stored.grandparent_thumb = meta.get("grandparent_thumb") or ""
+            stored.parent_thumb = meta.get("parent_thumb") or ""
     return art or item.thumb
 
 

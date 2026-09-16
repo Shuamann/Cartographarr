@@ -119,6 +119,8 @@ export type MapPoint = {
   type: "Feature";
   geometry: { type: "Point"; coordinates: [number, number] };
   properties: {
+    lat: number;
+    lon: number;
     city: string | null;
     region: string | null;
     country: string | null;

@@ -231,8 +231,8 @@ export default function MapRoute({
         {selected && (
           <Drawer
             place={selected.properties}
-            lat={selected.geometry.coordinates[1]}
-            lon={selected.geometry.coordinates[0]}
+            lat={selected.properties.lat}
+            lon={selected.properties.lon}
             onClose={() => setSelected(null)}
             onOpenUser={onOpenUser}
             onFilterToTitle={(ratingKey, title) => {
@@ -949,11 +949,43 @@ function LiveFlyout({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Dragged by its header, because it opens over the pin it describes and
+  // that is exactly the part of the map you want to look at.
+  const [offset, setOffset] = useState({ dx: 0, dy: 0 });
+  const [dragging, setDragging] = useState(false);
+  const from = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
+
+  useEffect(() => setOffset({ dx: 0, dy: 0 }), [session.session_key]);
+
+  function startDrag(e: React.PointerEvent) {
+    // Let the close and action buttons keep their clicks.
+    if ((e.target as HTMLElement).closest("button")) return;
+    from.current = { x: e.clientX, y: e.clientY, dx: offset.dx, dy: offset.dy };
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function moveDrag(e: React.PointerEvent) {
+    const start = from.current;
+    if (!start) return;
+    setOffset({
+      dx: start.dx + e.clientX - start.x,
+      dy: start.dy + e.clientY - start.y,
+    });
+  }
+
+  function endDrag(e: React.PointerEvent) {
+    from.current = null;
+    setDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
   const who = session.friendly_name || session.username || "Unknown";
   const where = session.geo
     ? [session.geo.city, session.geo.region].filter(Boolean).join(", ")
     : session.ip_address;
   const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+  const moved = offset.dx !== 0 || offset.dy !== 0;
 
   async function stop() {
     setBusy(true);
@@ -972,12 +1004,30 @@ function LiveFlyout({
 
   return (
     <div
-      className={pinned ? "flyout pinned" : "flyout"}
-      style={{ left: x, top: y }}
-      onMouseLeave={pinned ? undefined : onClose}
+      className={[
+        "flyout",
+        // Once it has been moved it stays put: dragging something away only to
+        // have it close when the pointer leaves would be useless.
+        pinned || moved ? "pinned" : "",
+        dragging ? "dragging" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{
+        left: x,
+        top: y,
+        transform: `translate(calc(-50% + ${offset.dx}px), calc(-100% - 20px + ${offset.dy}px))`,
+      }}
+      onMouseLeave={pinned || moved || dragging ? undefined : onClose}
       role="dialog"
     >
-      <div className="flyout-head">
+      <div
+        className="flyout-head"
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         {session.rating_key && (
           <img
             className="stream-poster"

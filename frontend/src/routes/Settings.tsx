@@ -2,63 +2,112 @@ import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type IntegrationStatus, type Setting } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
 
-const SECTIONS: { title: string; note?: string; keys: string[] }[] = [
+type Section = { title: string; note?: string; keys: string[] };
+type Area = { area: string; blurb?: string; sections: Section[] };
+
+/* Grouped into areas rather than one long list, because the page covers four
+ * unrelated jobs: connecting to things, how it behaves, who gets in, and how
+ * it looks. */
+const AREAS: Area[] = [
   {
-    title: "Tautulli",
-    keys: ["tautulli_url", "tautulli_local_url", "tautulli_api_key", "tautulli_verify_ssl", "tautulli_timeout"],
+    area: "Connections",
+    blurb: "Where Cartographarr gets its data, and what it can link out to.",
+    sections: [
+      {
+        title: "Tautulli",
+        note: "Required. Everything except sharing goes through Tautulli.",
+        keys: [
+          "tautulli_url",
+          "tautulli_local_url",
+          "tautulli_api_key",
+          "tautulli_verify_ssl",
+          "tautulli_timeout",
+        ],
+      },
+      {
+        title: "Plex",
+        note: "The server id comes from Tautulli and enables the Plex link. A token is only needed to manage sharing.",
+        keys: ["plex_token", "plex_machine_identifier"],
+      },
+      {
+        title: "Map locations",
+        note: "A free MaxMind GeoLite2 account. Without it there are no map pins.",
+        keys: [
+          "maxmind_account_id",
+          "maxmind_license_key",
+          "geoip_auto_update",
+          "geoip_update_interval_days",
+        ],
+      },
+      {
+        title: "Radarr and Sonarr",
+        note: "Optional. Links a title straight to it. Films go to Radarr, anything episodic to Sonarr.",
+        keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
+      },
+      {
+        title: "Seerr",
+        note: "Optional. Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into.",
+        keys: ["seerr_url", "seerr_api_key"],
+      },
+      {
+        title: "Notifications",
+        note: "One Apprise URL per line or comma separated, covering Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
+        keys: ["apprise_urls", "webhook_url"],
+      },
+      {
+        title: "Artwork and monitoring",
+        note: "A TMDB key puts trending film art behind the sign-in page. The Uptime Kuma URL is pinged after each sync, monitoring the sync rather than just the container.",
+        keys: ["tmdb_api_key", "uptime_kuma_push_url"],
+      },
+    ],
   },
   {
-    title: "Plex",
-    note: "The server id is discovered from Tautulli and enables the Plex deep link. A token is only needed to manage sharing; everything else goes through Tautulli.",
-    keys: ["plex_token", "plex_machine_identifier"],
+    area: "Behaviour",
+    blurb: "How often it looks, and what it does when a rule matches.",
+    sections: [
+      {
+        title: "Syncing",
+        keys: [
+          "sync_interval_minutes",
+          "slow_sync_interval_minutes",
+          "sync_page_size",
+          "metadata_concurrency",
+        ],
+      },
+      {
+        title: "Shared account detection",
+        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: pairs are ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance.",
+        keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
+      },
+      {
+        title: "Rules and live activity",
+        note: "Dry run records what rules would have done without stopping anything. Turn it off once the enforcement log looks right.",
+        keys: [
+          "enforce_enabled",
+          "enforce_dry_run",
+          "enforce_cooldown_seconds",
+          "activity_poll_seconds",
+        ],
+      },
+    ],
   },
   {
-    title: "Map locations",
-    note: "A free MaxMind GeoLite2 account. Without it there are no map pins.",
-    keys: ["maxmind_account_id", "maxmind_license_key", "geoip_auto_update", "geoip_update_interval_days"],
-  },
-  {
-    title: "Syncing",
-    keys: ["sync_interval_minutes", "slow_sync_interval_minutes", "sync_page_size", "metadata_concurrency"],
-  },
-  {
-    title: "Rules and live activity",
-    note: "Dry run records what rules would have done without stopping anything. Turn it off once the enforcement log looks right.",
-    keys: ["enforce_enabled", "enforce_dry_run", "enforce_cooldown_seconds", "activity_poll_seconds"],
-  },
-  {
-    title: "Radarr and Sonarr",
-    note: "Optional. Adds a link from any title straight to it in Radarr or Sonarr. Films go to Radarr, anything episodic to Sonarr.",
-    keys: ["radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key"],
-  },
-  {
-    title: "Seerr",
-    note: "Optional. Shows who requested a title and links to it. Seerr is what Overseerr and Jellyseerr merged into; an older Overseerr should work too.",
-    keys: ["seerr_url", "seerr_api_key"],
-  },
-  {
-    title: "Branding",
-    note: "The name shown in the top bar, the browser tab and on the sign-in page.",
-    keys: ["app_name"],
-  },
-  {
-    title: "Artwork and monitoring",
-    note: "A free TMDB key puts trending film art behind the sign-in page. The Uptime Kuma push URL is pinged after each sync, which monitors the sync being alive rather than just the container.",
-    keys: ["tmdb_api_key", "uptime_kuma_push_url"],
-  },
-  {
-    title: "Notifications",
-    note: "Optional. One Apprise URL per line or comma separated, which covers Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Rules can then warn you instead of stopping a stream.",
-    keys: ["apprise_urls", "webhook_url"],
-  },
-  {
-    title: "Reverse proxy sign in",
-    note: "Only turn this on with an authenticating proxy in front. The header is honoured solely from the addresses listed here, otherwise anyone who can reach the app could claim to be anyone.",
-    keys: ["auth_proxy_enabled", "trusted_proxy_ips", "proxy_user_header", "proxy_email_header", "proxy_default_role"],
-  },
-  {
-    title: "Sessions",
-    keys: ["session_ttl_hours", "session_cookie_secure"],
+    area: "Access",
+    blurb: "Who can sign in, and how.",
+    sections: [
+      {
+        title: "Reverse proxy sign in",
+        note: "Only turn this on with an authenticating proxy in front. The header is honoured solely from the addresses listed here, otherwise anyone who can reach the app could claim to be anyone.",
+        keys: [
+          "auth_proxy_enabled",
+          "trusted_proxy_ips",
+          "proxy_user_header",
+          "proxy_email_header",
+          "proxy_default_role",
+        ],
+      },
+      { title: "Sessions", keys: ["session_ttl_hours", "session_cookie_secure"] },
+    ],
   },
 ];
 
@@ -98,6 +147,9 @@ const LABELS: Record<string, string> = {
   seerr_api_key: "Seerr API key",
   apprise_urls: "Apprise URLs",
   webhook_url: "Webhook URL",
+  impossible_kmh: "Flag faster than (km/h)",
+  impossible_min_km: "Ignore closer than (km)",
+  impossible_max_accuracy_km: "Ignore vaguer than (km)",
   session_ttl_hours: "Stay signed in for (hours)",
   session_cookie_secure: "Only send the cookie over HTTPS",
 };
@@ -112,12 +164,8 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
     );
   }
   return (
-    <div className="pad scroll">
+    <div className="pad scroll settings">
       <SettingsForm />
-      <BrandingImages />
-      <Integrations />
-      <Accounts />
-      <ChangePassword />
     </div>
   );
 }
@@ -232,14 +280,54 @@ function SettingsForm() {
 
       {error && <p className="note bad-note">{error}</p>}
 
-      {SECTIONS.map((section) => (
-        <section key={section.title}>
-          <h2 className="section-head">{section.title}</h2>
-          {section.note && <p className="muted small">{section.note}</p>}
-          <div className="grid2">{section.keys.map(field)}</div>
-        </section>
+      {AREAS.map((area) => (
+        <Area key={area.area} title={area.area} blurb={area.blurb}>
+          {area.sections.map((section) => (
+            <section key={section.title} className="card-section">
+              <h3>{section.title}</h3>
+              {section.note && <p className="muted small">{section.note}</p>}
+              <div className="grid2">{section.keys.map(field)}</div>
+            </section>
+          ))}
+          {area.area === "Connections" && <Integrations />}
+        </Area>
       ))}
+
+      <Area title="Appearance" blurb="The name and marks shown around the app.">
+        <section className="card-section">
+          <h3>Name</h3>
+          <div className="grid2">{field("app_name")}</div>
+        </section>
+        <BrandingImages />
+      </Area>
+
+      <Area title="Accounts" blurb="Who can sign in to Cartographarr.">
+        <Accounts />
+        <ChangePassword />
+      </Area>
     </>
+  );
+}
+
+/* One titled card per area, so the page reads as four jobs rather than one
+ * long list of unrelated switches. */
+function Area({
+  title,
+  blurb,
+  children,
+}: {
+  title: string;
+  blurb?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="area">
+      <header>
+        <h2>{title}</h2>
+        {blurb && <p className="muted small">{blurb}</p>}
+      </header>
+      <div className="area-body">{children}</div>
+    </section>
   );
 }
 
@@ -284,8 +372,8 @@ function BrandingImages() {
   }
 
   return (
-    <section>
-      <h2 className="section-head">Logos and icon</h2>
+    <section className="card-section">
+      <h3>Logos and icon</h3>
       <p className="muted small">
         Stored on the server rather than linked, so they keep working without depending on
         anywhere else. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB.
@@ -356,8 +444,8 @@ function Integrations() {
   }
 
   return (
-    <section>
-      <h2 className="section-head">Connections</h2>
+    <section className="card-section">
+      <h3>Reachability</h3>
       <div className="mini-list">
         {list.data?.map((i) => (
           <div key={i.name} className="mini">
@@ -427,9 +515,9 @@ function Accounts() {
   }
 
   return (
-    <section>
+    <section className="card-section">
       <div className="row-between">
-        <h2 className="section-head">Accounts</h2>
+        <h3>People</h3>
         <button className="btn" onClick={() => setAdding(!adding)}>
           {adding ? "Cancel" : "Add account"}
         </button>
@@ -530,8 +618,8 @@ function ChangePassword() {
   }
 
   return (
-    <section>
-      <h2 className="section-head">Your password</h2>
+    <section className="card-section">
+      <h3>Your password</h3>
       <div className="grid2">
         <label>
           Current password

@@ -10,7 +10,6 @@ import Setup from "./routes/Setup";
 // MapLibre is most of the bundle and the app opens on the dashboard, so the
 // map arrives only when someone asks for it.
 const Map = lazy(() => import("./routes/Map"));
-import Activity from "./routes/Activity";
 import History from "./routes/History";
 import Users from "./routes/Users";
 import Devices from "./routes/Devices";
@@ -22,7 +21,6 @@ import type { Device, Rule } from "./lib/api";
 const TABS = [
   "Dashboard",
   "Map",
-  "Activity",
   "History",
   "Users",
   "Devices",
@@ -148,6 +146,7 @@ function SignedIn({
                 onNavigate={(t) => setTab(t as Tab)}
                 isAdmin={isAdmin}
                 onOpenUser={openUser}
+                onBlockDevice={isAdmin ? blockMachine : undefined}
                 filters={filters}
                 onFilters={setFilters}
               />
@@ -161,7 +160,6 @@ function SignedIn({
                 onFilters={setFilters}
               />
             )}
-            {active === "Activity" && <Activity />}
             {active === "History" && (
               <History onOpenUser={openUser} filters={filters} onFilters={setFilters} />
             )}
