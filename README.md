@@ -150,6 +150,39 @@ A play left paused keeps its session open for hours or days. Signals measure
 from when a play was last watched, not when the session closed, so pausing on
 a phone and later watching on the TV does not count.
 
+## Monitoring
+
+Uptime Kuma: give Settings a push monitor URL and every sync pings it, so
+the monitor watches the sync, not just the container.
+
+Prometheus and dashboard tiles: set a metrics token in Settings. That
+switches on:
+
+- `/metrics`, Prometheus text format
+- `/api/summary`, one JSON object for Homepage's custom API widget or Homarr
+
+Send the token as `Authorization: Bearer <token>` or `?token=<token>`. Both
+return counts only: streams, transcodes, plays, users, devices, unreviewed
+devices, open signals, bans, rules and the last sync time. Nothing that
+names a person, an address or a title.
+
+A Homepage tile:
+
+```yaml
+- Cartographarr:
+    href: https://cartographarr.example.com
+    widget:
+      type: customapi
+      url: http://cartographarr:6277/api/summary?token=YOUR_TOKEN
+      mappings:
+        - field: streams
+          label: Streams
+        - field: devices_unreviewed
+          label: New devices
+        - field: signals_open
+          label: Signals
+```
+
 ## A note on locations
 
 An IP address gives you a city, never an address. GeoLite2 reports its own

@@ -540,6 +540,10 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
         "ips": ips,
         "travel_flags": flags,
     }
+    with session_scope() as session:
+        # For monitoring: a container that is up but has not synced in hours
+        # looks healthy to everything else.
+        _set_state(session, "last_sync_at", str(int(datetime.now(UTC).timestamp())))
     await _heartbeat(result)
     return result
 

@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     """Seerr, the project Overseerr and Jellyseerr merged into. An older
     Overseerr instance should work too, the API shape is inherited."""
 
+    metrics_token: str = ""
+    """Turns on /metrics (Prometheus) and /api/summary (Homepage, Homarr), and
+    is the token they must be sent with. Empty leaves both switched off. They
+    carry counts only, never names, addresses or titles."""
+
     apprise_urls: str = ""
     """Where notifications go. One Apprise URL per line or comma separated, so
     one setting covers Discord, ntfy, Gotify, Pushover, Telegram, email and the

@@ -116,6 +116,11 @@ const AREAS: Area[] = [
         guess: { key: "uptime_kuma_push_url", port: 3001, slug: "uptime", path: "/api/push/" },
         keys: ["uptime_kuma_push_url"],
       },
+      {
+        title: "Prometheus and dashboard tiles",
+        note: "Set a token to switch on /metrics for Prometheus and /api/summary for Homepage or Homarr tiles. Send the token as a bearer token, or as ?token= on the URL. Both carry counts only (streams, plays, devices, signals, bans, last sync), never names, addresses or titles. Leave empty to keep them off.",
+        keys: ["metrics_token"],
+      },
     ],
   },
   {
@@ -242,6 +247,7 @@ const LABELS: Record<string, string> = {
   seerr_api_key: "API key",
   apprise_urls: "Apprise URLs",
   webhook_url: "Webhook URL",
+  metrics_token: "Metrics token",
   impossible_kmh: "Flag faster than (km/h)",
   impossible_min_km: "Ignore closer than (km)",
   impossible_max_accuracy_km: "Ignore vaguer than (km)",
