@@ -41,6 +41,24 @@ ALLOWED = {
 MAX_BYTES = 4 * 1024 * 1024
 
 
+def _looks_like(suffix: str, body: bytes) -> bool:
+    head = body[:512]
+    if suffix == ".png":
+        return head.startswith(b"\x89PNG\r\n\x1a\n")
+    if suffix == ".jpg":
+        return head.startswith(b"\xff\xd8\xff")
+    if suffix == ".gif":
+        return head.startswith((b"GIF87a", b"GIF89a"))
+    if suffix == ".webp":
+        return head[:4] == b"RIFF" and head[8:12] == b"WEBP"
+    if suffix == ".ico":
+        return head[:4] == b"\x00\x00\x01\x00"
+    if suffix == ".svg":
+        text = body[:4096].decode("utf-8", errors="ignore").lower()
+        return "<svg" in text
+    return False
+
+
 def branding_dir() -> Path:
     path = current().data_dir / "branding"
     path.mkdir(parents=True, exist_ok=True)
@@ -69,8 +87,16 @@ def get_branding(kind: str):
     if path is None:
         raise HTTPException(404, "Not set")
     # Short cache: a logo changes rarely, but when it does the change should
-    # show up without anyone being told to hard refresh.
-    return FileResponse(path, headers={"Cache-Control": "public, max-age=300"})
+    # show up without anyone being told to hard refresh. Sandboxed, so an SVG
+    # opened directly cannot run script as this site; as an <img> it never can.
+    return FileResponse(
+        path,
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.put("/{kind}")
@@ -89,6 +115,9 @@ async def put_branding(kind: str, admin: AdminUser, file: UploadFile) -> dict:
         raise HTTPException(400, f"Too large. Keep it under {MAX_BYTES // 1024 // 1024} MB.")
     if not body:
         raise HTTPException(400, "That file is empty")
+    # The browser's label is whatever it says; check the file is what it claims.
+    if not _looks_like(suffix, body):
+        raise HTTPException(400, "That file is not the image type it claims to be")
 
     # Replace rather than accumulate: one file per mark, whatever its type.
     for existing in branding_dir().glob(f"{kind}.*"):

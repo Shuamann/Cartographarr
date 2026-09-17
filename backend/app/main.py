@@ -138,6 +138,23 @@ app = FastAPI(
 )
 
 
+_ALLOW_FRAMING = os.environ.get("ALLOW_FRAMING", "").lower() in ("1", "true", "yes")
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """Headers every response gets. No framing by other sites (clickjacking a
+    Ban or Unshare button), unless ALLOW_FRAMING=true for dashboards such as
+    Organizr that show apps in a frame; no guessing content types; and no
+    leaking page addresses to other sites."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    if not _ALLOW_FRAMING:
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    return response
+
+
 @app.middleware("http")
 async def refuse_cross_site_writes(request, call_next):
     """No other website can make a signed-in browser change anything here.

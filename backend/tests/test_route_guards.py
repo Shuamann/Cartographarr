@@ -93,3 +93,22 @@ def test_cross_site_writes_are_refused(client):
     assert client.request("DELETE", "/api/bans/x").status_code == 200
     # Reading is unaffected.
     assert client.get("/api/bans", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
+
+
+
+def test_security_headers(client):
+    res = client.get("/health")
+    assert res.headers["X-Content-Type-Options"] == "nosniff"
+    assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert res.headers["Referrer-Policy"] == "same-origin"
+
+
+def test_branding_uploads_are_checked_and_sandboxed(client):
+    claim(client)
+    fake = client.put("/api/branding/logo", files={"file": ("logo.png", b"<html><script>alert(1)</script>", "image/png")})
+    assert fake.status_code == 400
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    assert client.put("/api/branding/logo", files={"file": ("logo.svg", svg, "image/svg+xml")}).status_code == 200
+    served = client.get("/api/branding/logo")
+    assert "sandbox" in served.headers["Content-Security-Policy"]
+    client.delete("/api/branding/logo")
