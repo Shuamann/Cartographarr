@@ -180,6 +180,11 @@ _static = _static_dir()
 if _static is not None:
     # Mounted last so every /api route still wins. html=True sends index.html
     # for unknown paths, which is what a client-side app needs.
+    # The map loads module workers (.mjs), which browsers refuse unless served
+    # as JavaScript. Slim container images have no mime.types to say so.
+    import mimetypes
+
+    mimetypes.add_type("text/javascript", ".mjs")
     app.mount("/", StaticFiles(directory=_static, html=True), name="ui")
 else:
     log.info("No built frontend found; serving API only")
