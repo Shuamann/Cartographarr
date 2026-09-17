@@ -211,3 +211,44 @@ async def sync_run(admin: AdminUser, full: bool = False) -> dict:
         finally:
             await client.aclose()
     return {**slow, **main}
+
+
+# ---- background tasks ----------------------------------------------------------------------
+
+@router.get("/tasks")
+def list_tasks() -> list[dict]:
+    from app import tasks
+
+    return tasks.describe()
+
+
+@router.get("/tasks/{key}/runs")
+def task_runs(key: str, limit: int = 50) -> list[dict]:
+    from app import tasks
+    from app.models import TaskRun
+
+    if key not in tasks.TASKS:
+        raise HTTPException(404, "No such task")
+    with session_scope() as db:
+        rows = db.execute(
+            select(TaskRun).where(TaskRun.task == key).order_by(TaskRun.id.desc()).limit(min(limit, 100))
+        ).scalars().all()
+        return [
+            {"id": r.id, "started_at": r.started_at.isoformat() if r.started_at else None, "duration_ms": r.duration_ms,
+             "status": r.status, "message": r.message, "trigger": r.trigger}
+            for r in rows
+        ]
+
+
+@router.post("/tasks/{key}/run")
+async def run_task(key: str, admin: AdminUser) -> dict:
+    """Start a task now, in the background. The page follows its status."""
+    from app import tasks
+
+    if key not in tasks.TASKS:
+        raise HTTPException(404, "No such task")
+    if tasks.TASKS[key].running:
+        raise HTTPException(409, "It is running already")
+    asyncio.get_running_loop().create_task(tasks.run(key, trigger="manual"))
+    audit.record(admin, "task.run", f"Ran {tasks.TASKS[key].name} by hand", target=key)
+    return {"started": True}

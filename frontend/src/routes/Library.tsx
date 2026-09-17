@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
@@ -740,7 +740,7 @@ function ArrActions({
     <div className="arr-actions">
       <div className="row wrap">
         <button className="btn primary" onClick={() => setPicking(!picking)} disabled={!arr.configured} title={why}>
-          {picking ? "Hide releases" : "Find a replacement"}
+          Find a replacement
         </button>
         <button className="btn" onClick={() => run("search")} disabled={!arr.configured || busy !== null} title={why}>
           {busy === "search" ? "Asking\u2026" : `Let ${arr.label} search by itself`}
@@ -751,7 +751,7 @@ function ArrActions({
       </div>
       {!arr.configured && <p className="muted small">{why}.</p>}
       {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
-      {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} />}
+      {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} onClose={() => setPicking(false)} />}
     </div>
   )
 }
@@ -768,6 +768,7 @@ type Release = {
   quality: string | null;
   languages: string[];
   custom_format_score: number | null;
+  custom_formats?: string[];
   estimated_bitrate: number | null;
   parsed: Parsed;
   fixes: string[];
@@ -857,26 +858,55 @@ function ago(iso: string | null | undefined): string {
 
 const CHANNELS: Record<number, string> = { 2: "stereo", 6: "5.1", 8: "7.1" };
 
-function describeParsed(p: Parsed | undefined): string {
-  if (!p) return "";
-  return [
-    p.resolution,
-    p.video_codec?.toUpperCase(),
-    p.bit_depth ? `${p.bit_depth}-bit` : null,
-    p.hdr,
-    p.audio_codec ? `${p.audio_codec.toUpperCase()}${p.audio_channels ? ` ${CHANNELS[p.audio_channels] ?? ""}` : ""}` : null,
-    p.source,
-  ]
-    .filter(Boolean)
-    .join(" \u00b7 ");
-}
+/* Releases Radarr or Sonarr can find, each against the current file, in a
+ * pop-up over a dimmed page. One compact row each, sortable by any column. */
+type SortKey = "rank" | "fixes" | "held" | "quality" | "score" | "size" | "bitrate" | "video" | "audio" | "seeders" | "age";
 
-/* Releases Radarr or Sonarr can find, each against the current file. */
-function ReleasePicker({ ratingKey, label, title }: { ratingKey: number; label: string; title: string }) {
+const SORTS: Record<SortKey, (r: Release) => number | string> = {
+  rank: () => 0,
+  fixes: (r) => r.fixes.length,
+  held: (r) => (r.held ? 1 : 0),
+  quality: (r) => r.quality ?? "",
+  score: (r) => r.custom_format_score ?? -1e9,
+  size: (r) => r.size ?? 0,
+  bitrate: (r) => r.estimated_bitrate ?? 0,
+  video: (r) => `${r.parsed.video_codec ?? ""}${r.parsed.hdr ?? ""}`,
+  audio: (r) => `${r.parsed.audio_codec ?? ""}${r.parsed.audio_channels ?? ""}`,
+  seeders: (r) => r.seeders ?? -1,
+  age: (r) => r.age_days ?? 1e9,
+};
+
+function ReleasePicker({
+  ratingKey,
+  label,
+  title,
+  onClose,
+}: {
+  ratingKey: number;
+  label: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
   const found = useApi<{ service: string; current: FileInfo; releases: Release[] }>(`/library/file/${ratingKey}/releases`);
-  const [showAll, setShowAll] = useState(false);
+  const [sort, setSort] = useState<SortKey>("rank");
+  const [ascending, setAscending] = useState(false);
+  const [hideBlocked, setHideBlocked] = useState(true);
   const [queued, setQueued] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+
+  function sortBy(key: SortKey) {
+    if (sort === key) setAscending(!ascending);
+    else {
+      setSort(key);
+      // Smaller is better for age; bigger for the rest.
+      setAscending(key === "age" || key === "quality");
+    }
+  }
 
   async function queue(release: Release) {
     const how = release.held
@@ -892,76 +922,142 @@ function ReleasePicker({ ratingKey, label, title }: { ratingKey: number; label: 
     }
   }
 
-  if (found.error) return <p className="note bad-note">{found.error}</p>;
-  if (!found.data)
-    return (
-      <Loading
-        label={`Asking ${label} to search the indexers`}
-        slowHint="A live search across every indexer, which often takes half a minute or more."
-      />
-    );
-  const releases = found.data.releases;
-  const shown = showAll ? releases : releases.slice(0, 12);
+  const all = found.data?.releases ?? [];
+  const blockedCount = all.filter((r) => r.blocked).length;
+  const visible = all.filter((r) => !hideBlocked || !r.blocked);
+  const rows =
+    sort === "rank"
+      ? visible
+      : [...visible].sort((a, b) => {
+          const [x, y] = [SORTS[sort](a), SORTS[sort](b)];
+          const cmp = typeof x === "string" ? x.localeCompare(String(y)) : x - (y as number);
+          return ascending ? cmp : -cmp;
+        });
+
+  const head = (key: SortKey, text: string, hint?: string) => (
+    <th className={key === "rank" ? undefined : "sortable"} title={hint} onClick={() => sortBy(key)} aria-sort={sort === key ? (ascending ? "ascending" : "descending") : "none"}>
+      {text}
+      {sort === key ? (ascending ? " \u25b2" : " \u25bc") : ""}
+    </th>
+  );
+
   return (
-    <div className="release-picker">
-      <p className="small">
-        <span className="muted">Current file: </span>
-        {format(found.data.current)}
-        {found.data.current.file_size ? ` \u00b7 ${size(found.data.current.file_size)}` : ""}
-        {found.data.current.file_bitrate ? ` \u00b7 ${mbps(found.data.current.file_bitrate)}` : ""}
-      </p>
+    <dialog ref={ref} className="dialog wide" onClose={onClose} aria-labelledby="release-picker-title">
+      <div className="row-between dialog-head">
+        <div className="min0">
+          <h2 id="release-picker-title">Replace {title}</h2>
+          {found.data && (
+            <p className="muted small">
+              Current file: {format(found.data.current)}
+              {found.data.current.file_size ? ` \u00b7 ${size(found.data.current.file_size)}` : ""}
+              {found.data.current.file_bitrate ? ` \u00b7 ${mbps(found.data.current.file_bitrate)}` : ""}
+            </p>
+          )}
+        </div>
+        <button className="icon-btn" onClick={() => ref.current?.close()} aria-label="Close">
+          &times;
+        </button>
+      </div>
+
+      {found.error && <p className="note bad-note">{found.error}</p>}
+      {!found.data && !found.error && (
+        <Loading
+          label={`Asking ${label} to search the indexers`}
+          slowHint="A live search across every indexer, which often takes half a minute or more."
+        />
+      )}
       {queued && <p className="note ok-note">Queued. Follow it in Library, Replacements.</p>}
       {error && <p className="note bad-note">{error}</p>}
-      {releases.length === 0 && <p className="muted">No releases found.</p>}
-      <div className="mini-list">
-        {shown.map((r) => (
-          <div key={r.guid} className={r.blocked ? "release blocked" : "release"}>
-            <div className="min0">
-              <p className="release-title">{r.title}</p>
-              <div className="row wrap file-badges">
-                {r.held ? (
-                  <span className="pill ok" title="Not an upgrade by your quality profile, so it is held for you">
-                    Waits for you
-                  </span>
-                ) : (
-                  <span className="pill warn" title="Rated an upgrade, so it imports as soon as it downloads">
-                    Imports straight away
-                  </span>
-                )}
-                {r.fixes.map((f) => (
-                  <span key={f} className="pill ok">
-                    {f}
-                  </span>
-                ))}
-              </div>
-              <p className="muted small">
-                {[
-                  r.quality,
-                  describeParsed(r.parsed),
-                  size(r.size),
-                  r.estimated_bitrate ? `about ${mbps(r.estimated_bitrate)}` : null,
-                  r.languages.length ? r.languages.join(", ") : null,
-                  r.seeders != null ? `${r.seeders} seeders` : null,
-                  r.age_days != null ? `${r.age_days} days old` : null,
-                  r.indexer,
-                ]
-                  .filter(Boolean)
-                  .join(" \u00b7 ")}
-              </p>
-              {r.rejections.length > 0 && <p className="muted small">{label} says: {r.rejections.join("; ")}</p>}
-            </div>
-            <button className="btn" onClick={() => queue(r)} disabled={queued !== null}>
-              {queued === r.guid ? "Queued" : "Download"}
-            </button>
+
+      {found.data && (
+        <>
+          <div className="row-between release-toolbar">
+            <span className="muted small">
+              {visible.length} of {all.length} releases. <span className="pill ok">Waits</span> means it is held for you to
+              confirm; <span className="pill warn">Auto</span> means {label} imports it by itself.
+            </span>
+            {blockedCount > 0 && (
+              <label className="check small">
+                <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
+                Hide {blockedCount} {label} would refuse
+              </label>
+            )}
           </div>
-        ))}
-      </div>
-      {releases.length > shown.length && (
-        <button className="tab" onClick={() => setShowAll(true)}>
-          Show all {releases.length}
-        </button>
+          {rows.length === 0 ? (
+            <p className="muted">No releases found.</p>
+          ) : (
+            <div className="release-table-wrap">
+              <table className="table release-table">
+                <thead>
+                  <tr>
+                    {head("fixes", "Fixes", "Problems with the current file this release would likely fix")}
+                    <th>Release</th>
+                    {head("held", "Import", "Whether it waits for you or imports by itself")}
+                    {head("quality", "Quality")}
+                    {head("score", "Score", `${label}'s custom format score`)}
+                    {head("size", "Size")}
+                    {head("bitrate", "Mbps", "Estimated from size and running time")}
+                    {head("video", "Video")}
+                    {head("audio", "Audio")}
+                    {head("seeders", "Peers")}
+                    {head("age", "Age")}
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.guid} className={r.blocked ? "blocked" : undefined}>
+                      <td>
+                        {r.fixes.length > 0 ? (
+                          <span className="pill ok" title={r.fixes.join("\n")}>
+                            {r.fixes.length === 1 ? r.fixes[0] : `${r.fixes.length} fixes`}
+                          </span>
+                        ) : (
+                          <span className="muted">none</span>
+                        )}
+                      </td>
+                      <td className="release-name" title={[r.title, r.indexer, ...r.rejections].filter(Boolean).join("\n")}>
+                        <span className="clip">{r.title}</span>
+                        {r.languages.length > 0 && r.languages.join(",") !== "English" && (
+                          <span className="muted"> {r.languages.join(", ")}</span>
+                        )}
+                        {r.blocked && <span className="danger-text"> {r.rejections.join("; ")}</span>}
+                      </td>
+                      <td>
+                        {r.held ? <span className="pill ok">Waits</span> : <span className="pill warn">Auto</span>}
+                      </td>
+                      <td>{r.quality ?? ""}</td>
+                      <td className="num" title={r.custom_formats?.join("\n") || undefined}>
+                        {r.custom_format_score ?? ""}
+                      </td>
+                      <td className="num">{size(r.size)}</td>
+                      <td className="num">{r.estimated_bitrate ? (r.estimated_bitrate / 1000).toFixed(1) : ""}</td>
+                      <td>
+                        {[r.parsed.video_codec?.toUpperCase(), r.parsed.bit_depth ? `${r.parsed.bit_depth}b` : null, r.parsed.hdr]
+                          .filter(Boolean)
+                          .join(" ")}
+                      </td>
+                      <td>
+                        {r.parsed.audio_codec
+                          ? `${r.parsed.audio_codec.toUpperCase()}${r.parsed.audio_channels ? ` ${CHANNELS[r.parsed.audio_channels] ?? ""}` : ""}`
+                          : ""}
+                      </td>
+                      <td className="num">{r.seeders ?? ""}</td>
+                      <td className="num">{r.age_days != null ? `${r.age_days}d` : ""}</td>
+                      <td>
+                        <button className="btn small-btn" onClick={() => queue(r)} disabled={queued !== null}>
+                          {queued === r.guid ? "Queued" : "Get"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
-    </div>
+    </dialog>
   );
 }
 
@@ -985,30 +1081,74 @@ const REPLACEMENT_STATUS: Record<Replacement["status"], { label: string; tone: s
   failed: { label: "Failed", tone: "pill bad" },
 };
 
+const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
+
 function Replacements() {
   const list = useApi<Replacement[]>("/library/replacements");
-  const active = (list.data ?? []).some((r) => ["queued", "downloading", "ready", "importing"].includes(r.status));
+  const [tab, setTab] = useState<"active" | "history">("active");
+  const rows = list.data ?? [];
+  const current = rows.filter((r) => ACTIVE_STATUSES.includes(r.status));
+  const past = rows.filter((r) => !ACTIVE_STATUSES.includes(r.status));
   useEffect(() => {
-    if (!active) return;
+    if (current.length === 0) return;
     const timer = setInterval(list.reload, 15000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [current.length]);
   if (list.error) return <p className="note bad-note">{list.error}</p>;
   if (!list.data) return <Loading label="Reading replacements" />;
+  const shown = tab === "active" ? current : past;
   return (
     <>
-      <p className="muted">
-        Releases you chose to replace a file with. Radarr and Sonarr import an upgrade by themselves; anything else waits
-        here once downloaded, beside the current file, for you to confirm or deny.
-      </p>
-      {list.data.length === 0 && <p className="muted">Nothing yet. Open a file in any list and choose Find a replacement.</p>}
+      <div className="row-between">
+        <p className="muted">
+          Radarr and Sonarr import an upgrade by themselves; anything else waits here once downloaded, beside the current
+          file, for you to confirm or deny. Finished ones move to History.
+        </p>
+        <div className="segmented">
+          <button className={tab === "active" ? "seg on" : "seg"} onClick={() => setTab("active")}>
+            Active {current.length}
+          </button>
+          <button className={tab === "history" ? "seg on" : "seg"} onClick={() => setTab("history")}>
+            History {past.length}
+          </button>
+        </div>
+      </div>
+      {shown.length === 0 && (
+        <p className="muted">
+          {tab === "active"
+            ? "Nothing in progress. Open a file in any list and choose Find a replacement."
+            : "Nothing finished yet."}
+        </p>
+      )}
       <div className="mini-list">
-        {list.data.map((r) => (
-          <ReplacementRow key={r.id} r={r} onChanged={list.reload} />
-        ))}
+        {shown.map((r) =>
+          tab === "active" ? <ReplacementRow key={r.id} r={r} onChanged={list.reload} /> : <PastReplacement key={r.id} r={r} />,
+        )}
       </div>
     </>
+  );
+}
+
+/* A finished replacement, one line, opening to its comparison. */
+function PastReplacement({ r }: { r: Replacement }) {
+  const [open, setOpen] = useState(false);
+  const status = REPLACEMENT_STATUS[r.status];
+  return (
+    <div>
+      <button className={open ? "mini mini-button on" : "mini mini-button"} onClick={() => setOpen(!open)} aria-expanded={open}>
+        <div className="min0">
+          <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
+          <p className="muted small release-title">{r.release?.title}</p>
+          {r.status === "failed" && r.message && <p className="small danger-text">{r.message}</p>}
+        </div>
+        <span className="muted small">
+          {r.updated_at ? new Date(/[zZ]|[+-]\d\d:\d\d$/.test(r.updated_at) ? r.updated_at : `${r.updated_at}Z`).toLocaleDateString() : ""}
+          {r.resolved_by ? ` \u00b7 ${r.resolved_by}` : ""}
+        </span>
+      </button>
+      {open && <ReplacementRow r={r} onChanged={() => undefined} />}
+    </div>
   );
 }
 

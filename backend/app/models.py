@@ -601,6 +601,21 @@ class Replacement(Base):
     checked_at: Mapped[datetime | None] = mapped_column()
 
 
+class TaskRun(Base):
+    """One run of a background task, for Settings, Tasks. See app/tasks.py."""
+
+    __tablename__ = "task_runs"
+    __table_args__ = (Index("ix_task_runs_task", "task", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task: Mapped[str] = mapped_column(String(32))
+    started_at: Mapped[datetime | None] = mapped_column()
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))  # ok, failed, skipped
+    message: Mapped[str | None] = mapped_column(Text)
+    trigger: Mapped[str | None] = mapped_column(String(16))  # schedule, manual, startup
+
+
 class SavedReport(Base):
     """A report someone saved from the Reports tab. The spec is what the
     builder sends: source, measure, group, split, range and filters."""

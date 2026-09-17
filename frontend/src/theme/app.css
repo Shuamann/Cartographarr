@@ -2254,6 +2254,57 @@ label.locked .pill {
   margin-top: 10px;
 }
 
+.dialog.wide {
+  width: min(1240px, calc(100% - 32px));
+  max-height: 88vh;
+  overflow: auto;
+}
+.dialog-head {
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.release-toolbar {
+  gap: 12px;
+  margin: 6px 0 8px;
+}
+.release-toolbar .check {
+  margin: 0;
+  white-space: nowrap;
+}
+.release-table-wrap {
+  overflow-x: auto;
+}
+.release-table {
+  font-size: 12px;
+}
+.release-table th,
+.release-table td {
+  padding: 5px 7px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.release-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.release-table th.sortable:hover {
+  color: var(--ink);
+}
+.release-table td.release-name {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.release-table tr.blocked td {
+  opacity: 0.55;
+}
+.small-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .release-picker {
   margin-top: 12px;
 }
@@ -2292,6 +2343,41 @@ label.locked .pill {
   height: 100%;
   background: var(--accent);
 }
+.task-row {
+  cursor: pointer;
+}
+.table.tasks th,
+.table.tasks td:not(:first-child) {
+  white-space: nowrap;
+}
+.table.tasks td:first-child {
+  min-width: 260px;
+}
+.task-row:hover td {
+  background: var(--surface-2);
+}
+.task-runs {
+  padding: 6px 4px 10px;
+}
+.task-run {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.task-run p {
+  margin: 4px 0 0;
+}
+.task-error {
+  max-height: 220px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--danger);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 .steps {
   display: flex;
   gap: 4px;
@@ -2426,7 +2512,8 @@ label.locked .pill {
   box-shadow: var(--shadow);
 }
 .dialog::backdrop {
-  background: rgb(0 0 0 / 0.45);
+  background: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(2px);
 }
 .dialog h2 {
   margin-bottom: 6px;

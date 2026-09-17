@@ -1,3 +1,4 @@
+import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
@@ -229,6 +230,7 @@ const PAGES: Page[] = [
   })),
   { id: "appearance", title: "Appearance", group: "Cartographarr", blurb: "The name and marks shown around the app.", keys: ["app_name"] },
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
+  { id: "tasks", title: "Tasks", group: "Cartographarr", blurb: "Background jobs: how often each runs, how the last run went, and any errors. Open one for its recent runs." },
 ];
 
 /* URLs that carry a credential. The server sends them with the secret parts
@@ -601,6 +603,8 @@ function SettingsForm() {
             <BrandingImages />
           </>
         )}
+
+        {current.id === "tasks" && <Tasks />}
 
         {current.id === "accounts" && (
           <>

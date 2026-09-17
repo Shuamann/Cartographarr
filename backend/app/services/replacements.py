@@ -149,6 +149,7 @@ def compare_releases(
             "quality": ((r.get("quality") or {}).get("quality") or {}).get("name"),
             "languages": [lang.get("name") for lang in r.get("languages") or [] if isinstance(lang, dict)],
             "custom_format_score": r.get("customFormatScore"),
+            "custom_formats": [cf.get("name") for cf in r.get("customFormats") or [] if isinstance(cf, dict) and cf.get("name")],
             "estimated_bitrate": estimated_bitrate(r.get("size"), duration_ms),
             "parsed": parsed,
             "fixes": fixes(current, parsed, duration_ms, threshold_kbps),

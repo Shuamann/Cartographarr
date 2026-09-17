@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
-from app import redact
+from app import redact, tasks
 from app.routers import admin, auth, branding, data, library, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
@@ -26,54 +26,72 @@ from app.tautulli.client import TautulliClient
 log = logging.getLogger(__name__)
 
 
-async def _cycle(full: bool = False) -> None:
-    # A fresh install has no credentials until someone completes setup. Skip
-    # quietly rather than logging a stack trace every five minutes.
+async def _cycle(full: bool = False) -> dict:
+    # A fresh install has no credentials until someone completes setup.
     if not is_configured():
-        return
+        raise tasks.Skipped("Not set up yet")
     settings = current()
     client = TautulliClient(settings)
     try:
-        await sync_service.run_sync(client, settings, full=full)
-    except Exception:
-        log.exception("sync cycle failed")
+        return await sync_service.run_sync(client, settings, full=full)
     finally:
         await client.aclose()
 
 
-async def _enforce_cycle() -> None:
-    try:
-        await enforcer.run_once()
-    except Exception:
-        log.exception("enforcement sweep failed")
+async def _enforce_cycle() -> dict:
+    return await enforcer.run_once()
 
 
 async def _capability_cycle() -> None:
-    try:
-        await capabilities.refresh()
-    except Exception:
-        log.exception("capability probe failed")
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
+    await capabilities.refresh()
 
 
-async def _replacement_cycle() -> None:
+async def _replacement_cycle() -> str:
     from app.services import replacements
 
-    try:
-        await replacements.poll()
-    except Exception:
-        log.exception("replacement follow-up failed")
+    changed = await replacements.poll()
+    return f"{changed} changed" if changed else "nothing to update"
 
 
-async def _slow_cycle() -> None:
+async def _slow_cycle() -> dict:
     if not is_configured():
-        return
+        raise tasks.Skipped("Not set up yet")
     client = TautulliClient(current())
     try:
-        await sync_service.run_slow_sync(client)
-    except Exception:
-        log.exception("slow sync cycle failed")
+        return await sync_service.run_slow_sync(client)
     finally:
         await client.aclose()
+
+
+tasks.register(tasks.Task(
+    "sync", "Sync history", "New plays, titles, file details, devices, locations, sharing signals and stall causes.",
+    _cycle, lambda: current().sync_interval_minutes * 60,
+))
+tasks.register(tasks.Task(
+    "slow_sync", "Sync users and libraries", "Plex users, their shared libraries, libraries, and Plex's upload speed.",
+    _slow_cycle, lambda: current().slow_sync_interval_minutes * 60,
+))
+tasks.register(tasks.Task(
+    "enforce", "Check live streams", "Runs the rules and ban list, records streams, stalls and upload.",
+    _enforce_cycle, lambda: current().activity_poll_seconds, store_every_run=False,
+))
+tasks.register(tasks.Task(
+    "capabilities", "Check Plex Pass and server", "Whether stopping streams is possible, and the server's name and version.",
+    _capability_cycle, lambda: 3600,
+))
+tasks.register(tasks.Task(
+    "replacements", "Follow replacements", "Reads Radarr and Sonarr queues and history for replacements in progress.",
+    _replacement_cycle, lambda: 60,
+))
+
+
+def _job(key: str):
+    async def job() -> None:
+        await tasks.run(key)
+
+    return job
 
 
 @asynccontextmanager
@@ -90,34 +108,23 @@ async def lifespan(app: FastAPI):
     )
 
     scheduler = AsyncIOScheduler()
-    # Both run once straight away as well as on their interval. An interval job
-    # otherwise waits a full interval before its first run, so after every
-    # restart or image update names stayed stale for up to an hour.
+    # The syncs also run straight away. An interval job otherwise waits a full
+    # interval before its first run, so after every restart or image update
+    # names stayed stale for up to an hour.
     soon = datetime.now()
-    scheduler.add_job(
-        _slow_cycle,
-        "interval",
-        minutes=settings.slow_sync_interval_minutes,
-        id="slow_sync",
-        next_run_time=soon,
-    )
-    scheduler.add_job(
-        _cycle,
-        "interval",
-        minutes=settings.sync_interval_minutes,
-        id="sync",
-        next_run_time=soon + timedelta(seconds=20),
-    )
-    scheduler.add_job(
-        _enforce_cycle, "interval", seconds=settings.activity_poll_seconds, id="enforce"
-    )
-    scheduler.add_job(_capability_cycle, "interval", minutes=60, id="capabilities")
-    scheduler.add_job(_replacement_cycle, "interval", minutes=1, id="replacements")
+    first = {"slow_sync": soon, "sync": soon + timedelta(seconds=20)}
+    for task in tasks.TASKS.values():
+        # Passing next_run_time=None pauses a job, so it is only passed when set.
+        extra = {"next_run_time": first[task.key]} if task.key in first else {}
+        scheduler.add_job(
+            _job(task.key), "interval", seconds=task.interval(), id=task.key,
+            max_instances=1, coalesce=True, **extra,
+        )
+    tasks.scheduler = scheduler
     scheduler.start()
 
     # Probe once at boot so the UI knows what to enable before the first hour.
-    if is_configured():
-        await capabilities.refresh()
+    await tasks.run("capabilities", trigger="startup")
     app.state.scheduler = scheduler
 
     if is_configured():
