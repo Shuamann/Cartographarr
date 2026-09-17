@@ -84,6 +84,6 @@ def test_urls_with_credentials_are_masked_and_not_logged(client):
     secret = "discord://1234/very-secret-token"
     assert client.put("/api/settings", json={"apprise_urls": secret}).status_code == 200
     shown = {s["key"]: s["value"] for s in client.get("/api/settings").json()}
-    assert shown["apprise_urls"] == "********"
+    assert "very-secret-token" not in shown["apprise_urls"] and "****" in shown["apprise_urls"]
     log = client.get("/api/log?kind=changes").json()
     assert all("very-secret-token" not in str(entry) for entry in log)

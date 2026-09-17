@@ -33,6 +33,12 @@ SECRET_HINT = ("key", "token", "secret", "password")
 
 
 def _redact(key: str, value: Any) -> Any:
+    if key in audit.SECRET_URLS and value:
+        # Shape kept, secrets masked, so one URL can be edited without
+        # retyping the rest. Put back on save (see put_settings).
+        from app.url_mask import mask
+
+        return mask(str(value))
     if audit.is_secret(key) and value:
         return "********"
     return value
@@ -134,7 +140,12 @@ def get_settings() -> list[dict]:
 @router.put("/settings")
 def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[dict]:
     before = {row["key"]: row["value"] for row in describe()}
+    from app.url_mask import restore
+
+    values = dict(values)
     try:
+        for key in audit.SECRET_URLS & set(values):
+            values[key] = restore(str(values[key] or ""), str(before.get(key) or ""))
         save(values)
     except ValueError as exc:
         raise HTTPException(400, redact(exc)) from exc

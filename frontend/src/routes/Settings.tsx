@@ -231,7 +231,8 @@ const PAGES: Page[] = [
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
 ];
 
-/* URLs that carry a credential. Masked like keys; the server does the same. */
+/* URLs that carry a credential. The server sends them with the secret parts
+ * masked, and puts the originals back on save for any URL left masked. */
 const SECRET_URLS = new Set(["apprise_urls", "webhook_url", "uptime_kuma_push_url", "viewer_message_url"]);
 
 const LABELS: Record<string, string> = {
@@ -437,7 +438,7 @@ function SettingsForm() {
     const locked = !setting.editable;
     const value = key in draft ? draft[key] : setting.value;
     const isBool = typeof setting.value === "boolean";
-    const isSecret = /key|token|secret|password/.test(key) || SECRET_URLS.has(key);
+    const isSecret = /key|token|secret|password/.test(key) && !SECRET_URLS.has(key);
     // A masked secret must not be saved back as literal asterisks.
     const masked = isSecret && setting.value === "********";
 
@@ -524,6 +525,9 @@ function SettingsForm() {
             An environment variable supplies this, so it wins over anything set here. Remove it
             from your container configuration to edit it in the UI.
           </small>
+        )}
+        {SECRET_URLS.has(key) && !locked && Boolean(setting.value) && (
+          <small>Parts shown as **** stay as saved. To change one, replace that whole URL.</small>
         )}
         {key === "trusted_proxy_ips" && !locked && (
           <small>Comma separated. Addresses or CIDRs, for example 172.17.0.0/16.</small>
