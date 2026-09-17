@@ -55,6 +55,15 @@ async def _capability_cycle() -> None:
         log.exception("capability probe failed")
 
 
+async def _replacement_cycle() -> None:
+    from app.services import replacements
+
+    try:
+        await replacements.poll()
+    except Exception:
+        log.exception("replacement follow-up failed")
+
+
 async def _slow_cycle() -> None:
     if not is_configured():
         return
@@ -103,6 +112,7 @@ async def lifespan(app: FastAPI):
         _enforce_cycle, "interval", seconds=settings.activity_poll_seconds, id="enforce"
     )
     scheduler.add_job(_capability_cycle, "interval", minutes=60, id="capabilities")
+    scheduler.add_job(_replacement_cycle, "interval", minutes=1, id="replacements")
     scheduler.start()
 
     # Probe once at boot so the UI knows what to enable before the first hour.

@@ -570,6 +570,36 @@ class TravelFlag(Base):
     """Set when an ignore pattern closed this flag, rather than a person."""
 
 
+class Replacement(Base):
+    """A file being replaced through Radarr or Sonarr, from the release chosen
+    to the import confirmed or denied. See services/replacements.py."""
+
+    __tablename__ = "replacements"
+    __table_args__ = (Index("ix_replacements_status", "status"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rating_key: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(Text)
+    service: Mapped[str] = mapped_column(String(16))  # radarr or sonarr
+    arr_id: Mapped[int | None] = mapped_column(Integer)  # movie or series id
+    episode_id: Mapped[int | None] = mapped_column(Integer)
+    guid: Mapped[str | None] = mapped_column(Text)
+    indexer_id: Mapped[int | None] = mapped_column(Integer)
+    # queued, downloading, ready, importing, imported, imported_automatically, denied, failed
+    status: Mapped[str] = mapped_column(String(32), default="queued")
+    progress: Mapped[float | None] = mapped_column(Float)
+    download_id: Mapped[str | None] = mapped_column(String(128))
+    queue_id: Mapped[int | None] = mapped_column(Integer)
+    release: Mapped[str | None] = mapped_column(Text)  # JSON, the release as compared when chosen
+    current: Mapped[str | None] = mapped_column(Text)  # JSON, the file it replaces
+    candidate: Mapped[str | None] = mapped_column(Text)  # JSON, the downloaded file, then the imported one
+    message: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    resolved_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime | None] = mapped_column()
+    updated_at: Mapped[datetime | None] = mapped_column()
+
+
 class SavedReport(Base):
     """A report someone saved from the Reports tab. The spec is what the
     builder sends: source, measure, group, split, range and filters."""

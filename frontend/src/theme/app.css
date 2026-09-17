@@ -2254,6 +2254,51 @@ label.locked .pill {
   margin-top: 10px;
 }
 
+.release-picker {
+  margin-top: 12px;
+}
+.release {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.release.blocked {
+  opacity: 0.6;
+}
+.release-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.replacement {
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.progress {
+  height: 6px;
+  margin: 8px 0;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--surface-3);
+}
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.table.compare {
+  margin-top: 10px;
+}
+.table.compare tr.changed td:not(:first-child) {
+  font-weight: 600;
+}
+
 .cause-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

@@ -154,6 +154,84 @@ class ArrIntegration:
         await self._send("POST", "/api/v3/command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
         return f"{self.label} is searching for {found.get('title')} S{season:02d}E{episode:02d}"
 
+    # ---- replacements: find, grab, follow, confirm or deny --------------------------
+
+    async def locate(self, external_id: str, season: int | None, episode: int | None) -> tuple[dict, int | None]:
+        """The movie or series, and for Sonarr the episode id."""
+        found = await self.find(external_id)
+        if found is None:
+            raise LookupError(f"Not in {self.label}")
+        if self.path == "movie":
+            return found, None
+        if season is None or episode is None:
+            raise LookupError("Episode number unknown")
+        episode_id = await self._episode_id(found["id"], season, episode)
+        if episode_id is None:
+            raise LookupError(f"{self.label} does not list S{season:02d}E{episode:02d}")
+        return found, episode_id
+
+    async def releases(self, arr_id: int, episode_id: int | None) -> list[dict]:
+        """Every release the indexers offer. Slow: this is a live search."""
+        params = {"movieId": arr_id} if self.path == "movie" else {"episodeId": episode_id}
+        return await get_json(f"{self.base_url}/api/v3/release", headers=self.headers, params=params, timeout=120) or []
+
+    async def grab(self, guid: str, indexer_id: int) -> dict:
+        return await self._send("POST", "/api/v3/release", {"guid": guid, "indexerId": indexer_id}) or {}
+
+    async def queue(self) -> list[dict]:
+        data = await get_json(
+            f"{self.base_url}/api/v3/queue", headers=self.headers,
+            params={"pageSize": 500, "includeUnknownMovieItems" if self.path == "movie" else "includeUnknownSeriesItems": "false"},
+        )
+        return (data or {}).get("records") or [] if isinstance(data, dict) else data or []
+
+    async def manual_import_candidates(self, download_id: str) -> list[dict]:
+        return await get_json(
+            f"{self.base_url}/api/v3/manualimport", headers=self.headers,
+            params={"downloadId": download_id, "filterExistingFiles": "false"}, timeout=60,
+        ) or []
+
+    async def manual_import(self, files: list[dict], arr_id: int, episode_id: int | None, download_id: str) -> None:
+        """Import the downloaded file, replacing the current one."""
+        entries = []
+        for f in files:
+            entry = {
+                "path": f.get("path"),
+                "quality": f.get("quality"),
+                "languages": f.get("languages"),
+                "releaseGroup": f.get("releaseGroup"),
+                "downloadId": download_id,
+                "indexerFlags": f.get("indexerFlags", 0),
+            }
+            if self.path == "movie":
+                entry["movieId"] = arr_id
+            else:
+                entry["seriesId"] = arr_id
+                entry["episodeIds"] = [episode_id]
+            entries.append(entry)
+        await self._send("POST", "/api/v3/command", {"name": "ManualImport", "importMode": "auto", "files": entries})
+
+    async def remove_from_queue(self, queue_id: int) -> None:
+        """Delete the download and block the release, so it is not grabbed again."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.delete(
+                f"{self.base_url}/api/v3/queue/{queue_id}", headers=self.headers,
+                params={"removeFromClient": "true", "blocklist": "true"},
+            )
+            response.raise_for_status()
+
+    async def current_file(self, arr_id: int, episode_id: int | None) -> dict | None:
+        if self.path == "movie":
+            movie = await get_json(f"{self.base_url}/api/v3/movie/{arr_id}", headers=self.headers)
+            return (movie or {}).get("movieFile")
+        episode = await get_json(f"{self.base_url}/api/v3/episode/{episode_id}", headers=self.headers)
+        file_id = (episode or {}).get("episodeFileId")
+        if not file_id:
+            return None
+        return await get_json(f"{self.base_url}/api/v3/episodefile/{file_id}", headers=self.headers)
+
     async def tag(self, external_id: str) -> str:
         """Add the cartographarr-replace tag to the movie or series."""
         found = await self.find(external_id)

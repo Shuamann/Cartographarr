@@ -312,3 +312,189 @@ def health_summary(_: AdminUser, db: Db) -> dict:
         "people": len(active_users),
         "idle_days": idle_days,
     }
+
+
+# ---- replacements ------------------------------------------------------------------------------
+
+async def _arr_target(rating_key: int):
+    """The title, its service, its external id and episode numbers."""
+    import asyncio
+
+    from app.db import session_scope
+    from app.integrations import arr as arr_integrations
+
+    def load():
+        with session_scope() as db:
+            item = db.get(MediaItem, rating_key)
+            if item is None or item.title is None:
+                return None
+            show = db.get(MediaItem, item.grandparent_rating_key) if item.media_type == "episode" and item.grandparent_rating_key else None
+            return {
+                "item": library.describe_file(item) | {"duration": item.duration},
+                "media_type": item.media_type,
+                "show_key": item.grandparent_rating_key,
+                "external": (show.tvdb_id if show else None) if item.media_type == "episode" else item.tmdb_id,
+                "season": item.parent_media_index,
+                "episode": item.media_index,
+            }
+
+    target = await asyncio.to_thread(load)
+    if target is None:
+        raise HTTPException(404, "No such title")
+    service = arr_integrations.for_media_type(target["media_type"])
+    if not service.configured():
+        raise HTTPException(409, f"Connect {service.label} in Settings first")
+    if target["media_type"] == "episode" and not target["external"] and target["show_key"]:
+        from app.services.sync import cache_one
+
+        await cache_one(target["show_key"])
+        target = await asyncio.to_thread(load)
+    if not target["external"]:
+        raise HTTPException(409, f"No {'TMDB' if service.name == 'radarr' else 'TVDB'} id for this title")
+    return target, service
+
+
+@router.get("/file/{rating_key}/releases")
+async def find_releases(rating_key: int, _: AdminUser) -> dict:
+    """Releases that could replace this file, each compared with it."""
+    import asyncio
+
+    from app.integrations.base import describe_failure
+    from app.services import replacements
+
+    target, service = await _arr_target(rating_key)
+    try:
+        found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+        raw = await asyncio.wait_for(service.releases(found["id"], episode_id), timeout=150)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except TimeoutError as exc:
+        raise HTTPException(504, f"{service.label} took too long searching the indexers") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+    detail = await file(rating_key, _, days=365)
+    current_file = {**target["item"], "findings": detail["findings"]}
+    return {
+        "service": service.label,
+        "current": current_file,
+        "releases": replacements.compare_releases(
+            raw, current_file, target["item"].get("duration"), int(current().library_bitrate_threshold_mbps * 1000)
+        ),
+    }
+
+
+@router.post("/file/{rating_key}/replace")
+async def queue_replacement(
+    rating_key: int, admin: AdminUser, release: dict = Body(..., embed=True)
+) -> dict:
+    """Grab the chosen release and follow it."""
+    import json
+    from datetime import UTC, datetime
+
+    from app import audit
+    from app.db import session_scope
+    from app.integrations.base import describe_failure
+    from app.models import Replacement
+    from app.services import replacements
+
+    target, service = await _arr_target(rating_key)
+    if not release.get("guid") or release.get("indexer_id") is None:
+        raise HTTPException(400, "Pick a release")
+    try:
+        found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+        existing = await service.current_file(found["id"], episode_id)
+        await service.grab(release["guid"], int(release["indexer_id"]))
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+    now = datetime.now(UTC)
+    with session_scope() as db:
+        row = Replacement(
+            rating_key=rating_key, title=target["item"]["title"], service=service.name, arr_id=found["id"],
+            episode_id=episode_id, guid=release["guid"], indexer_id=int(release["indexer_id"]), status="queued",
+            release=json.dumps(release), current=json.dumps({**target["item"], "arr_file_id": (existing or {}).get("id")}),
+            created_by=admin.username, created_at=now, updated_at=now,
+        )
+        db.add(row)
+        db.flush()
+        out = replacements.to_dict(row)
+    audit.record(admin, "library.replace", f"Queued a replacement for {target['item']['title']}: {release.get('title')}",
+                 target=str(rating_key))
+    return out
+
+
+@router.get("/replacements")
+def list_replacements(_: AdminUser, db: Db) -> list:
+    from app.models import Replacement
+    from app.services import replacements
+
+    rows = db.execute(select(Replacement).order_by(Replacement.updated_at.desc()).limit(200)).scalars().all()
+    order = {"ready": 0, "importing": 1, "downloading": 2, "queued": 3}
+    return sorted((replacements.to_dict(r) for r in rows), key=lambda r: order.get(r["status"], 9))
+
+
+async def _decide(replacement_id: int, admin, confirm: bool) -> dict:
+    import asyncio
+    import json
+    from datetime import UTC, datetime
+
+    from app import audit
+    from app.db import session_scope
+    from app.integrations.base import describe_failure
+    from app.models import Replacement
+    from app.services import replacements
+
+    def load():
+        with session_scope() as db:
+            row = db.get(Replacement, replacement_id)
+            if row is not None:
+                db.expunge(row)
+            return row
+
+    row = await asyncio.to_thread(load)
+    if row is None:
+        raise HTTPException(404, "No such replacement")
+    service = replacements._service(row.service)
+    if not service.configured():
+        raise HTTPException(409, f"Connect {service.label} in Settings first")
+    try:
+        if confirm:
+            if row.status != "ready":
+                raise HTTPException(409, "It is not downloaded and waiting yet")
+            files = (json.loads(row.candidate or "{}") or {}).get("files") or []
+            if not files:
+                raise HTTPException(409, f"{service.label} found no file to import in the download")
+            biggest = max(files, key=lambda f: f.get("size") or 0)
+            await service.manual_import([biggest], row.arr_id, row.episode_id, row.download_id)
+            status = "importing"
+        else:
+            if row.status not in ("queued", "downloading", "ready"):
+                raise HTTPException(409, "Too late to deny this one")
+            if row.queue_id is not None:
+                await service.remove_from_queue(row.queue_id)
+            status = "denied"
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+
+    with session_scope() as db:
+        stored = db.get(Replacement, replacement_id)
+        stored.status, stored.resolved_by, stored.updated_at = status, admin.username, datetime.now(UTC)
+        out = replacements.to_dict(stored)
+    audit.record(
+        admin, "library.replace_confirm" if confirm else "library.replace_deny",
+        f"{'Confirmed' if confirm else 'Denied'} the replacement for {row.title}", target=str(row.rating_key),
+    )
+    return out
+
+
+@router.post("/replacements/{replacement_id}/confirm")
+async def confirm_replacement(replacement_id: int, admin: AdminUser) -> dict:
+    return await _decide(replacement_id, admin, confirm=True)
+
+
+@router.post("/replacements/{replacement_id}/deny")
+async def deny_replacement(replacement_id: int, admin: AdminUser) -> dict:
+    return await _decide(replacement_id, admin, confirm=False)

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
@@ -127,6 +127,7 @@ const SECTIONS = [
   { id: "messy", title: "Messy files" },
   { id: "four-k", title: "4K copies" },
   { id: "requests", title: "Requested, never watched" },
+  { id: "replacements", title: "Replacements" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -198,6 +199,8 @@ export default function Library() {
   const [section, setSection] = useState<SectionId>("overview");
   const [days, setDays] = useState(90);
   const current = SECTIONS.find((s) => s.id === section)!;
+  const replacementList = useApi<Replacement[]>("/library/replacements");
+  const waiting = (replacementList.data ?? []).filter((r) => r.status === "ready").length;
 
   return (
     <div className="settings-layout">
@@ -212,6 +215,7 @@ export default function Library() {
               onClick={() => setSection(s.id)}
             >
               <span>{s.title}</span>
+              {s.id === "replacements" && waiting > 0 && <span className="pill warn">{waiting} ready</span>}
             </button>
           ))}
         </div>
@@ -219,7 +223,7 @@ export default function Library() {
       <div className="settings-page">
         <header className="settings-page-head row-between">
           <h2>{current.title}</h2>
-          {section !== "overview" && section !== "requests" && (
+          {section !== "overview" && section !== "requests" && section !== "replacements" && (
             <label className="inline-select">
               <span className="muted small">Looking back</span>
               <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -238,6 +242,7 @@ export default function Library() {
         {section === "messy" && <MessyFiles days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "requests" && <Requests />}
+        {section === "replacements" && <Replacements />}
       </div>
     </div>
   );
@@ -710,6 +715,7 @@ function ArrActions({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [picking, setPicking] = useState(false);
 
   async function run(action: "search" | "tag") {
     const question =
@@ -733,8 +739,11 @@ function ArrActions({
   return (
     <div className="arr-actions">
       <div className="row wrap">
+        <button className="btn primary" onClick={() => setPicking(!picking)} disabled={!arr.configured} title={why}>
+          {picking ? "Hide releases" : "Find a replacement"}
+        </button>
         <button className="btn" onClick={() => run("search")} disabled={!arr.configured || busy !== null} title={why}>
-          {busy === "search" ? "Asking\u2026" : `Search for a replacement in ${arr.label}`}
+          {busy === "search" ? "Asking\u2026" : `Let ${arr.label} search by itself`}
         </button>
         <button className="btn" onClick={() => run("tag")} disabled={!arr.configured || busy !== null} title={why}>
           {busy === "tag" ? "Tagging\u2026" : "Tag for replacement"}
@@ -742,6 +751,344 @@ function ArrActions({
       </div>
       {!arr.configured && <p className="muted small">{why}.</p>}
       {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
+      {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} />}
     </div>
   )
+}
+
+type Release = {
+  guid: string;
+  indexer_id: number;
+  title: string;
+  indexer: string | null;
+  size: number | null;
+  age_days: number | null;
+  seeders: number | null;
+  protocol: string | null;
+  quality: string | null;
+  languages: string[];
+  custom_format_score: number | null;
+  estimated_bitrate: number | null;
+  parsed: Parsed;
+  fixes: string[];
+  held: boolean;
+  rejections: string[];
+  blocked: boolean;
+};
+
+type Parsed = {
+  resolution?: string;
+  video_codec?: string;
+  bit_depth?: number;
+  hdr?: string;
+  audio_codec?: string;
+  audio_channels?: number;
+  source?: string;
+};
+
+type Replacement = {
+  id: number;
+  rating_key: number;
+  title: string | null;
+  service: string;
+  status: "queued" | "downloading" | "ready" | "importing" | "imported" | "imported_automatically" | "denied" | "failed";
+  progress: number | null;
+  message: string | null;
+  release: Release | null;
+  current: (FileInfo & { duration?: number | null }) | null;
+  candidate: {
+    name?: string;
+    size?: number;
+    quality?: string;
+    languages?: string[];
+    release_group?: string;
+    rejections?: string[];
+    parsed?: Parsed;
+    imported?: {
+      size?: number;
+      quality?: string;
+      video_codec?: string;
+      bit_depth?: number;
+      hdr?: string;
+      audio_codec?: string;
+      audio_channels?: number;
+      audio_languages?: string;
+      subtitles?: string;
+      resolution?: string;
+    };
+  } | null;
+  created_by: string | null;
+  updated_at: string | null;
+  resolved_by: string | null;
+};
+
+const CHANNELS: Record<number, string> = { 2: "stereo", 6: "5.1", 8: "7.1" };
+
+function describeParsed(p: Parsed | undefined): string {
+  if (!p) return "";
+  return [
+    p.resolution,
+    p.video_codec?.toUpperCase(),
+    p.bit_depth ? `${p.bit_depth}-bit` : null,
+    p.hdr,
+    p.audio_codec ? `${p.audio_codec.toUpperCase()}${p.audio_channels ? ` ${CHANNELS[p.audio_channels] ?? ""}` : ""}` : null,
+    p.source,
+  ]
+    .filter(Boolean)
+    .join(" \u00b7 ");
+}
+
+/* Releases Radarr or Sonarr can find, each against the current file. */
+function ReleasePicker({ ratingKey, label, title }: { ratingKey: number; label: string; title: string }) {
+  const found = useApi<{ service: string; current: FileInfo; releases: Release[] }>(`/library/file/${ratingKey}/releases`);
+  const [showAll, setShowAll] = useState(false);
+  const [queued, setQueued] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function queue(release: Release) {
+    const how = release.held
+      ? `${label} does not rate it as an upgrade, so once downloaded it waits in Library, Replacements for you to confirm or deny.`
+      : `${label} rates it as an upgrade, so it will import it as soon as it is downloaded, without waiting for you.`;
+    if (!confirm(`Download this replacement for ${title}?\n\n${release.title}\n\n${how}`)) return;
+    setError(null);
+    try {
+      await api.post(`/library/file/${ratingKey}/replace`, { release });
+      setQueued(release.guid);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  if (found.error) return <p className="note bad-note">{found.error}</p>;
+  if (!found.data)
+    return (
+      <Loading
+        label={`Asking ${label} to search the indexers`}
+        slowHint="A live search across every indexer, which often takes half a minute or more."
+      />
+    );
+  const releases = found.data.releases;
+  const shown = showAll ? releases : releases.slice(0, 12);
+  return (
+    <div className="release-picker">
+      <p className="small">
+        <span className="muted">Current file: </span>
+        {format(found.data.current)}
+        {found.data.current.file_size ? ` \u00b7 ${size(found.data.current.file_size)}` : ""}
+        {found.data.current.file_bitrate ? ` \u00b7 ${mbps(found.data.current.file_bitrate)}` : ""}
+      </p>
+      {queued && <p className="note ok-note">Queued. Follow it in Library, Replacements.</p>}
+      {error && <p className="note bad-note">{error}</p>}
+      {releases.length === 0 && <p className="muted">No releases found.</p>}
+      <div className="mini-list">
+        {shown.map((r) => (
+          <div key={r.guid} className={r.blocked ? "release blocked" : "release"}>
+            <div className="min0">
+              <p className="release-title">{r.title}</p>
+              <div className="row wrap file-badges">
+                {r.held ? (
+                  <span className="pill ok" title="Not an upgrade by your quality profile, so it is held for you">
+                    Waits for you
+                  </span>
+                ) : (
+                  <span className="pill warn" title="Rated an upgrade, so it imports as soon as it downloads">
+                    Imports straight away
+                  </span>
+                )}
+                {r.fixes.map((f) => (
+                  <span key={f} className="pill ok">
+                    {f}
+                  </span>
+                ))}
+              </div>
+              <p className="muted small">
+                {[
+                  r.quality,
+                  describeParsed(r.parsed),
+                  size(r.size),
+                  r.estimated_bitrate ? `about ${mbps(r.estimated_bitrate)}` : null,
+                  r.languages.length ? r.languages.join(", ") : null,
+                  r.seeders != null ? `${r.seeders} seeders` : null,
+                  r.age_days != null ? `${r.age_days} days old` : null,
+                  r.indexer,
+                ]
+                  .filter(Boolean)
+                  .join(" \u00b7 ")}
+              </p>
+              {r.rejections.length > 0 && <p className="muted small">{label} says: {r.rejections.join("; ")}</p>}
+            </div>
+            <button className="btn" onClick={() => queue(r)} disabled={queued !== null}>
+              {queued === r.guid ? "Queued" : "Download"}
+            </button>
+          </div>
+        ))}
+      </div>
+      {releases.length > shown.length && (
+        <button className="tab" onClick={() => setShowAll(true)}>
+          Show all {releases.length}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Whether two descriptions really differ, not just in how much is known:
+ * "H264" from a release name against "H264 8-bit" from the file is the same. */
+function differs(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const x = a.toLowerCase().trim();
+  const y = b.toLowerCase().replace(/^about /, "").trim();
+  return !(x === y || x.startsWith(y) || y.startsWith(x));
+}
+
+const REPLACEMENT_STATUS: Record<Replacement["status"], { label: string; tone: string }> = {
+  queued: { label: "Queued", tone: "pill" },
+  downloading: { label: "Downloading", tone: "pill" },
+  ready: { label: "Ready for you", tone: "pill warn" },
+  importing: { label: "Importing", tone: "pill" },
+  imported: { label: "Replaced", tone: "pill ok" },
+  imported_automatically: { label: "Imported by itself", tone: "pill ok" },
+  denied: { label: "Denied", tone: "pill" },
+  failed: { label: "Failed", tone: "pill bad" },
+};
+
+function Replacements() {
+  const list = useApi<Replacement[]>("/library/replacements");
+  const active = (list.data ?? []).some((r) => ["queued", "downloading", "ready", "importing"].includes(r.status));
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(list.reload, 15000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+  if (list.error) return <p className="note bad-note">{list.error}</p>;
+  if (!list.data) return <Loading label="Reading replacements" />;
+  return (
+    <>
+      <p className="muted">
+        Releases you chose to replace a file with. Radarr and Sonarr import an upgrade by themselves; anything else waits
+        here once downloaded, beside the current file, for you to confirm or deny.
+      </p>
+      {list.data.length === 0 && <p className="muted">Nothing yet. Open a file in any list and choose Find a replacement.</p>}
+      <div className="mini-list">
+        {list.data.map((r) => (
+          <ReplacementRow key={r.id} r={r} onChanged={list.reload} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ReplacementRow({ r, onChanged }: { r: Replacement; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const status = REPLACEMENT_STATUS[r.status];
+  const service = r.service === "sonarr" ? "Sonarr" : "Radarr";
+
+  async function decide(confirmIt: boolean) {
+    const question = confirmIt
+      ? `Import the new file for ${r.title}? ${service} replaces the current file (into its recycle bin, if you have one set).`
+      : `Deny this replacement for ${r.title}? The download is deleted and the release is blocked in ${service}.`;
+    if (!confirm(question)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/library/replacements/${r.id}/${confirmIt ? "confirm" : "deny"}`);
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const cur = r.current;
+  const next = r.candidate?.parsed ?? r.release?.parsed;
+  const imported = r.candidate?.imported;
+  const rows: [string, string | null | undefined, string | null | undefined][] = cur
+    ? [
+        ["Resolution", cur.video_resolution, imported?.resolution ?? next?.resolution],
+        ["Video", [cur.video_codec?.toUpperCase(), cur.video_bit_depth ? `${cur.video_bit_depth}-bit` : null].filter(Boolean).join(" "),
+          [(imported?.video_codec ?? next?.video_codec)?.toUpperCase(), (imported?.bit_depth ?? next?.bit_depth) ? `${imported?.bit_depth ?? next?.bit_depth}-bit` : null].filter(Boolean).join(" ")],
+        ["HDR", cur.video_dynamic_range, imported?.hdr ?? next?.hdr ?? "SDR"],
+        ["Audio", (cur.audio_tracks ?? []).map((t) => `${t.codec?.toUpperCase()}${t.channels ? ` ${CHANNELS[t.channels] ?? t.channels}` : ""}`).join(", "),
+          imported?.audio_codec ? `${imported.audio_codec} ${imported.audio_channels ?? ""}`.trim() :
+          next?.audio_codec ? `${next.audio_codec.toUpperCase()}${next.audio_channels ? ` ${CHANNELS[next.audio_channels] ?? ""}` : ""}` : null],
+        ["Subtitles", (cur.subtitle_tracks ?? []).map((t) => t.codec?.toUpperCase()).join(", ") || "none", imported?.subtitles ?? null],
+        ["Size", size(cur.file_size), size(imported?.size ?? r.candidate?.size ?? r.release?.size)],
+        ["Bitrate", mbps(cur.file_bitrate), r.release?.estimated_bitrate ? `about ${mbps(r.release.estimated_bitrate)}` : null],
+        ["Quality", null, imported?.quality ?? r.candidate?.quality ?? r.release?.quality],
+      ]
+    : [];
+  const showCompare = ["ready", "importing", "imported", "imported_automatically"].includes(r.status);
+
+  return (
+    <div className="replacement">
+      <div className="row-between">
+        <div className="min0">
+          <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
+          <p className="muted small release-title">{r.release?.title}</p>
+        </div>
+        {r.status === "ready" && (
+          <div className="row">
+            <button className="btn danger" onClick={() => decide(false)} disabled={busy}>
+              Deny
+            </button>
+            <button className="btn primary" onClick={() => decide(true)} disabled={busy}>
+              Confirm
+            </button>
+          </div>
+        )}
+        {(r.status === "queued" || r.status === "downloading") && (
+          <button className="tab danger-text" onClick={() => decide(false)} disabled={busy}>
+            Cancel
+          </button>
+        )}
+      </div>
+      {r.status === "downloading" && r.progress != null && (
+        <div className="progress" title={`${Math.round(r.progress * 100)}%`}>
+          <span style={{ width: `${Math.round(r.progress * 100)}%` }} />
+        </div>
+      )}
+      {r.release?.fixes && r.release.fixes.length > 0 && (
+        <div className="row wrap file-badges">
+          {r.release.fixes.map((f) => (
+            <span key={f} className="pill ok">
+              {f}
+            </span>
+          ))}
+        </div>
+      )}
+      {showCompare && rows.length > 0 && (
+        <table className="table compare">
+          <thead>
+            <tr>
+              <th />
+              <th>Current file</th>
+              <th>{imported ? "Now" : "Replacement"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([name, a, b]) => (
+              <tr key={name} className={differs(a, b) ? "changed" : undefined}>
+                <td className="muted">{name}</td>
+                <td>{a || <span className="muted">not known</span>}</td>
+                <td>{b || <span className="muted">not known</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {r.status === "ready" && !imported && (
+        <p className="muted small">
+          The replacement's formats are read from its file name until it is imported.
+          {r.candidate?.rejections?.length ? ` ${service} says: ${r.candidate.rejections.join("; ")}.` : ""}
+        </p>
+      )}
+      {r.message && !(r.candidate?.rejections ?? []).some((x) => r.message?.includes(x)) && (
+        <p className="muted small">{r.message}</p>
+      )}
+      {error && <p className="note bad-note">{error}</p>}
+    </div>
+  );
 }
