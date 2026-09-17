@@ -5,6 +5,8 @@ person's stream, so the counts must not drift: a stall is counted once, its
 length comes from the polls, and it is saved when it ends.
 """
 
+import json
+
 from app.services import conditions as c
 from app.services import tracker
 
@@ -94,3 +96,56 @@ def test_real_window_counts_from_history_and_events(client):
     assert count("user_devices_window", s("playing"), 24 * 7) == 3
     assert count("user_buffering_window", s("playing"), 24) == 1
     assert count("device_buffering_window", s("playing", machine="a"), 24) == 1
+
+
+def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
+    """A condition like "more than 3 plays in the last 24 hours" stays true for
+    hours. The rule must record a stream once, not every cooldown."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.db import session_scope
+    from app.models import EnforcementLog, Rule
+    from app.services import enforcer
+
+    with session_scope() as db:
+        db.add(Rule(
+            name="Busy user", enabled=True, record_only=True,
+            conditions=json.dumps({"type": "group", "op": "and", "items": [
+                {"type": "condition", "field": "user_plays_window", "op": "gte", "value": [0, 24]},
+            ]}),
+            actions=json.dumps([{"name": "notify", "params": {}}]),
+        ))
+
+    sessions = [{"session_key": "s1", "user_id": 7, "machine_id": "m1", "state": "playing"}]
+
+    async def live():
+        return sessions, {"s1": {"window_count": lambda *a: 5}}, None
+
+    monkeypatch.setattr(enforcer, "is_configured", lambda: True)
+    monkeypatch.setattr(enforcer, "current", lambda: SimpleNamespace(enforce_enabled=True, enforce_cooldown_seconds=0))
+    monkeypatch.setattr(enforcer, "live_context", live)
+    enforcer._done.clear()
+    enforcer._recent.clear()
+
+    def logged():
+        with session_scope() as db:
+            return db.query(EnforcementLog).filter(EnforcementLog.rule_name == "Busy user").count()
+
+    for _ in range(4):
+        asyncio.run(enforcer.run_once())
+    assert logged() == 1
+
+    # The stream ends and a new one starts: that one is recorded too.
+    sessions[:] = []
+    asyncio.run(enforcer.run_once())
+    sessions[:] = [{"session_key": "s2", "user_id": 7, "machine_id": "m1", "state": "playing"}]
+    live_ctx = {"s2": {"window_count": lambda *a: 5}}
+
+    async def live2():
+        return sessions, live_ctx, None
+
+    monkeypatch.setattr(enforcer, "live_context", live2)
+    asyncio.run(enforcer.run_once())
+    asyncio.run(enforcer.run_once())
+    assert logged() == 2

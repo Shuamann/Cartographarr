@@ -32,6 +32,13 @@ Session = dict[str, Any]
 # One session shouldn't spam the log while a stubborn client retries.
 _recent: dict[tuple[int, str], float] = {}
 
+# Rule and stream pairs already dealt with for the life of the stream. A rule
+# that only records or notifies stays true while the stream runs (a count over
+# the last day stays true for hours), so without this it would log and notify
+# again every cooldown. Stopping is left to the cooldown, so a failed stop is
+# retried. Keyed on record only as well, so switching a rule to act still acts.
+_done: set[tuple[int, str, bool]] = set()
+
 
 def _ip_in_cidr(ip: str | None, cidr: str | None) -> bool:
     if not ip or not cidr:
@@ -468,28 +475,33 @@ async def run_once() -> dict[str, Any]:
                 continue
             matched += 1
 
+            dry_run = record_only(rule)
+            if (rule.id, key, dry_run) in _done:
+                break
+
             cooldown_key = (rule.id, key)
             last = _recent.get(cooldown_key)
             if last is not None and now - last < settings.enforce_cooldown_seconds:
                 break
             _recent[cooldown_key] = now
-
-            dry_run = record_only(rule)
             steps = rule_actions(rule)
             specs = [(step, registry.get(str(step.get("name")))) for step in steps]
             unknown = [str(step.get("name")) for step, spec in specs if spec is None]
             if unknown or not specs:
                 _record(rule, session, dry_run, f"unknown action {', '.join(unknown) or '(none)'}")
+                _done.add((rule.id, key, dry_run))
                 break
 
             missing = sorted({m for _, spec in specs for m in registry.unmet(spec)})
             if missing:
                 # Refused, not silently skipped, and the log says why.
                 _record(rule, session, dry_run, f"refused: requires {', '.join(missing)}")
+                _done.add((rule.id, key, dry_run))
                 break
 
             if dry_run:
                 _record(rule, session, True, "would " + ", ".join(spec.name for _, spec in specs))
+                _done.add((rule.id, key, True))
                 break
 
             results = []
@@ -501,6 +513,8 @@ async def run_once() -> dict[str, Any]:
                     results.append(f"{spec.name} failed: {exc}")
                     log.warning("action %s failed: %s", spec.name, exc)
             _record(rule, session, False, "; ".join(results))
+            if not any(spec.name == "terminate" for _, spec in specs):
+                _done.add((rule.id, key, False))
             break  # first matching rule wins; don't double-act on one session
 
     # Keep the cooldown map from growing forever.
@@ -508,6 +522,8 @@ async def run_once() -> dict[str, Any]:
     for k, seen in list(_recent.items()):
         if seen < cutoff:
             del _recent[k]
+    live = {str(s.get("session_key")) for s in sessions}
+    _done.difference_update({d for d in _done if d[1] not in live})
 
     return {
         "checked": len(sessions),
