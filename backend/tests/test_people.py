@@ -126,3 +126,13 @@ def test_buttons_use_the_remote_url_while_the_api_uses_the_local_one(client):
         assert seerr.seerr.link_for(item) == "https://seerr.example.com/movie/603"
     with trial({"seerr_url": "http://192.0.2.10:5055", "seerr_public_url": "", "seerr_api_key": "k"}):
         assert seerr.seerr.link_for(item) == "http://192.0.2.10:5055/movie/603"
+
+
+def test_location_panel_follows_the_map_filters(client):
+    claim(client)
+    seed()
+    everyone = client.get("/api/location?city=Springfield").json()
+    assert {u["user_id"] for u in everyone["users"]} == {7, 8}
+    one = client.get("/api/location?city=Springfield&user_id=8").json()
+    assert [u["user_id"] for u in one["users"]] == [8]
+    assert one["plays"] == 1

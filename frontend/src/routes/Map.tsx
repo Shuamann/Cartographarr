@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   useApi,
+  useUserNames,
   type Activity,
   type LiveSession,
   type MapPoint,
@@ -297,6 +298,7 @@ export default function MapRoute({
             place={selected.properties}
             lat={selected.properties.lat}
             lon={selected.properties.lon}
+            filterQuery={query}
             onClose={() => setSelected(null)}
             onOpenUser={onOpenUser}
             onFilterToTitle={(ratingKey, title) => {
@@ -927,6 +929,7 @@ function Drawer({
   place,
   lat,
   lon,
+  filterQuery,
   onClose,
   onFilterToTitle,
   onOpenUser,
@@ -934,6 +937,8 @@ function Drawer({
   place: Place;
   lat: number;
   lon: number;
+  /* The map's filters as a query string, so the panel lists what the pin shows. */
+  filterQuery: string;
   onClose: () => void;
   onFilterToTitle?: (ratingKey: number, title: string) => void;
   onOpenUser?: (userId: number) => void;
@@ -946,10 +951,12 @@ function Drawer({
   // Keyed on coordinates, the same way the map groups pins. Plenty of
   // addresses resolve to a country with no city at all, and keying on city
   // left those panels empty.
-  const detail = useApi<LocationDetail>(`/location?lat=${lat}&lon=${lon}`);
+  const extra = filterQuery.replace(/^\?/, "");
+  const detail = useApi<LocationDetail>(`/location?lat=${lat}&lon=${lon}${extra ? `&${extra}` : ""}`);
   const recent = useApi<HistoryPage>(
-    tab === "watched" ? `/location/plays?lat=${lat}&lon=${lon}&size=12` : null,
+    tab === "watched" ? `/location/plays?lat=${lat}&lon=${lon}&size=25${extra ? `&${extra}` : ""}` : null,
   );
+  const names = useUserNames();
 
   function show(which: "users" | "devices" | "addresses") {
     setTab("who");
@@ -1089,9 +1096,35 @@ function Drawer({
                       }
                     >
                       <span>
-                        {row.full_title}
+                        {row.full_title ?? <span className="muted">Withheld, another viewer</span>}
                         <span className="muted small block">
-                          {row.player}
+                          {row.user_id != null && (nav.openUser || onOpenUser) ? (
+                            <span
+                              className="linkish"
+                              role="link"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                (onOpenUser ?? nav.openUser)?.(row.user_id as number);
+                              }}
+                            >
+                              {names.get(row.user_id) ?? row.user_id}
+                            </span>
+                          ) : null}
+                          {row.user_id != null && row.player ? " · " : ""}
+                          {row.machine_id && nav.openDevice ? (
+                            <span
+                              className="linkish"
+                              role="link"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                nav.openDevice?.(row.machine_id as string);
+                              }}
+                            >
+                              {row.player}
+                            </span>
+                          ) : (
+                            row.player
+                          )}
                           {row.transcode_decision === "transcode" ? " · transcode" : ""}
                         </span>
                       </span>

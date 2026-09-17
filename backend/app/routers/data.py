@@ -421,6 +421,7 @@ async def media_detail(rating_key: int, db: Db) -> dict:
 def location_detail(
     db: Db,
     scope: ViewerScope,
+    filters: Filt,
     lat: float | None = None,
     lon: float | None = None,
     city: str | None = None,
@@ -446,6 +447,9 @@ def location_detail(
     me = scope.plex_user_id if scope and scope.plex_user_id is not None else -1
     if scope is not None and scope.own_only:
         where.append(History.user_id == me)
+    # The same filters the map was drawn with, so the panel describes the pin
+    # as it is shown: filter to one user and the panel lists only them.
+    where.extend(filters.conditions())
 
     joined = select(History).join(IpLocation, IpLocation.ip == History.ip_address).where(*where)
 
@@ -555,6 +559,7 @@ def location_detail(
 def location_plays(
     db: Db,
     scope: ViewerScope,
+    filters: Filt,
     lat: float,
     lon: float,
     size: int = Query(12, le=200),
@@ -565,6 +570,7 @@ def location_plays(
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .where(IpLocation.lat == lat, IpLocation.lon == lon)
         .where(*([History.user_id == (scope.plex_user_id or -1)] if scope is not None and scope.own_only else []))
+        .where(*filters.conditions())
         .order_by(desc(History.started))
         .limit(size)
     )
