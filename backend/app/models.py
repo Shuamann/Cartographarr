@@ -253,6 +253,46 @@ class Rule(Base):
     created_at: Mapped[datetime | None] = mapped_column()
 
 
+class StreamEvent(Base):
+    """Something that happened during a stream, with how long it lasted.
+
+    Only buffering so far. Recorded by services/tracker.py when an episode
+    ends, with the stream's details at the time, so it can be counted in
+    rules and reported on later.
+    """
+
+    __tablename__ = "stream_events"
+    __table_args__ = (
+        Index("ix_stream_events_started", "started_at"),
+        Index("ix_stream_events_user", "user_id", "started_at"),
+        Index("ix_stream_events_machine", "machine_id", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    session_key: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    username: Mapped[str | None] = mapped_column(String(255))
+    machine_id: Mapped[str | None] = mapped_column(String(255))
+    player: Mapped[str | None] = mapped_column(String(255))
+    platform: Mapped[str | None] = mapped_column(String(64))
+    product: Mapped[str | None] = mapped_column(String(128))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    location: Mapped[str | None] = mapped_column(String(8))
+    rating_key: Mapped[int | None] = mapped_column(Integer)
+    full_title: Mapped[str | None] = mapped_column(Text)
+    media_type: Mapped[str | None] = mapped_column(String(16))
+    transcode_decision: Mapped[str | None] = mapped_column(String(32))
+    video_resolution: Mapped[str | None] = mapped_column(String(16))
+    quality_profile: Mapped[str | None] = mapped_column(String(64))
+    bandwidth: Mapped[int | None] = mapped_column(Integer)
+    stream_bitrate: Mapped[int | None] = mapped_column(Integer)
+    progress_percent: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column()
+    ended_at: Mapped[datetime | None] = mapped_column()
+    seconds: Mapped[float | None] = mapped_column(Float)
+
+
 class BannedDevice(Base):
     """A device that may not stream.
 

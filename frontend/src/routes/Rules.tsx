@@ -56,6 +56,8 @@ function blankValue(field: RuleField): unknown {
       return true;
     case "time":
       return ["22:00", "06:00"];
+    case "window":
+      return [3, 24];
     default:
       return "";
   }
@@ -827,6 +829,29 @@ function ValueEditor({
           {field.unit && <span className="muted small">{field.unit}</span>}
         </span>
       );
+    case "window": {
+      const [n, hours] = Array.isArray(value) ? (value as (number | string)[]) : ["", ""];
+      return (
+        <span className="row">
+          <input
+            type="number"
+            min={0}
+            className="cond-number"
+            value={n === null || n === undefined ? "" : String(n)}
+            onChange={(e) => onChange([e.target.value === "" ? "" : Number(e.target.value), hours])}
+          />
+          <span className="muted small">in the last</span>
+          <input
+            type="number"
+            min={1}
+            className="cond-number"
+            value={hours === null || hours === undefined ? "" : String(hours)}
+            onChange={(e) => onChange([n, e.target.value === "" ? "" : Number(e.target.value)])}
+          />
+          <span className="muted small">hours</span>
+        </span>
+      );
+    }
     case "time": {
       const [start, end] = Array.isArray(value) ? (value as string[]) : ["", ""];
       return (
@@ -948,7 +973,10 @@ function leafText(leaf: CondLeaf, catalogue: RuleFields): string {
   const op = field.ops.find((o) => o.value === leaf.op)?.label ?? leaf.op;
   const options = optionsFor(field, catalogue);
   let value: string;
-  if (Array.isArray(leaf.value)) {
+  if (field.type === "window" && Array.isArray(leaf.value)) {
+    const [n, hours] = leaf.value as (number | string)[];
+    value = `${n ?? "?"} in the last ${hours ?? "?"} hour${Number(hours) === 1 ? "" : "s"}`;
+  } else if (Array.isArray(leaf.value)) {
     const list = leaf.value.map((v) => options.find((o) => String(o.value) === String(v))?.label ?? String(v));
     value = field.type === "time" ? list.join(" and ") : list.join(", ") || "?";
   } else if (typeof leaf.value === "boolean") {

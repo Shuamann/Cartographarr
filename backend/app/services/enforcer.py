@@ -16,12 +16,12 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.actions import registry
 from app.db import session_scope
 from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
-from app.services import conditions
+from app.services import conditions, tracker
 from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
 
@@ -220,7 +220,77 @@ async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str 
     finally:
         await client.aclose()
     sessions: list[Session] = activity.get("sessions") or []
-    return sessions, _build_context(sessions), None
+    tracker.observe(sessions)
+    context = _build_context(sessions)
+    counter = window_counter()
+    for s in sessions:
+        ctx = context[str(s.get("session_key"))]
+        ctx.update(tracker.metrics(s.get("session_key")))
+        ctx["window_count"] = counter
+    return sessions, context, None
+
+
+def window_counter():
+    """Counts over the last N hours, for the "recent history" conditions.
+
+    Built per poll and memoised, so several rules asking the same question of
+    the same user cost one query.
+    """
+    from app.models import History, StreamEvent
+
+    cache: dict[tuple, int | None] = {}
+
+    def count(kind: str, session: Session, hours: float) -> int | None:
+        uid = _int(session.get("user_id"))
+        mid = session.get("machine_id")
+        key = (kind, uid, mid, hours)
+        if key in cache:
+            return cache[key]
+        since = int(time.time() - hours * 3600)
+        since_dt = datetime.fromtimestamp(since, UTC)
+        with session_scope() as db:
+            if kind == "device_buffering_window":
+                value = None if not mid else db.execute(
+                    select(func.count()).select_from(StreamEvent).where(
+                        StreamEvent.machine_id == mid, StreamEvent.started_at >= since_dt
+                    )
+                ).scalar_one()
+            elif uid is None:
+                value = None
+            elif kind == "user_plays_window":
+                value = db.execute(
+                    select(func.count()).select_from(History).where(History.user_id == uid, History.started >= since)
+                ).scalar_one()
+            elif kind == "user_devices_window":
+                value = db.execute(
+                    select(func.count(func.distinct(History.machine_id))).where(
+                        History.user_id == uid, History.started >= since
+                    )
+                ).scalar_one()
+            elif kind == "user_addresses_window":
+                value = db.execute(
+                    select(func.count(func.distinct(History.ip_address))).where(
+                        History.user_id == uid, History.started >= since
+                    )
+                ).scalar_one()
+            elif kind == "user_cities_window":
+                value = db.execute(
+                    select(func.count(func.distinct(IpLocation.city)))
+                    .join(History, History.ip_address == IpLocation.ip)
+                    .where(History.user_id == uid, History.started >= since, IpLocation.city.is_not(None))
+                ).scalar_one()
+            elif kind == "user_buffering_window":
+                value = db.execute(
+                    select(func.count()).select_from(StreamEvent).where(
+                        StreamEvent.user_id == uid, StreamEvent.started_at >= since_dt
+                    )
+                ).scalar_one()
+            else:
+                value = None
+        cache[key] = value
+        return value
+
+    return count
 
 
 def _int(value: Any) -> int | None:
@@ -350,8 +420,17 @@ def ban_rule() -> Rule | None:
 async def run_once() -> dict[str, Any]:
     """Evaluate every enabled rule against current activity."""
     settings = current()
-    if not (is_configured() and settings.enforce_enabled):
+    if not is_configured():
         return {"checked": 0, "matched": 0, "acted": 0}
+
+    # Read activity first, whatever happens next: the tracker has to see every
+    # poll to time buffering and record it, even with no rules or rules off.
+    sessions, context, error = await live_context()
+    if error:
+        log.warning("enforcer could not read activity: %s", error)
+        return {"checked": 0, "matched": 0, "acted": 0, "error": error}
+    if not settings.enforce_enabled:
+        return {"checked": len(sessions), "matched": 0, "acted": 0}
 
     with session_scope() as db:
         rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True)).order_by(Rule.id)).scalars())
@@ -362,12 +441,7 @@ async def run_once() -> dict[str, Any]:
     if banned is not None:
         rules.insert(0, banned)
     if not rules:
-        return {"checked": 0, "matched": 0, "acted": 0}
-
-    sessions, context, error = await live_context()
-    if error:
-        log.warning("enforcer could not read activity: %s", error)
-        return {"checked": 0, "matched": 0, "acted": 0, "error": error}
+        return {"checked": len(sessions), "matched": 0, "acted": 0}
 
     # Refuse rules that lean on something missing. Evaluating them with that
     # condition dropped would make them match more than was written.

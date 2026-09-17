@@ -45,6 +45,8 @@ OPS: dict[str, list[tuple[str, str]]] = {
     "cidr": [("in", "is in"), ("not_in", "is not in")],
     "time": [("between", "is between"), ("not_between", "is not between")],
     "weekday": [("any", "is any of"), ("none", "is none of")],
+    # A count over a time window: the value is [count, hours].
+    "window": [("gt", "more than"), ("gte", "at least"), ("lt", "fewer than"), ("lte", "at most"), ("eq", "exactly")],
 }
 
 
@@ -137,6 +139,25 @@ FIELDS: list[Field] = [
         fixed=(("playing", "Playing"), ("paused", "Paused"), ("buffering", "Buffering")),
     ),
     Field("paused_minutes", "Paused for", "Playback", "number", lambda s, c: c.get("paused_minutes"), unit="minutes"),
+    Field(
+        "buffering_seconds", "Buffering right now for", "Playback", "number",
+        lambda s, c: c.get("buffering_seconds"), unit="seconds",
+        hint="How long this stall has lasted. Measured each activity check, so accurate to a few seconds.",
+    ),
+    Field(
+        "buffer_count", "Times buffered, this stream", "Playback", "number",
+        lambda s, c: c.get("buffer_count"), unit="times",
+        hint="Stalls since Cartographarr first saw this stream, including one happening now.",
+    ),
+    Field(
+        "buffer_total_seconds", "Time spent buffering, this stream", "Playback", "number",
+        lambda s, c: c.get("buffer_total_seconds"), unit="seconds",
+    ),
+    Field(
+        "tracked_seconds", "Stream running for", "Playback", "number",
+        lambda s, c: c.get("tracked_seconds"), unit="seconds",
+        hint="Time since Cartographarr first saw this stream. Pair with buffering to catch stalls at the start.",
+    ),
     Field("progress", "Progress", "Playback", "number", lambda s, c: s.get("progress_percent"), unit="%"),
     Field("bandwidth", "Bandwidth", "Playback", "number", lambda s, c: s.get("bandwidth"), unit="kbps"),
     Field("quality", "Quality profile", "Playback", "text", lambda s, c: s.get("quality_profile")),
@@ -160,6 +181,22 @@ FIELDS: list[Field] = [
         requires=("geoip",),
     ),
     Field("isp", "Internet provider", "Where", "text", lambda s, c: _geo(c, "asn_org"), requires=("geoip",)),
+    # ---- recent history --------------------------------------------------------
+    # Counts over the last N hours. Plays are finished plays from history, so a
+    # stream still running is not counted until it ends and syncs.
+    Field("user_plays_window", "Plays by this user", "Recent history", "window", lambda s, c: None),
+    Field("user_devices_window", "Devices this user used", "Recent history", "window", lambda s, c: None),
+    Field("user_addresses_window", "Addresses this user used", "Recent history", "window", lambda s, c: None),
+    Field(
+        "user_cities_window", "Cities this user played from", "Recent history", "window",
+        lambda s, c: None, requires=("geoip",),
+        hint="Several cities in a short time is a sign of a shared account.",
+    ),
+    Field(
+        "user_buffering_window", "Times this user buffered", "Recent history", "window", lambda s, c: None,
+        hint="Stalls Cartographarr recorded across all of this user's streams.",
+    ),
+    Field("device_buffering_window", "Times this device buffered", "Recent history", "window", lambda s, c: None),
     # ---- when ------------------------------------------------------------------
     Field(
         "time", "Time of day", "When", "time", lambda s, c: c.get("now"),
@@ -277,6 +314,19 @@ def _condition(node: Tree, session: Session, ctx: Context) -> bool:
         inside = start <= minute < end if start <= end else (minute >= start or minute < end)
         return inside if op == "between" else (not inside if op == "not_between" else False)
 
+    if spec.type == "window":
+        bounds = _as_list(want)
+        counter = ctx.get("window_count")
+        if len(bounds) != 2 or not callable(counter):
+            return False
+        n, hours = _num(bounds[0]), _num(bounds[1])
+        if n is None or hours is None or hours <= 0:
+            return False
+        h = counter(spec.key, session, hours)
+        if h is None:
+            return False
+        return {"gt": h > n, "gte": h >= n, "lt": h < n, "lte": h <= n, "eq": h == n}.get(op, False)
+
     if spec.type == "weekday":
         now = have
         days = {str(d) for d in _as_list(want)}
@@ -362,6 +412,12 @@ def validate(tree: Any, depth: int = 0) -> Tree:
             raise ValueError(f"{spec.label}: needs a number")
         if spec.type == "bool" and not isinstance(value, bool):
             raise ValueError(f"{spec.label}: choose yes or no")
+        if spec.type == "window":
+            bounds = _as_list(value)
+            if len(bounds) != 2 or _num(bounds[0]) is None or _num(bounds[1]) is None:
+                raise ValueError(f"{spec.label}: needs a count and a number of hours")
+            if not 0 < float(bounds[1]) <= 24 * 90:
+                raise ValueError(f"{spec.label}: hours must be between 1 and {24 * 90}")
         if spec.type == "time":
             bounds = _as_list(value)
             if len(bounds) != 2 or any(_minutes(b) is None for b in bounds):

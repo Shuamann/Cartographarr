@@ -251,7 +251,7 @@ export type RuleField = {
   key: string;
   label: string;
   group: string;
-  type: "choice" | "text" | "number" | "bool" | "cidr" | "time" | "weekday";
+  type: "choice" | "text" | "number" | "bool" | "cidr" | "time" | "weekday" | "window";
   ops: { value: string; label: string }[];
   requires: string[];
   unmet: string[];
