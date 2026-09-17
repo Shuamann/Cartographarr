@@ -820,7 +820,40 @@ type Replacement = {
   created_by: string | null;
   updated_at: string | null;
   resolved_by: string | null;
+  checked_at?: string | null;
 };
+
+type Live = {
+  checked_at: string;
+  queue: {
+    status: string | null;
+    state: string | null;
+    health: string | null;
+    progress: number | null;
+    time_left: string | null;
+    client: string | null;
+    messages: string[];
+  } | null;
+  events: { type: string; label: string; date: string | null; title: string | null; message: string | null }[];
+};
+
+const STEPS: { key: string; label: string }[] = [
+  { key: "queued", label: "Queued" },
+  { key: "downloading", label: "Downloading" },
+  { key: "ready", label: "Ready for you" },
+  { key: "done", label: "Replaced" },
+];
+
+function stepOf(status: Replacement["status"]): number {
+  return { queued: 0, downloading: 1, ready: 2, importing: 2, imported: 3, imported_automatically: 3 }[status as string] ?? -1;
+}
+
+function ago(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const t = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : new Date(t).toLocaleString();
+}
 
 const CHANNELS: Record<number, string> = { 2: "stereo", 6: "5.1", 8: "7.1" };
 
@@ -979,9 +1012,37 @@ function Replacements() {
   );
 }
 
-function ReplacementRow({ r, onChanged }: { r: Replacement; onChanged: () => void }) {
+function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // What Radarr or Sonarr says right now: its queue entry and history, asked
+  // directly while this row is on screen, every 10 seconds while it is active.
+  const [fresh, setFresh] = useState<(Replacement & { live: Live }) | null>(null);
+  const [checking, setChecking] = useState(false);
+  const r = fresh ?? stored;
+  const active = ["queued", "downloading", "ready", "importing"].includes(r.status);
+
+  async function refresh() {
+    setChecking(true);
+    try {
+      const next = await api.get<Replacement & { live: Live }>(`/library/replacements/${stored.id}/live`);
+      if (next.status !== r.status) onChanged();
+      setFresh(next);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!active) return;
+    refresh();
+    const timer = setInterval(refresh, 10000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stored.id, active]);
   const status = REPLACEMENT_STATUS[r.status];
   const service = r.service === "sonarr" ? "Sonarr" : "Radarr";
 
@@ -1044,11 +1105,58 @@ function ReplacementRow({ r, onChanged }: { r: Replacement; onChanged: () => voi
             Cancel
           </button>
         )}
+        {r.status === "failed" && (
+          <button className="tab" onClick={refresh} disabled={checking}>
+            {checking ? "Checking\u2026" : "Show what happened"}
+          </button>
+        )}
       </div>
-      {r.status === "downloading" && r.progress != null && (
-        <div className="download-progress" title={`${Math.round(r.progress * 100)}%`}>
-          <span style={{ width: `${Math.round(r.progress * 100)}%` }} />
+      {stepOf(r.status) >= 0 && (
+        <ol className="steps">
+          {STEPS.map((step, i) => (
+            <li key={step.key} className={i < stepOf(r.status) ? "done" : i === stepOf(r.status) ? "now" : undefined}>
+              {step.label}
+            </li>
+          ))}
+        </ol>
+      )}
+      {(r.status === "downloading" || fresh?.live.queue?.progress != null) && (fresh?.live.queue?.progress ?? r.progress) != null && (
+        <div className="download-progress" title={`${Math.round((fresh?.live.queue?.progress ?? r.progress ?? 0) * 100)}%`}>
+          <span style={{ width: `${Math.round((fresh?.live.queue?.progress ?? r.progress ?? 0) * 100)}%` }} />
         </div>
+      )}
+      <div className="row wrap live-line">
+        <span className="muted small">
+          {fresh?.live.queue
+            ? [
+                `${service}: ${fresh.live.queue.state ?? fresh.live.queue.status ?? "in the queue"}`,
+                fresh.live.queue.progress != null ? `${Math.round(fresh.live.queue.progress * 100)}%` : null,
+                fresh.live.queue.time_left ? `${fresh.live.queue.time_left} left` : null,
+                fresh.live.queue.client,
+              ]
+                .filter(Boolean)
+                .join(" \u00b7 ")
+            : fresh
+              ? `Not in ${service}'s queue`
+              : null}
+          {`${fresh ? " \u00b7 " : ""}checked ${ago(fresh?.live.checked_at ?? r.checked_at)}`}
+        </span>
+        <button className="tab" onClick={refresh} disabled={checking}>
+          {checking ? "Checking\u2026" : "Refresh"}
+        </button>
+      </div>
+      {fresh?.live.queue?.messages && fresh.live.queue.messages.length > 0 && (
+        <p className="muted small">{fresh.live.queue.messages.join("; ")}</p>
+      )}
+      {fresh && fresh.live.events.length > 0 && (
+        <ul className="arr-events">
+          {fresh.live.events.map((e, i) => (
+            <li key={i} className={e.type?.toLowerCase().includes("fail") ? "bad" : undefined}>
+              <span className="muted small">{e.date ? new Date(e.date).toLocaleString() : ""}</span> <strong>{e.label}</strong>
+              {e.message && <span className="small"> {e.message}</span>}
+            </li>
+          ))}
+        </ul>
       )}
       {r.release?.fixes && r.release.fixes.length > 0 && (
         <div className="row wrap file-badges">

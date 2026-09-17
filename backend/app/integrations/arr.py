@@ -185,6 +185,19 @@ class ArrIntegration:
         )
         return (data or {}).get("records") or [] if isinstance(data, dict) else data or []
 
+    async def history(self, arr_id: int, episode_id: int | None) -> list[dict]:
+        """What Radarr or Sonarr recorded for this movie or episode, newest
+        first: grabbed, download failed, imported, deleted."""
+        if self.path == "movie":
+            data = await get_json(f"{self.base_url}/api/v3/history/movie", headers=self.headers, params={"movieId": arr_id})
+        else:
+            data = await get_json(
+                f"{self.base_url}/api/v3/history/series", headers=self.headers,
+                params={"seriesId": arr_id, "episodeId": episode_id},
+            )
+        records = data.get("records") if isinstance(data, dict) else data
+        return sorted(records or [], key=lambda r: str(r.get("date") or ""), reverse=True)
+
     async def manual_import_candidates(self, download_id: str) -> list[dict]:
         return await get_json(
             f"{self.base_url}/api/v3/manualimport", headers=self.headers,

@@ -490,6 +490,39 @@ async def _decide(replacement_id: int, admin, confirm: bool) -> dict:
     return out
 
 
+@router.get("/replacements/{replacement_id}/live")
+async def replacement_live(replacement_id: int, _: AdminUser) -> dict:
+    """This replacement as Radarr or Sonarr sees it right now: its queue entry
+    and history. Also brings the stored status up to date."""
+    import asyncio
+
+    from app.db import session_scope
+    from app.integrations.base import describe_failure
+    from app.models import Replacement
+    from app.services import replacements
+
+    def load():
+        with session_scope() as db:
+            row = db.get(Replacement, replacement_id)
+            if row is not None:
+                db.expunge(row)
+            return row
+
+    row = await asyncio.to_thread(load)
+    if row is None:
+        raise HTTPException(404, "No such replacement")
+    service = replacements._service(row.service)
+    if not service.configured():
+        raise HTTPException(409, f"Connect {service.label} in Settings first")
+    try:
+        shown, update = await replacements.live(row, service)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+    await asyncio.to_thread(replacements.save, row, update)
+    row = await asyncio.to_thread(load)
+    return {**replacements.to_dict(row), "live": shown}
+
+
 @router.post("/replacements/{replacement_id}/confirm")
 async def confirm_replacement(replacement_id: int, admin: AdminUser) -> dict:
     return await _decide(replacement_id, admin, confirm=True)

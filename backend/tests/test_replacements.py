@@ -46,6 +46,7 @@ class FakeRadarr:
 
     def __init__(self):
         self.queue_records = []
+        self.history_records = []
         self.file_id = 10
         self.sent = []
 
@@ -68,6 +69,9 @@ class FakeRadarr:
 
     async def queue(self):
         return self.queue_records
+
+    async def history(self, arr_id, episode_id):
+        return self.history_records
 
     async def manual_import_candidates(self, download_id):
         return [{"path": "/downloads/Film/film.mkv", "name": "Film.1080p.WEB-DL.DDP5.1.H.264.mkv", "size": 5_000_000_000,
@@ -170,3 +174,36 @@ def test_an_upgrade_imported_by_radarr_is_recorded(client, monkeypatch):
         db.get(Replacement, queued["id"]).created_at = datetime.now(UTC) - timedelta(hours=1)
     _poll()
     assert client.get("/api/library/replacements").json()[0]["status"] == "imported_automatically"
+
+
+
+def test_a_download_that_fails_before_reaching_the_queue_is_caught(client, monkeypatch):
+    """Sonarr's history says Download failed; the queue never showed it."""
+    fake = _setup(client, monkeypatch)
+    release = client.get("/api/library/file/1/releases").json()["releases"][0]
+    queued = client.post("/api/library/file/1/replace", json={"release": release}).json()
+    now = datetime.now(UTC).isoformat()
+    fake.history_records = [
+        {"eventType": "downloadFailed", "sourceTitle": release["title"], "downloadId": "zz", "date": now,
+         "data": {"message": "PAR Status: NONE - Delete Status: HEALTH"}},
+        {"eventType": "grabbed", "sourceTitle": release["title"], "downloadId": "zz", "date": now, "data": {}},
+        # From before this replacement: ignored.
+        {"eventType": "downloadFailed", "sourceTitle": release["title"], "downloadId": "old",
+         "date": (datetime.now(UTC) - timedelta(days=3)).isoformat(), "data": {"message": "old"}},
+    ]
+    live = client.get(f"/api/library/replacements/{queued['id']}/live").json()
+    assert live["status"] == "failed" and "Delete Status: HEALTH" in live["message"]
+    assert [e["label"] for e in live["live"]["events"]] == ["Download failed", "Sent to the download client"]
+    assert live["checked_at"] is not None
+
+
+def test_live_shows_the_queue_entry(client, monkeypatch):
+    fake = _setup(client, monkeypatch)
+    release = client.get("/api/library/file/1/replace".replace("/replace", "/releases")).json()["releases"][0]
+    queued = client.post("/api/library/file/1/replace", json={"release": release}).json()
+    fake.queue_records = [{"id": 60, "movieId": 7, "title": release["title"], "downloadId": "q1", "size": 200, "sizeleft": 50,
+                           "status": "downloading", "trackedDownloadState": "downloading", "timeleft": "00:04:10",
+                           "downloadClient": "NZBGet"}]
+    live = client.get(f"/api/library/replacements/{queued['id']}/live").json()
+    assert live["status"] == "downloading" and live["live"]["queue"]["progress"] == 0.75
+    assert live["live"]["queue"]["time_left"] == "00:04:10" and live["live"]["queue"]["client"] == "NZBGet"

@@ -184,6 +184,7 @@ def to_dict(row: Any) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "resolved_by": row.resolved_by,
+        "checked_at": row.checked_at.isoformat() if getattr(row, "checked_at", None) else None,
     }
 
 
@@ -202,8 +203,6 @@ async def poll() -> int:
         rows = db.execute(select(Replacement).where(Replacement.status.in_(ACTIVE))).scalars().all()
         for r in rows:
             db.expunge(r)
-    if not rows:
-        return 0
     changed = 0
     queues: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
@@ -213,73 +212,175 @@ async def poll() -> int:
         try:
             if r.service not in queues:
                 queues[r.service] = await service.queue()
-            update = await _step(r, service, queues[r.service])
+            _, update = await live(r, service, queues[r.service])
         except Exception as exc:  # noqa: BLE001 - try again next time
             log.debug("replacement %s poll failed: %s", r.id, exc)
             continue
-        if update:
-            with session_scope() as db:
-                stored = db.get(Replacement, r.id)
-                for key, value in update.items():
-                    setattr(stored, key, value)
-                stored.updated_at = datetime.now(UTC)
+        if save(r, update):
             changed += 1
-            if update.get("status") == "ready":
-                await _tell(r, "is downloaded and waiting for you to confirm or deny it")
     return changed
 
 
-async def _step(r: Any, service: Any, queue: list[dict[str, Any]]) -> dict[str, Any]:
+def save(r: Any, update: dict[str, Any]) -> bool:
+    from app.db import session_scope
+    from app.models import Replacement
+
+    with session_scope() as db:
+        stored = db.get(Replacement, r.id)
+        stored.checked_at = datetime.now(UTC)
+        if not update:
+            return False
+        for key, value in update.items():
+            setattr(stored, key, value)
+        stored.updated_at = datetime.now(UTC)
+    if update.get("status") == "ready":
+        import asyncio
+
+        try:
+            asyncio.get_running_loop().create_task(_tell(r, "is downloaded and waiting for you to confirm or deny it"))
+        except RuntimeError:
+            pass
+    return True
+
+
+EVENTS = {
+    "grabbed": "Sent to the download client",
+    "downloadfailed": "Download failed",
+    "downloadfolderimported": "Imported",
+    "moviefileimported": "Imported",
+    "episodefileimported": "Imported",
+    "downloadignored": "Ignored",
+    "moviefiledeleted": "Old file deleted",
+    "episodefiledeleted": "Old file deleted",
+    "moviefilerenamed": "Renamed",
+    "episodefilerenamed": "Renamed",
+}
+
+
+def _when(value: Any) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+async def live(r: Any, service: Any, queue: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What Radarr or Sonarr says about this replacement right now, straight
+    from its queue and history, and the changes that means for the stored row.
+
+    The download is recognised by its download id once known, otherwise by the
+    release name; history events from before the replacement was queued are
+    left out."""
     release = json.loads(r.release or "{}")
-    mine = [
-        q for q in queue
-        if (q.get("downloadId") and q.get("downloadId") == r.download_id)
-        or (not r.download_id and _same_item(q, r) and str(q.get("title") or "").lower() == str(release.get("title") or "").lower())
-    ]
+    name = str(release.get("title") or "").lower()
     now = datetime.now(UTC)
     created = r.created_at if (r.created_at and r.created_at.tzinfo) else (r.created_at or now).replace(tzinfo=UTC)
 
-    if mine:
-        q = mine[0]
-        size, left = q.get("size") or 0, q.get("sizeleft") or 0
-        update: dict[str, Any] = {
-            "download_id": q.get("downloadId"),
-            "queue_id": q.get("id"),
-            "progress": round(1 - left / size, 3) if size else None,
-        }
-        state = str(q.get("trackedDownloadState") or "").lower()
-        if state in ("importpending", "importblocked") or (str(q.get("status")).lower() == "completed" and state != "importing"):
-            if r.status != "ready":
-                files = await service.manual_import_candidates(q.get("downloadId"))
-                update["candidate"] = json.dumps(_candidate(files))
-                update["status"] = "ready"
-                messages = [m for s in q.get("statusMessages") or [] for m in s.get("messages") or []]
-                update["message"] = "; ".join(messages)[:500] or None
-        elif state == "importing":
-            update["status"] = "importing"
-        elif r.status == "queued":
-            update["status"] = "downloading"
-        if str(q.get("trackedDownloadStatus") or "").lower() == "error":
-            update["status"], update["message"] = "failed", (q.get("errorMessage") or "Download failed")[:500]
-        return {k: v for k, v in update.items() if getattr(r, k, None) != v}
+    if queue is None:
+        queue = await service.queue()
+    history = await service.history(r.arr_id, r.episode_id)
 
-    # Not in the queue any more, or not yet.
-    if r.status == "queued" and now - created < timedelta(minutes=30):
-        return {}
-    file = await service.current_file(r.arr_id, r.episode_id)
-    before = json.loads(r.current or "{}").get("arr_file_id")
-    if file and file.get("id") != before:
-        from app.db import session_scope
-        from app.models import MediaItem
+    events = [
+        h for h in history
+        if (_when(h.get("date")) or now) >= created - timedelta(minutes=5)
+        and ((r.download_id and h.get("downloadId") == r.download_id) or str(h.get("sourceTitle") or "").lower() == name)
+    ]
+    download_id = r.download_id or next((h.get("downloadId") for h in events if h.get("downloadId")), None)
+    if download_id:
+        events = [h for h in history if h.get("downloadId") == download_id and (_when(h.get("date")) or now) >= created - timedelta(minutes=5)] or events
+    q = next(
+        (x for x in queue
+         if (download_id and x.get("downloadId") == download_id)
+         or (not download_id and _same_item(x, r) and str(x.get("title") or "").lower() == name)),
+        None,
+    )
 
-        with session_scope() as db:
-            item = db.get(MediaItem, r.rating_key)
-            if item is not None:
-                item.file_checked_at = None  # read the new file's details on the next sync
-        status = "imported" if r.status == "importing" else "imported_automatically"
-        return {"status": status, "candidate": json.dumps({**json.loads(r.candidate or "{}"), "imported": _file_summary(file)}),
-                "progress": 1.0}
-    return {"status": "failed", "message": "It left the download queue without being imported."}
+    shown = {
+        "checked_at": now.isoformat(),
+        "queue": None if q is None else {
+            "status": q.get("status"),
+            "state": q.get("trackedDownloadState"),
+            "health": q.get("trackedDownloadStatus"),
+            "progress": round(1 - (q.get("sizeleft") or 0) / q["size"], 3) if q.get("size") else None,
+            "time_left": q.get("timeleft"),
+            "client": q.get("downloadClient"),
+            "messages": [m for x in q.get("statusMessages") or [] for m in x.get("messages") or []] + (
+                [q["errorMessage"]] if q.get("errorMessage") else []
+            ),
+        },
+        "events": [
+            {
+                "type": h.get("eventType"),
+                "label": EVENTS.get(str(h.get("eventType") or "").lower(), str(h.get("eventType") or "")),
+                "date": h.get("date"),
+                "title": h.get("sourceTitle"),
+                "message": (h.get("data") or {}).get("message"),
+            }
+            for h in events
+        ],
+    }
+
+    update: dict[str, Any] = {}
+    download_id = download_id or (q or {}).get("downloadId")
+    if download_id and download_id != r.download_id:
+        update["download_id"] = download_id
+    types = [str(h.get("eventType") or "").lower() for h in events]
+
+    if r.status in ACTIVE:
+        if any(t in ("downloadfolderimported", "moviefileimported", "episodefileimported") for t in types):
+            update.update(await _imported(r, service))
+        elif "downloadfailed" in types:
+            failed = next(h for h in events if str(h.get("eventType") or "").lower() == "downloadfailed")
+            update["status"] = "failed"
+            update["message"] = ((failed.get("data") or {}).get("message") or "The download failed")[:500]
+        elif q is not None:
+            update["queue_id"] = q.get("id")
+            update["progress"] = shown["queue"]["progress"]
+            state = str(q.get("trackedDownloadState") or "").lower()
+            if str(q.get("trackedDownloadStatus") or "").lower() == "error":
+                update["status"] = "failed"
+                update["message"] = ("; ".join(shown["queue"]["messages"]) or "Download failed")[:500]
+            elif state in ("importpending", "importblocked") or (str(q.get("status")).lower() == "completed" and state != "importing"):
+                if r.status != "ready":
+                    files = await service.manual_import_candidates(q.get("downloadId"))
+                    update["candidate"] = json.dumps(_candidate(files))
+                    update["status"] = "ready"
+                    update["message"] = "; ".join(shown["queue"]["messages"])[:500] or None
+            elif state == "importing":
+                update["status"] = "importing"
+            elif r.status == "queued":
+                update["status"] = "downloading"
+        elif r.status in ("importing", "downloading", "ready") or now - created > timedelta(minutes=30):
+            # Gone from the queue with no event saying why: look at the file.
+            file = await service.current_file(r.arr_id, r.episode_id)
+            if file and file.get("id") != json.loads(r.current or "{}").get("arr_file_id"):
+                update.update(await _imported(r, service, file))
+            elif not events:
+                update["status"] = "failed"
+                update["message"] = f"{service.label} never started this download."
+            elif r.status != "importing":
+                update["status"] = "failed"
+                update["message"] = "It left the download queue without being imported."
+
+    return shown, {k: v for k, v in update.items() if getattr(r, k, None) != v}
+
+
+async def _imported(r: Any, service: Any, file: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    if file is None:
+        file = await service.current_file(r.arr_id, r.episode_id)
+    with session_scope() as db:
+        item = db.get(MediaItem, r.rating_key)
+        if item is not None:
+            item.file_checked_at = None  # read the new file's details on the next sync
+    return {
+        "status": "imported" if r.status == "importing" else "imported_automatically",
+        "candidate": json.dumps({**json.loads(r.candidate or "{}"), "imported": _file_summary(file or {})}),
+        "progress": 1.0,
+    }
 
 
 def _same_item(q: dict[str, Any], r: Any) -> bool:

@@ -598,6 +598,7 @@ class Replacement(Base):
     resolved_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime | None] = mapped_column()
     updated_at: Mapped[datetime | None] = mapped_column()
+    checked_at: Mapped[datetime | None] = mapped_column()
 
 
 class SavedReport(Base):

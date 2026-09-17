@@ -2292,6 +2292,42 @@ label.locked .pill {
   height: 100%;
   background: var(--accent);
 }
+.steps {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.steps li {
+  flex: 1;
+  padding: 4px 8px;
+  border-top: 3px solid var(--surface-3);
+  color: var(--ink-3);
+}
+.steps li.done {
+  border-top-color: var(--ok);
+  color: var(--ink-2);
+}
+.steps li.now {
+  border-top-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+}
+.live-line {
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.arr-events {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.arr-events li.bad strong {
+  color: var(--danger);
+}
+
 .table.compare {
   margin-top: 10px;
 }
