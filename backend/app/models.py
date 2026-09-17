@@ -501,6 +501,9 @@ class AppUser(Base):
     plex_user_id: Mapped[int | None] = mapped_column(Integer)
     """Which Plex user this person is, for viewer privacy. Set by an admin, or
     left empty to match by email or username."""
+    privacy: Mapped[str | None] = mapped_column(String(16))
+    """What this viewer may see: all, own or anonymised. Empty follows the
+    viewer privacy setting. Accounts made by Plex sign-in start anonymised."""
 
 
 class AppSession(Base):

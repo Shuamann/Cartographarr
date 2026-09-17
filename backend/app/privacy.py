@@ -77,7 +77,8 @@ def scope_for(account: AppUser) -> Scope | None:
     """None means no restriction."""
     if account.role == "admin":
         return None
-    mode = getattr(current(), "viewer_privacy", "all") or "all"
+    # The account's own setting wins over the server-wide one.
+    mode = getattr(account, "privacy", None) or getattr(current(), "viewer_privacy", "all") or "all"
     if mode not in ("own", "anonymised"):
         return None
     return Scope(mode=mode, plex_user_id=linked_plex_user(account))

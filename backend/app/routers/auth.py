@@ -37,6 +37,7 @@ def _public(user: AppUser) -> dict:
         "is_active": user.is_active,
         "last_login": user.last_login,
         "plex_user_id": user.plex_user_id,
+        "privacy": user.privacy,
     }
 
 
@@ -334,10 +335,12 @@ def create_user(
 
 @router.put("/users/{user_id}")
 def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(...)) -> dict:
-    allowed = {"role", "email", "is_active", "password", "plex_user_id"}
+    allowed = {"role", "email", "is_active", "password", "plex_user_id", "privacy"}
     unknown = set(values) - allowed
     if unknown:
         raise HTTPException(400, f"Cannot change: {', '.join(sorted(unknown))}")
+    if "privacy" in values and values["privacy"] not in (None, "all", "own", "anonymised"):
+        raise HTTPException(400, "Privacy is all, own, anonymised, or empty to follow the setting")
     if "role" in values and values["role"] not in ROLES:
         raise HTTPException(400, f"Role must be one of: {', '.join(sorted(ROLES))}")
 
@@ -367,8 +370,8 @@ def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
                 raise HTTPException(400, problem)
             user.password_hash = hash_password(values["password"])
             db.execute(delete(AppSession).where(AppSession.app_user_id == user.id))
-        before = {f: getattr(user, f) for f in ("role", "email", "is_active", "plex_user_id")}
-        for field in ("role", "email", "is_active", "plex_user_id"):
+        before = {f: getattr(user, f) for f in ("role", "email", "is_active", "plex_user_id", "privacy")}
+        for field in ("role", "email", "is_active", "plex_user_id", "privacy"):
             if field in values:
                 setattr(user, field, values[field])
         db.flush()
@@ -383,6 +386,8 @@ def update_user(user_id: int, admin: AdminUser, values: dict[str, Any] = Body(..
         parts.append("email")
     if "password" in values:
         parts.append("reset password")
+    if "privacy" in values and values["privacy"] != before["privacy"]:
+        parts.append(f"sees {values['privacy'] or 'the server setting'}")
     if "plex_user_id" in values and values["plex_user_id"] != before["plex_user_id"]:
         parts.append("linked Plex user" if values["plex_user_id"] else "unlinked Plex user")
     audit.record(

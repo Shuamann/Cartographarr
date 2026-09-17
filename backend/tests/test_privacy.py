@@ -88,3 +88,17 @@ def test_admins_always_see_everything(client):
     assert client.get("/api/history").json()["total"] == 3
     assert len(client.get("/api/users").json()) == 2
     assert client.get("/api/users/8").status_code == 200
+
+
+
+def test_an_account_can_override_the_server_setting(client):
+    from app.db import session_scope
+    from app.models import AppUser
+
+    as_viewer(client, "all")
+    assert len(client.get("/api/history").json()["items"]) == 3
+    with session_scope() as db:
+        db.query(AppUser).filter(AppUser.username == "viewer7").update({"privacy": "own"})
+    items = client.get("/api/history").json()["items"]
+    assert [i["user_id"] for i in items] == [7]
+    assert client.put("/api/auth/users/1", json={"privacy": "nonsense"}).status_code in (400, 403)

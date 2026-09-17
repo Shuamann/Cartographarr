@@ -122,6 +122,9 @@ def test_strangers_are_refused_and_new_viewers_only_when_allowed(client, monkeyp
     start(client)
     created = client.post("/api/auth/plex/finish").json()["user"]
     assert created["username"] == "friend" and created["role"] == "viewer"
+    # Anonymised for them even though the server-wide setting shows everything.
+    assert created["privacy"] == "anonymised"
+    assert client.get("/api/auth/state").json()["privacy"]["mode"] == "anonymised"
 
     # Someone Tautulli does not list as having access still gets nothing.
     client.post("/api/auth/logout")

@@ -175,6 +175,9 @@ def account_for(plex: dict[str, Any], allow_new_viewers: bool) -> tuple[AppUser 
         user = AppUser(
             username=username, email=plex.get("email"), role="viewer", password_hash=None,
             auth_source="plex", is_active=True, created_at=datetime.now(UTC), plex_user_id=plex_id,
+            # Someone who let themselves in sees the server with other people
+            # anonymised, whatever the server-wide setting; an admin can widen it.
+            privacy="anonymised",
         )
         db.add(user)
         db.flush()

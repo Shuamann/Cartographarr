@@ -348,7 +348,10 @@ export type AppUser = {
   is_active: boolean;
   last_login: string | null;
   plex_user_id?: number | null;
+  privacy?: AccountPrivacy;
 };
+
+export type AccountPrivacy = "all" | "own" | "anonymised" | null;
 
 export type AuthState = {
   needs_claim: boolean;

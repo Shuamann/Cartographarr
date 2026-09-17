@@ -184,7 +184,7 @@ const AREAS: Area[] = [
       },
       {
         title: "Plex sign in",
-        note: "Adds Sign in with Plex to the sign-in page. A Plex account signs in as the Cartographarr account linked to it under Accounts, or a viewer account with the same email. Usernames are never matched, and an admin account must be linked to its Plex account first. With new viewers allowed, anyone the server is shared with gets a viewer account the first time they sign in. Nobody becomes an admin through Plex, and Cartographarr does not keep their Plex token.",
+        note: "Adds Sign in with Plex to the sign-in page. A Plex account signs in as the Cartographarr account linked to it under Accounts, or a viewer account with the same email. Usernames are never matched, and an admin account must be linked to its Plex account first. With new viewers allowed, anyone the server is shared with gets a viewer account the first time they sign in, seeing other people anonymised whatever the viewer privacy setting; change that per account under Accounts. Nobody becomes an admin through Plex, and Cartographarr does not keep their Plex token.",
         keys: ["plex_signin_enabled", "plex_signin_new_viewers"],
       },
       {
@@ -1040,6 +1040,22 @@ function Accounts() {
                     </option>
                   ))}
                 </select>
+              </td>
+              <td>
+                {u.role === "viewer" ? (
+                  <select
+                    title="What this viewer can see. Server setting follows Viewer privacy above."
+                    value={u.privacy ?? ""}
+                    onChange={(e) => change(u, { privacy: e.target.value || null })}
+                  >
+                    <option value="">Sees: server setting</option>
+                    <option value="all">Sees: everything</option>
+                    <option value="anonymised">Sees: others anonymised</option>
+                    <option value="own">Sees: only their own</option>
+                  </select>
+                ) : (
+                  <span className="muted small">sees everything</span>
+                )}
               </td>
               <td className="muted small">
                 {u.last_login ? new Date(u.last_login).toLocaleString() : "never signed in"}
