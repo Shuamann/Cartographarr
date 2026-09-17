@@ -171,6 +171,15 @@ class Settings(BaseSettings):
     """What viewer accounts can see: `all` of the server, only their `own`
     data, or everything with other people `anonymised`. Admins see all."""
 
+    plex_signin_enabled: bool = False
+    """Offer "Sign in with Plex" on the sign-in page. A Plex account signs in as
+    the Cartographarr account linked to it, or a viewer account with the same
+    email. Usernames are never matched; admins must be linked explicitly."""
+
+    plex_signin_new_viewers: bool = False
+    """Let anyone the server is shared with (per Tautulli) sign in with Plex
+    and get a viewer account the first time. Nobody becomes an admin this way."""
+
     auth_proxy_enabled: bool = False
     """Trust an authenticating reverse proxy (Authelia, Authentik, Cloudflare
     Access). Off until you have one in front, or anyone could send the header."""

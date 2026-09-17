@@ -1,3 +1,4 @@
+import BrandIcon from "../components/BrandIcon";
 import { useEffect, useState } from "react";
 import { api, useApi, type AuthState } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
@@ -54,6 +55,36 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
   const mismatch = claiming && confirm.length > 0 && password !== confirm;
   const ready =
     username.trim().length > 0 && password.length > 0 && (!claiming || (!mismatch && confirm));
+
+  // Coming back from Plex: finish signing in once, then tidy the address.
+  const returning = new URLSearchParams(window.location.search).has("plex_login");
+  const [plexBusy, setPlexBusy] = useState(returning);
+  useEffect(() => {
+    if (!returning) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("plex_login");
+    window.history.replaceState(null, "", url.toString());
+    api
+      .post("/auth/plex/finish")
+      .then(() => onDone())
+      .catch((err: Error) => {
+        setError(err.message);
+        setPlexBusy(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function plexSignIn() {
+    setPlexBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ url: string }>("/auth/plex/start", { origin: window.location.origin });
+      window.location.href = r.url;
+    } catch (err) {
+      setError((err as Error).message);
+      setPlexBusy(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -125,6 +156,13 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
           <button className="btn primary" type="submit" disabled={!ready || busy}>
             {busy ? "Working…" : claiming ? "Create account" : "Sign in"}
           </button>
+
+          {state.plex_signin && !claiming && (
+            <button type="button" className="btn plex-signin" onClick={plexSignIn} disabled={plexBusy}>
+              <BrandIcon name="plex" />
+              {plexBusy ? (returning ? "Finishing Plex sign-in\u2026" : "Opening Plex\u2026") : "Sign in with Plex"}
+            </button>
+          )}
         </section>
 
         {state.proxy_enabled && !claiming && (

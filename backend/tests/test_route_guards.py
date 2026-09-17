@@ -13,6 +13,9 @@ PUBLIC = {
     ("POST", "/api/auth/claim"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/logout"),
+    # Signing in with Plex happens before anyone is signed in; off (404) unless switched on.
+    ("POST", "/api/auth/plex/start"),
+    ("POST", "/api/auth/plex/finish"),
     ("GET", "/api/branding"),
     ("GET", "/api/branding/{kind}"),
     # Trending TMDB art for the sign-in page; nothing about this server.

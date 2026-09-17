@@ -2323,6 +2323,15 @@ label.locked .pill {
   }
 }
 
+.plex-signin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+}
+
 .dialog {
   width: min(440px, calc(100% - 32px));
   padding: 20px 22px;

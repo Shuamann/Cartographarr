@@ -94,6 +94,16 @@ out and the UI owns it.
 | `API_DOCS` | `true` turns on /docs and /openapi.json, off by default |
 | `ALLOW_FRAMING` | `true` lets dashboards such as Organizr show Cartographarr in a frame |
 
+## Signing in with Plex
+
+Switch on **Offer Sign in with Plex** in Settings, Access. A Plex account signs
+in as the Cartographarr account linked to it under Accounts, or as a viewer
+account with the same email. Usernames are never matched, and an admin must be
+linked to their Plex account before Plex can sign them in. With **Let people
+you share with sign in as viewers** on, anyone Tautulli lists as having access
+gets a viewer account the first time. Cartographarr uses the Plex token once to
+learn who signed in and does not keep it.
+
 ## Putting it behind a reverse proxy
 
 Cartographarr has its own login, so it is safe to expose without one. If you

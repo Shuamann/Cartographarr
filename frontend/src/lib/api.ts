@@ -355,6 +355,7 @@ export type AuthState = {
   authenticated: boolean;
   user: AppUser | null;
   proxy_enabled: boolean;
+  plex_signin?: boolean;
   privacy: { mode: "all" | "own" | "anonymised"; plex_user_id: number | null; linked: boolean } | null;
 };
 

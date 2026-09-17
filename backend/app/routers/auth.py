@@ -82,6 +82,7 @@ def state(request: Request) -> dict:
         "authenticated": user is not None,
         "user": _public(user) if user else None,
         "proxy_enabled": settings.auth_proxy_enabled,
+        "plex_signin": bool(settings.plex_signin_enabled) and has_any_user(),
         "privacy": _privacy(user) if user else None,
     }
 
@@ -188,6 +189,63 @@ def login(
 
     login_throttle.succeeded(name)
     audit.record(user, "auth.login", f"{user.username} signed in")
+    _start_session(response, user)
+    return {"user": _public(user)}
+
+
+@router.post("/plex/start")
+async def plex_start(request: Request, response: Response, origin: str = Body(..., embed=True)) -> dict:
+    """Begin signing in with Plex. Returns where to send the browser."""
+    from app.auth import plex_signin
+    from app.integrations.base import describe_failure
+
+    settings = current()
+    if not settings.plex_signin_enabled or not has_any_user():
+        raise HTTPException(404, "Plex sign-in is not switched on")
+    safe = plex_signin.safe_origin(origin)
+    header = request.headers.get("origin")
+    # Plex sends the browser back to this address, so it must be this app as
+    # the browser sees it, not something a request body made up.
+    if safe is None or (header and plex_signin.safe_origin(header) != safe):
+        raise HTTPException(400, "That is not this app's address")
+    try:
+        state_value, url = await plex_signin.start(safe)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"plex.tv: {describe_failure(exc)}") from exc
+    response.set_cookie(
+        plex_signin.STATE_COOKIE, state_value, httponly=True, samesite="lax",
+        secure=settings.session_cookie_secure, max_age=plex_signin.PIN_SECONDS, path="/api/auth/plex",
+    )
+    return {"url": url}
+
+
+@router.post("/plex/finish")
+async def plex_finish(request: Request, response: Response) -> dict:
+    """Finish signing in with Plex, once Plex has sent the browser back."""
+    from app.auth import plex_signin
+    from app.integrations.base import describe_failure
+
+    settings = current()
+    if not settings.plex_signin_enabled:
+        raise HTTPException(404, "Plex sign-in is not switched on")
+    try:
+        plex = await plex_signin.finish(request.cookies.get(plex_signin.STATE_COOKIE))
+    except plex_signin.NotYet as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"plex.tv: {describe_failure(exc)}") from exc
+    response.delete_cookie(plex_signin.STATE_COOKIE, path="/api/auth/plex")
+
+    user, why = plex_signin.account_for(plex, bool(settings.plex_signin_new_viewers))
+    who = str(plex.get("username") or plex.get("email") or plex.get("id"))[:64]
+    if user is None:
+        audit.record(None, "auth.failed", f"Plex account {who!r} could not sign in: {why}", actor=who, result="failed")
+        raise HTTPException(403, why)
+    if why == "created":
+        audit.record(user, "account.create", f"Added viewer account {user.username} on first Plex sign-in", target=str(user.id))
+    audit.record(user, "auth.login", f"{user.username} signed in with Plex")
     _start_session(response, user)
     return {"user": _public(user)}
 
