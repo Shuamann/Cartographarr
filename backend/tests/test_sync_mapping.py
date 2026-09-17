@@ -126,3 +126,25 @@ def test_episode_numbers_are_copied_from_history_to_cached_titles(client):
         ep = db.get(MediaItem, 5)
         assert (ep.grandparent_title, ep.parent_media_index, ep.media_index) == ("Show", 1, 1)
         assert db.get(MediaItem, 6).media_index is None
+
+
+def test_user_sync_keeps_shared_libraries(client):
+    import asyncio
+    import json
+
+    from app.db import session_scope
+    from app.models import User
+    from app.services.sync import sync_users
+
+    class Fake:
+        async def call(self, cmd, **params):
+            if cmd == "get_users_table":
+                return {"data": [{"user_id": "5", "username": "pat", "is_active": 1}]}
+            if cmd == "get_users":
+                return [{"user_id": "5", "shared_libraries": ["3", "1"], "is_allow_sync": 0}]
+            return None
+
+    asyncio.run(sync_users(Fake()))
+    with session_scope() as db:
+        pat = db.get(User, 5)
+        assert json.loads(pat.shared_libraries) == ["3", "1"] and pat.allow_sync is False

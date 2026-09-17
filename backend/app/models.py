@@ -56,6 +56,10 @@ class User(Base):
     # Deleted from Tautulli's user list, which hides them from get_users, while
     # the Plex account may well still have access and still be streaming.
     deleted_in_tautulli: Mapped[bool | None] = mapped_column(Boolean)
+    # Library section ids shared with them (JSON list), from Tautulli's
+    # get_users, so access can be reviewed without a Plex token.
+    shared_libraries: Mapped[str | None] = mapped_column(Text)
+    allow_sync: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class Device(Base):

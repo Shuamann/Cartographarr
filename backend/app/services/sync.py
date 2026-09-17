@@ -194,6 +194,23 @@ async def sync_users(client: TautulliClient) -> int:
     ]
     rows = [r for r in rows if r["user_id"] is not None]
     listed = {r["user_id"] for r in rows}
+
+    # Which libraries each person has. Only get_users says, not the table.
+    try:
+        shares = {
+            _int(u.get("user_id")): (
+                json.dumps([str(x) for x in (u.get("shared_libraries") or []) if str(x)]),
+                _bool(u.get("is_allow_sync")),
+            )
+            for u in (await client.call("get_users") or [])
+        }
+    except Exception as exc:  # noqa: BLE001 - access review is a bonus on top of the user list
+        log.warning("could not read shared libraries: %s", exc)
+        shares = {}
+    for r in rows:
+        if r["user_id"] in shares:
+            r["shared_libraries"], r["allow_sync"] = shares[r["user_id"]]
+
     with session_scope() as session:
         _upsert(session, User, rows)
         # Someone stored before who has dropped off the list since. Rows are

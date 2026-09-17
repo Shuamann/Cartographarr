@@ -136,3 +136,37 @@ def test_location_panel_follows_the_map_filters(client):
     one = client.get("/api/location?city=Springfield&user_id=8").json()
     assert [u["user_id"] for u in one["users"]] == [8]
     assert one["plays"] == 1
+
+
+def test_access_review(client):
+    import json
+    import time
+
+    from app.db import session_scope
+    from app.models import BannedDevice, History, Library, User
+    from tests.test_auth import claim
+
+    claim(client)
+    now = int(time.time())
+    with session_scope() as db:
+        db.add(Library(section_id=1, name="Movies"))
+        db.add(Library(section_id=2, name="TV"))
+        db.add(User(user_id=1, username="busy", shared_libraries=json.dumps(["1", "2"]), is_active=True))
+        db.add(User(user_id=2, username="gone quiet", shared_libraries=json.dumps(["1"]), is_active=True))
+        db.add(User(user_id=3, username="never", is_active=True))
+        db.add(User(user_id=4, username="removed", deleted_in_tautulli=True))
+        db.add(History(row_id=1, user_id=1, started=now - 86400, machine_id="a"))
+        db.add(History(row_id=2, user_id=2, started=now - 200 * 86400, machine_id="b"))
+        db.add(BannedDevice(machine_id="b", user_id=2))
+    data = client.get("/api/access-review").json()
+    people = {p["username"]: p for p in data["people"]}
+    assert data["inactive_days"] == 90
+    assert [p["username"] for p in data["people"]] == ["gone quiet", "never", "busy", "removed"]
+    assert people["busy"]["libraries"] == ["Movies", "TV"] and people["busy"]["status"] == "active"
+    assert people["gone quiet"]["status"] == "inactive" and people["gone quiet"]["idle_days"] == 200
+    assert people["gone quiet"]["banned_devices"] == 1
+    assert people["never"]["libraries"] is None and people["never"]["status"] == "never"
+    client.post("/api/auth/users", json={"username": "viewer1", "password": "a-long-enough-password", "role": "viewer"})
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username": "viewer1", "password": "a-long-enough-password"})
+    assert client.get("/api/access-review").status_code == 403

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 
-from datetime import UTC
+from datetime import UTC, datetime
 from urllib.parse import quote
 from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import Select, desc, func, select, update
+from sqlalchemy import Select, case, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
@@ -1091,6 +1091,75 @@ def person_activity(
         row["at_epoch"] = stamp(row)
     out.sort(key=lambda r: r["at_epoch"], reverse=True)
     return out[:limit]
+
+
+@router.get("/access-review")
+def access_review(admin: AdminUser, db: Db) -> dict:
+    """Everyone with access, what they can see, and whether they still use it."""
+    import json as _json
+
+    from app.models import BannedDevice
+
+    days = int(current().access_inactive_days or 90)
+    now = int(datetime.now(UTC).timestamp())
+    recent = now - days * 86400
+    libraries = {lib.section_id: lib.name for lib in db.execute(select(Library)).scalars()}
+    stats = {
+        r.user_id: r
+        for r in db.execute(
+            select(
+                History.user_id,
+                func.count().label("plays"),
+                func.sum(case((History.started >= recent, 1), else_=0)).label("recent"),
+                func.max(History.started).label("last_play"),
+                func.count(func.distinct(History.machine_id)).label("devices"),
+                func.count(func.distinct(History.ip_address)).label("addresses"),
+            ).group_by(History.user_id)
+        ).all()
+    }
+    banned_by_user: dict[int, int] = {}
+    for (uid,) in db.execute(select(BannedDevice.user_id)).all():
+        if uid is not None:
+            banned_by_user[uid] = banned_by_user.get(uid, 0) + 1
+
+    people = []
+    for u in db.execute(select(User)).scalars():
+        s = stats.get(u.user_id)
+        try:
+            ids = _json.loads(u.shared_libraries) if u.shared_libraries else None
+        except ValueError:
+            ids = None
+        last = s.last_play if s else None
+        idle = (now - last) // 86400 if last else None
+        if u.deleted_in_tautulli:
+            status = "removed"
+        elif not s or not s.plays:
+            status = "never"
+        elif s.recent == 0:
+            status = "inactive"
+        else:
+            status = "active"
+        people.append({
+            "user_id": u.user_id,
+            "name": u.friendly_name or u.username or f"User {u.user_id}",
+            "username": u.username,
+            "email": u.email,
+            "home": bool(u.is_home_user),
+            "active_in_tautulli": bool(u.is_active),
+            "libraries": None if ids is None else [libraries.get(int(i), f"Library {i}") for i in ids if str(i).isdigit()],
+            "allow_sync": u.allow_sync,
+            "plays": s.plays if s else 0,
+            "recent_plays": int(s.recent or 0) if s else 0,
+            "last_play": last,
+            "idle_days": idle,
+            "devices": s.devices if s else 0,
+            "addresses": s.addresses if s else 0,
+            "banned_devices": banned_by_user.get(u.user_id, 0),
+            "status": status,
+        })
+    order = {"inactive": 0, "never": 1, "active": 2, "removed": 3}
+    people.sort(key=lambda p: (order[p["status"]], -(p["idle_days"] or 0), p["name"].lower()))
+    return {"inactive_days": days, "people": people}
 
 
 @router.get("/devices")

@@ -863,7 +863,10 @@ code {
   background: var(--surface-2);
   color: var(--ink);
 }
-.seg.on {
+/* Also while hovered: the hover rule above is more specific, and a selected
+ * option turned grey under the pointer, as if clicking had deselected it. */
+.seg.on,
+.seg.on:hover:not(:disabled) {
   background: var(--accent);
   color: var(--accent-ink);
 }

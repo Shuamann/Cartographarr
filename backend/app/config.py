@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     """Library health lists files above this average bitrate that are watched
     remotely. Set it near what one remote stream can comfortably use."""
 
+    access_inactive_days: int = 90
+    """Access review marks someone inactive after this many days without a
+    play."""
+
     upload_alert_percent: int = 90
     """Notify when remote streams use this much of the upload. 0 turns the
     warning off. Needs the upload capacity set."""
