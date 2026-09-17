@@ -338,7 +338,7 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
         {open && nav.isAdmin && <AddBan banned={bans.ids} />}
         {open && (
           <div className="mini-list">
-            {bans.list.length === 0 && <p className="muted">Nothing is banned.</p>}
+            {bans.list.length === 0 && <p className="muted pad-s">Nothing is banned.</p>}
             {bans.list.map((b) => (
               <div key={b.machine_id} className="mini">
                 <div className="min0">
