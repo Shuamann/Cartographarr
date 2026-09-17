@@ -451,6 +451,7 @@ function UserProfile({
               <StreamDetail key={s.session_key} session={s} compact />
             ))}
             <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} scope={{ user_id: [userId] }} />
+            <PlaybackSection path={`/users/${userId}/playback`} who="this person" />
           </>
         )}
         {tab === "history" && <RecentPlays query={`user_id=${userId}`} onOpenAll={() => nav.filterTo?.("History", { user_id: [userId] })} showDevice />}
@@ -606,6 +607,7 @@ function DeviceProfile({
               </div>
             </section>
             <Overview profile={d} extra={[["First seen", when(d.first_seen)]]} scope={{ machine_id: [machineId], machineLabel: label }} />
+            <PlaybackSection path={`/devices/${encodeURIComponent(machineId)}/playback`} who="this device" />
           </>
         )}
         {tab === "users" && (
@@ -933,6 +935,108 @@ function PlaceList({ places, scope }: { places: Profile["places"]; scope?: Parti
         );
       })}
     </div>
+  );
+}
+
+type Playback = {
+  days: number;
+  plays: number;
+  transcoded: number;
+  streams_recorded: number;
+  hardware: number;
+  transcode_causes: { cause: string; label: string; streams: number }[];
+  stalls: number;
+  stall_minutes: number;
+  stall_causes: { cause: string; label: string; stalls: number }[];
+  stalled_titles: { rating_key: number; title: string | null; stalls: number }[];
+};
+
+/* How streams play here: transcodes and why, stalls and what is likely to
+ * blame. "Is it their device?" answered on the profile itself. */
+function PlaybackSection({ path, who }: { path: string; who: string }) {
+  const nav = useNav();
+  const data = useApi<Playback>(`${path}?days=90`);
+  if (data.error) return null;
+  if (!data.data) return <Loading compact label="Reading how streams play" />;
+  const p = data.data;
+  if (!p.plays && !p.streams_recorded && !p.stalls) return null;
+  const share = p.plays ? Math.round((p.transcoded / p.plays) * 100) : 0;
+  const count = (cause: string) => p.stall_causes.find((c) => c.cause === cause)?.stalls ?? 0;
+  const elsewhere = count("server") + count("upload") + count("file");
+  const verdict =
+    p.stalls === 0
+      ? `No stalls recorded for ${who} in the last ${p.days} days.`
+      : count("viewer") / p.stalls >= 0.5
+        ? `Most stalls look like ${who}'s device or connection: stalls across many titles while nobody else stalls.`
+        : elsewhere / p.stalls >= 0.5
+          ? `Most stalls are not down to ${who}: they came from the ${
+              count("file") >= count("server") + count("upload") ? "files being watched" : "server or its upload"
+            }.`
+          : `${p.stalls} stall${p.stalls === 1 ? "" : "s"} so far, with no pattern yet.`;
+  return (
+    <section className="profile-section playback">
+      <h3>How it plays, last {p.days} days</h3>
+      <p className="small">{verdict}</p>
+      <dl className="stats">
+        <Stat label="Plays transcoded" value={`${share}% (${p.transcoded} of ${p.plays})`} />
+        <Stat label="Stalls" value={p.stalls ? `${p.stalls}, ${p.stall_minutes} min` : "None"} />
+      </dl>
+      <div className="dash-cols">
+        <div>
+          <h4>Why streams transcoded</h4>
+          {p.transcode_causes.length === 0 ? (
+            <p className="muted small">
+              {p.streams_recorded ? "Every recorded stream played directly." : "No streams recorded live yet."}
+            </p>
+          ) : (
+            <div className="mini-list">
+              {p.transcode_causes.map((c) => (
+                <div key={c.cause} className="mini">
+                  <span>{c.label}</span>
+                  <span className="muted">{c.streams}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <h4>Likely cause of stalls</h4>
+          {p.stall_causes.length === 0 ? (
+            <p className="muted small">No stalls.</p>
+          ) : (
+            <div className="mini-list">
+              {p.stall_causes.map((c) => (
+                <div key={c.cause} className="mini">
+                  <span>{c.label}</span>
+                  <span className="muted">{c.stalls}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {p.stalled_titles.length > 0 && (
+            <p className="muted small">
+              Stalled most on{" "}
+              {p.stalled_titles.map((t, i) => (
+                <span key={t.rating_key}>
+                  {i > 0 ? ", " : ""}
+                  {nav.filterTo ? (
+                    <button
+                      className="linkish"
+                      onClick={() => nav.filterTo?.("History", { rating_key: t.rating_key, ratingKeyLabel: t.title ?? "" })}
+                    >
+                      {t.title ?? `item ${t.rating_key}`}
+                    </button>
+                  ) : (
+                    t.title
+                  )}{" "}
+                  ({t.stalls})
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -438,3 +438,72 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
             })
     out.sort(key=lambda x: -(x["available_days"] or 0))
     return {"configured": True, "requests": out}
+
+
+def playback_summary(db: Session, days: int, user_id: int | None = None, machine_id: str | None = None) -> dict[str, Any]:
+    """How streams play for one person or one device: how often they
+    transcode and why, how often they stall and what is likely to blame, and
+    the titles that stall most. Answers "is it their device?" in one place."""
+    from app.services.stalls import CAUSES as STALL_CAUSES
+    from app.services.streams import CAUSES as TRANSCODE_CAUSES
+
+    since, cutoff = _since(days)
+
+    def narrow(stmt, model):
+        if user_id is not None:
+            stmt = stmt.where(model.user_id == user_id)
+        if machine_id is not None:
+            stmt = stmt.where(model.machine_id == machine_id)
+        return stmt
+
+    plays, transcoded = db.execute(
+        narrow(
+            select(func.count(), func.sum(case((History.transcode_decision == "transcode", 1), else_=0)))
+            .where(History.started >= since),
+            History,
+        )
+    ).one()
+    sessions = db.execute(
+        narrow(select(StreamSession.causes, StreamSession.transcode_hw).where(StreamSession.started_at >= cutoff), StreamSession)
+    ).all()
+    causes: Counter = Counter()
+    for text, _hw in sessions:
+        for c in (text or "").split(","):
+            if c:
+                causes[c] += 1
+    stall_rows = db.execute(
+        narrow(
+            select(StreamEvent.cause, func.count(), func.sum(StreamEvent.seconds))
+            .where(StreamEvent.started_at >= cutoff)
+            .group_by(StreamEvent.cause),
+            StreamEvent,
+        )
+    ).all()
+    stalled_titles = db.execute(
+        narrow(
+            select(StreamEvent.rating_key, func.max(StreamEvent.full_title), func.count())
+            .where(StreamEvent.started_at >= cutoff, StreamEvent.rating_key.is_not(None))
+            .group_by(StreamEvent.rating_key)
+            .order_by(func.count().desc())
+            .limit(5),
+            StreamEvent,
+        )
+    ).all()
+    stalls = sum(n for _, n, _ in stall_rows)
+    return {
+        "days": days,
+        "plays": int(plays or 0),
+        "transcoded": int(transcoded or 0),
+        "streams_recorded": len(sessions),
+        "hardware": sum(1 for _, hw in sessions if hw),
+        "transcode_causes": [
+            {"cause": c, "label": TRANSCODE_CAUSES.get(c, c), "streams": n} for c, n in causes.most_common()
+        ],
+        "stalls": stalls,
+        "stall_minutes": round(sum(float(sec or 0) for _, _, sec in stall_rows) / 60, 1),
+        "stall_causes": [
+            {"cause": c or "one_off", "label": STALL_CAUSES.get(c or "one_off", c), "stalls": n}
+            for c, n, _ in sorted(stall_rows, key=lambda r: -r[1])
+        ],
+        "stalled_titles": [{"rating_key": k, "title": t, "stalls": n} for k, t, n in stalled_titles],
+    }

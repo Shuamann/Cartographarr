@@ -172,3 +172,23 @@ def test_many_requests_do_not_freeze_the_app(client, monkeypatch):
     assert clock.perf_counter() - started < 5
     client.get("/api/library/requests")
     assert calls["n"] == 1  # the second came from the cache
+
+
+def test_playback_summary_for_a_user_and_a_device(client):
+    from app.db import session_scope
+    from app.models import StreamEvent, StreamSession
+
+    claim(client)
+    seed()
+    with session_scope() as db:
+        db.add(StreamSession(user_id=1, machine_id="tv", causes="subtitle_burn,audio_codec", transcode_hw=True,
+                             started_at=datetime.now(UTC) - timedelta(days=1)))
+        db.add(StreamEvent(kind="buffering", user_id=1, machine_id="tv", rating_key=4, full_title="Transcoded everywhere",
+                           started_at=datetime.now(UTC) - timedelta(days=1), ended_at=datetime.now(UTC), seconds=30, cause="viewer"))
+    user = client.get("/api/users/1/playback").json()
+    assert user["plays"] == 10 and user["transcoded"] == 4
+    assert [c["cause"] for c in user["transcode_causes"]] == ["subtitle_burn", "audio_codec"]
+    assert user["stalls"] == 1 and user["stall_causes"][0]["label"] == "Viewer's device or connection"
+    assert user["stalled_titles"][0]["title"] == "Transcoded everywhere"
+    device = client.get("/api/devices/tv/playback").json()
+    assert device["streams_recorded"] == 1 and device["hardware"] == 1

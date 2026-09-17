@@ -2389,6 +2389,15 @@ label.locked .pill {
     grid-template-columns: 1fr;
   }
 }
+.playback {
+  margin-top: 18px;
+}
+.playback h4 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
 .top-media-detail {
   padding: 14px 13px;
   background: var(--surface-2);

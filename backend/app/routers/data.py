@@ -821,6 +821,25 @@ def user_detail(user_id: int, db: Db, scope: ViewerScope) -> dict:
     }
 
 
+@router.get("/users/{user_id}/playback")
+def user_playback(user_id: int, db: Db, scope: ViewerScope, days: int = Query(90, ge=1, le=3650)) -> dict:
+    from app.services.library import playback_summary
+
+    privacy.require_self(scope, user_id)
+    return playback_summary(db, days, user_id=user_id)
+
+
+@router.get("/devices/{machine_id}/playback")
+def device_playback(machine_id: str, db: Db, scope: ViewerScope, days: int = Query(90, ge=1, le=3650)) -> dict:
+    from app.services.library import playback_summary
+
+    if scope is not None:
+        # A viewer sees only their own streams on a device they used.
+        return playback_summary(db, days, user_id=scope.plex_user_id if scope.plex_user_id is not None else -1,
+                                machine_id=machine_id)
+    return playback_summary(db, days, machine_id=machine_id)
+
+
 @router.get("/devices/{machine_id}")
 def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
     """One device, across everyone who has used it. The same install can be
