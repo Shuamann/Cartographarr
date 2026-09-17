@@ -2198,6 +2198,38 @@ label.locked .pill {
   background: var(--bg);
   font-size: 12px;
 }
+.finding-summary {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+.findings {
+  margin-bottom: 14px;
+}
+.findings h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.finding {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.finding.high {
+  border-left-color: var(--danger);
+}
+.finding.medium {
+  border-left-color: var(--warn);
+}
+.finding p {
+  margin: 6px 0 0;
+}
+.arr-actions {
+  margin-top: 10px;
+}
+
 .cause-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

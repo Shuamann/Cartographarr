@@ -112,6 +112,62 @@ class ArrIntegration:
         return f"{self.link_base}/add/new?term={prefix}%3A{external_id}"
 
 
+    # ---- replacing a file ------------------------------------------------------
+    # Non-destructive only: ask for a search, or tag the title. Neither deletes
+    # the current file; a search only grabs something the quality profile
+    # rates higher.
+
+    REPLACE_TAG = "cartographarr-replace"
+
+    async def _send(self, method: str, path: str, body: object) -> object:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.request(method, f"{self.base_url}{path}", headers=self.headers, json=body)
+            response.raise_for_status()
+            return response.json() if response.content else None
+
+    async def find(self, external_id: str) -> dict | None:
+        found = await get_json(f"{self.base_url}/api/v3/{self.path}", headers=self.headers, params={self.id_param: external_id})
+        items = found if isinstance(found, list) else [found]
+        return next((i for i in items if isinstance(i, dict) and i.get("id")), None)
+
+    async def _episode_id(self, series_id: int, season: int, episode: int) -> int | None:
+        episodes = await get_json(
+            f"{self.base_url}/api/v3/episode", headers=self.headers, params={"seriesId": series_id, "seasonNumber": season}
+        )
+        return next((e["id"] for e in episodes or [] if e.get("episodeNumber") == episode), None)
+
+    async def search(self, external_id: str, season: int | None = None, episode: int | None = None) -> str:
+        """Ask for a search for this movie, or this one episode."""
+        found = await self.find(external_id)
+        if found is None:
+            raise LookupError(f"Not in {self.label}")
+        if self.path == "movie":
+            await self._send("POST", "/api/v3/command", {"name": "MoviesSearch", "movieIds": [found["id"]]})
+            return f"{self.label} is searching for {found.get('title')}"
+        if season is None or episode is None:
+            raise LookupError("Episode number unknown, so the episode cannot be searched for")
+        episode_id = await self._episode_id(found["id"], season, episode)
+        if episode_id is None:
+            raise LookupError(f"{self.label} does not list S{season:02d}E{episode:02d}")
+        await self._send("POST", "/api/v3/command", {"name": "EpisodeSearch", "episodeIds": [episode_id]})
+        return f"{self.label} is searching for {found.get('title')} S{season:02d}E{episode:02d}"
+
+    async def tag(self, external_id: str) -> str:
+        """Add the cartographarr-replace tag to the movie or series."""
+        found = await self.find(external_id)
+        if found is None:
+            raise LookupError(f"Not in {self.label}")
+        tags = await get_json(f"{self.base_url}/api/v3/tag", headers=self.headers) or []
+        tag = next((t for t in tags if str(t.get("label", "")).lower() == self.REPLACE_TAG), None)
+        if tag is None:
+            tag = await self._send("POST", "/api/v3/tag", {"label": self.REPLACE_TAG})
+        ids_field = "movieIds" if self.path == "movie" else "seriesIds"
+        await self._send("PUT", f"/api/v3/{self.path}/editor", {ids_field: [found["id"]], "tags": [tag["id"]], "applyTags": "add"})
+        return f"Tagged {found.get('title')} {self.REPLACE_TAG} in {self.label}"
+
+
 radarr = ArrIntegration("radarr", "Radarr", "movie", "tmdbId", "radarr_slug")
 sonarr = ArrIntegration("sonarr", "Sonarr", "series", "tvdbId", "sonarr_slug")
 

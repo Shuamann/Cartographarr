@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
-import { useApi } from "../lib/api";
+import { api, useApi } from "../lib/api";
 import { useNav } from "../lib/nav";
 
 /* Library health: files judged by how they are actually watched.
@@ -14,7 +14,17 @@ import { useNav } from "../lib/nav";
 
 type Track = { codec: string | null; channels?: number | null; language: string | null; bitrate?: number | null; forced?: boolean; location?: string | null };
 
+type Finding = {
+  key: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  fix: string;
+  arr: string | null;
+};
+
 type FileInfo = {
+  findings?: Finding[];
   rating_key: number;
   title: string;
   media_type: string | null;
@@ -98,6 +108,8 @@ type RequestRow = {
 };
 
 type FileDetail = FileInfo & {
+  findings: Finding[];
+  arr: { name: string; label: string; configured: boolean };
   plays: number;
   remote_plays: number;
   transcodes: number;
@@ -555,6 +567,12 @@ function FileRow({ file, badges, stats, days }: { file: FileInfo; badges: ReactN
           </span>
           <div className="row wrap file-badges">{badges}</div>
           <p className="muted small">{stats.filter(Boolean).join(" · ")}</p>
+          {file.findings && file.findings.length > 0 && (
+            <p className="small finding-summary">
+              {file.findings[0].title}
+              {file.findings.length > 1 ? ` and ${file.findings.length - 1} more` : ""}
+            </p>
+          )}
         </div>
         <span className="muted small">{open ? "Hide" : "Details"}</span>
       </button>
@@ -577,6 +595,30 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
   const f = detail.data;
   return (
     <div className="file-card">
+      {f.findings.length > 0 ? (
+        <section className="findings">
+          <h4>What is wrong, and how to fix it</h4>
+          {f.findings.map((x) => (
+            <div key={x.key} className={`finding ${x.severity}`}>
+              <div className="row">
+                <span className={x.severity === "high" ? "pill bad" : x.severity === "medium" ? "pill warn" : "pill"}>
+                  {x.severity === "high" ? "Fix first" : x.severity === "medium" ? "Worth fixing" : "Tidy up"}
+                </span>
+                <strong>{x.title}</strong>
+              </div>
+              <p className="small">{x.detail}</p>
+              <p className="small">
+                <span className="muted">Fix: </span>
+                {x.fix}
+              </p>
+              {x.arr && <p className="muted small">{x.arr}</p>}
+            </div>
+          ))}
+          <ArrActions ratingKey={f.rating_key} arr={f.arr} title={f.title} />
+        </section>
+      ) : (
+        <p className="muted small">Nothing about this file itself stands out.</p>
+      )}
       <dl className="kv">
         <div>
           <dt>Format</dt>
@@ -613,15 +655,6 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
         )}
       </dl>
 
-      {f.issues.length > 0 && (
-        <div className="row wrap file-badges">
-          {f.issues.map((i) => (
-            <span key={i} className="pill warn">
-              {ISSUE_LABELS[i] ?? i}
-            </span>
-          ))}
-        </div>
-      )}
 
       <div className="track-lists">
         <div>
@@ -661,4 +694,54 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
       {showTitle && <MediaPanel ratingKey={f.rating_key} />}
     </div>
   );
+}
+
+/* Hand a file back to Radarr or Sonarr. Search asks it to look for a better
+ * release, which it only grabs if the quality profile rates it higher; Tag
+ * marks it to pick a release by hand. Neither deletes the current file. */
+function ArrActions({
+  ratingKey,
+  arr,
+  title,
+}: {
+  ratingKey: number;
+  arr: { name: string; label: string; configured: boolean };
+  title: string;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  async function run(action: "search" | "tag") {
+    const question =
+      action === "search"
+        ? `Ask ${arr.label} to search for a replacement for ${title}?\n\nIt only downloads a release your quality profile rates higher than the current file. Nothing is deleted.`
+        : `Tag ${title} "cartographarr-replace" in ${arr.label}, to find and pick a release by hand later?`;
+    if (!confirm(question)) return;
+    setBusy(action);
+    setMessage(null);
+    try {
+      const r = await api.post<{ message: string }>(`/library/file/${ratingKey}/arr`, { action });
+      setMessage({ text: r.message, ok: true });
+    } catch (err) {
+      setMessage({ text: (err as Error).message, ok: false });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const why = arr.configured ? undefined : `Connect ${arr.label} in Settings to use this`;
+  return (
+    <div className="arr-actions">
+      <div className="row wrap">
+        <button className="btn" onClick={() => run("search")} disabled={!arr.configured || busy !== null} title={why}>
+          {busy === "search" ? "Asking\u2026" : `Search for a replacement in ${arr.label}`}
+        </button>
+        <button className="btn" onClick={() => run("tag")} disabled={!arr.configured || busy !== null} title={why}>
+          {busy === "tag" ? "Tagging\u2026" : "Tag for replacement"}
+        </button>
+      </div>
+      {!arr.configured && <p className="muted small">{why}.</p>}
+      {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
+    </div>
+  )
 }

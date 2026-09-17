@@ -202,6 +202,21 @@ def problem_files(db: Session, threshold_kbps: int, days: int, limit: int = 100)
             "reasons": reasons,
             "score": score,
         })
+        from app.services.findings import explain
+
+        row = out[-1]
+        stall_kind = "file" if int(s.get("stall_users") or 0) > 1 else "one_off"
+        row["findings"] = explain(
+            row,
+            threshold_kbps,
+            [{"cause": c, "streams": n} for c, n in causes.get(key, Counter()).items()],
+            [{"cause": stall_kind, "stalls": stall_count}] if stall_count else [],
+            "Sonarr" if item.media_type == "episode" else "Radarr",
+        )
+        for finding in row["findings"]:
+            # The detail card reads the reason back from Tautulli; the list does not wait for that.
+            if finding["key"] == "transcoded_unknown":
+                finding["title"] = "Usually transcoded, open it for the reason"
     out.sort(key=lambda r: (-r["score"], -(r["file_bitrate"] or 0)))
     return out[:limit]
 
@@ -258,10 +273,19 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
         if issues and (issue is None or issue in issues):
             flagged.append((item, issues))
     plays = play_stats(db, days, [i.rating_key for i, _ in flagged]) if flagged else {}
-    rows = [
-        {**describe_file(item), "plays": int(plays.get(item.rating_key, {}).get("plays") or 0)}
-        for item, _ in flagged
-    ]
+    from app.services.findings import explain
+
+    rows = []
+    for item, _ in flagged:
+        stats = plays.get(item.rating_key, {})
+        row = {
+            **describe_file(item),
+            "plays": int(stats.get("plays") or 0),
+            "remote_plays": int(stats.get("remote") or 0),
+            "transcodes": int(stats.get("transcodes") or 0),
+        }
+        row["findings"] = explain(row, 10**9, None, None, "Sonarr" if item.media_type == "episode" else "Radarr")
+        rows.append(row)
     rows.sort(key=lambda r: (-r["plays"], r["title"]))
     return {
         "checked": len(items),
