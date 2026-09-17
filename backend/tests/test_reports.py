@@ -154,3 +154,38 @@ def test_saved_reports_are_admin_managed_and_logged(client):
     assert client.delete(f"/api/reports/saved/{saved['id']}").status_code == 200
     actions = [e["action"] for e in client.get("/api/log?kind=changes").json()]
     assert {"report.save", "report.update", "report.delete"} <= set(actions)
+
+
+def test_file_details_streams_and_server_load(client):
+    from app.db import session_scope
+    from app.models import BandwidthSample, MediaItem, StreamEvent, StreamSession
+
+    claim(client)
+    seed()
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=101, title="Film 1", media_type="movie", file_bitrate=45000, video_resolution="4k"))
+        db.add(MediaItem(rating_key=102, title="Film 2", media_type="movie", file_bitrate=8000, video_resolution="1080p"))
+        db.add(StreamSession(user_id=1, rating_key=101, transcode_decision="transcode", primary_cause="subtitle_burn",
+                             transcode_hw=True, buffer_count=2, buffer_seconds=30, started_at=at(5), platform="Roku"))
+        db.add(StreamSession(user_id=2, rating_key=102, transcode_decision="direct play", started_at=at(6), platform="Roku"))
+        minute = int(at(5).timestamp()) // 60 * 60
+        db.add(BandwidthSample(minute=minute, wan_kbps=42000, streams=3, remote_streams=2, transcodes=1, hw_transcodes=1))
+        db.add(BandwidthSample(minute=minute + 60, wan_kbps=12000, streams=1, remote_streams=1, transcodes=0, hw_transcodes=0))
+        for e in db.query(StreamEvent).all():
+            e.cause = "viewer"
+
+    r = client.get("/api/reports/run?source=plays&measure=plays&group=file_bitrate_band").json()
+    assert {row["label"]: row["value"] for row in r["rows"]} == {
+        "40 Mbps and up": 1, "5 to 10 Mbps": 1, "File not checked yet": 2,
+    }
+    r = client.get("/api/reports/run?source=streams&measure=transcoded&group=transcode_cause").json()
+    assert {row["label"]: row["value"] for row in r["rows"]} == {"Subtitles burned in": 1, "Not transcoded": 0}
+    r = client.get("/api/reports/run?source=streams&measure=stall_minutes&group=hardware").json()
+    assert {row["label"]: row["value"] for row in r["rows"]}["Hardware"] == 0.5
+    r = client.get("/api/reports/run?source=server&measure=peak_upload&group=day").json()
+    assert r["total"] == 42 and r["measure"]["unit"] == "mbps"
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=stall_cause").json()
+    assert r["rows"][0]["label"] == "Viewer's device or connection"
+    catalog = client.get("/api/reports/catalog").json()
+    server = next(s for s in catalog["sources"] if s["key"] == "server")
+    assert {d["group"] for d in server["dimensions"]} == {"When"}

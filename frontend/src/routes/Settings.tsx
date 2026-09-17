@@ -142,6 +142,11 @@ const AREAS: Area[] = [
         keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
       },
       {
+        title: "Server upload",
+        note: "Your server's upload speed. With it set, stalls that happen while the upload is nearly full are blamed on the upload rather than a viewer, and you get a notification (through Apprise, at most every half hour) when remote streams use more than the alert level. Leave at 0 if you do not know it.",
+        keys: ["upload_capacity_mbps", "upload_alert_percent"],
+      },
+      {
         title: "Rules and live activity",
         note: "Whether rules run at all, and how often live activity is checked. Each rule, and the ban list, has its own record only switch on the Rules page.",
         keys: [
@@ -227,6 +232,8 @@ const LABELS: Record<string, string> = {
   enforce_cooldown_seconds: "Cooldown per rule (seconds)",
   activity_poll_seconds: "Check activity every (seconds)",
   ban_message: "Message shown to a banned device",
+  upload_capacity_mbps: "Upload capacity (Mbps)",
+  upload_alert_percent: "Warn when upload passes (%)",
   auth_proxy_enabled: "Trust a reverse proxy",
   trusted_proxy_ips: "Trusted proxy addresses",
   proxy_user_header: "Username header",

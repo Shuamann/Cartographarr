@@ -371,6 +371,8 @@ export function formatValue(value: number | null | undefined, unit: string): str
       return `${n(0)}%`;
     case "kbps":
       return `${n(0)} kbps`;
+    case "mbps":
+      return `${n(1)} Mbps`;
     default:
       return n(2);
   }
@@ -398,7 +400,8 @@ function ResultView({ result, loading }: { result: Result; loading: boolean }) {
       {rows.length === 0 ? (
         <p className="muted">
           Nothing matches.
-          {result.source === "buffering" && " Buffering is only recorded from when this version was installed, so it starts empty."}
+          {["buffering", "streams", "server"].includes(result.source) &&
+            " This is recorded from live activity from when this version was installed, so it starts empty."}
         </p>
       ) : (
         <>

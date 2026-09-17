@@ -24,7 +24,18 @@ from sqlalchemy import ColumnElement, and_, case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.filters import Filters, _epoch
-from app.models import Device, EnforcementLog, History, IpLocation, Library, MediaItem, StreamEvent, User
+from app.models import (
+    BandwidthSample,
+    Device,
+    EnforcementLog,
+    History,
+    IpLocation,
+    Library,
+    MediaItem,
+    StreamEvent,
+    StreamSession,
+    User,
+)
 
 OTHER = "__other__"
 TIME_FORMATS = {
@@ -74,6 +85,9 @@ class Source:
     time_column: Callable[[], ColumnElement] | None = None
     epoch_time: bool = False
     joins_location: bool = False
+    # For the location and file joins: this source's address and title columns.
+    ip_column: Callable[[], ColumnElement] | None = None
+    rating_column: Callable[[], ColumnElement] | None = None
 
 
 DIMENSIONS: list[Dimension] = [
@@ -94,6 +108,16 @@ DIMENSIONS: list[Dimension] = [
     Dimension("media_type", "Media type", "What"),
     Dimension("library", "Library", "What"),
     Dimension("transcode_decision", "Direct play or transcode", "Quality"),
+    Dimension("transcode_cause", "Why it transcoded", "Quality",
+              hint="Read from what changed between the file and what was sent. Streams seen live only."),
+    Dimension("stream_resolution", "Resolution sent", "Quality"),
+    Dimension("hardware", "Hardware transcoding", "Quality"),
+    Dimension("stall_cause", "Likely cause", "Quality", hint="Is it the server, the file, or the viewer?"),
+    Dimension("file_resolution", "File resolution", "File"),
+    Dimension("file_video_codec", "File video format", "File"),
+    Dimension("file_hdr", "File HDR", "File"),
+    Dimension("file_audio_codec", "File audio format", "File"),
+    Dimension("file_bitrate_band", "File bitrate", "File"),
     Dimension("video_resolution", "Resolution", "Quality"),
     Dimension("quality_profile", "Quality profile", "Quality"),
     Dimension("rule", "Rule", "Rules"),
@@ -109,6 +133,25 @@ DIMENSION = {d.key: d for d in DIMENSIONS}
 
 def _count() -> ColumnElement:
     return func.count()
+
+
+BITRATE_BANDS = ["Under 5 Mbps", "5 to 10 Mbps", "10 to 20 Mbps", "20 to 40 Mbps", "40 Mbps and up"]
+
+
+def _bitrate_band(column: Callable[[], ColumnElement] | None = None) -> ColumnElement:
+    rate = column() if column else MediaItem.file_bitrate
+    return case(
+        (rate.is_(None), literal(None)),
+        (rate < 5000, literal("1")),
+        (rate < 10000, literal("2")),
+        (rate < 20000, literal("3")),
+        (rate < 40000, literal("4")),
+        else_=literal("5"),
+    )
+
+
+# Dimensions read from the file, joined through the title.
+FILE_DIMENSIONS = {"file_resolution", "file_video_codec", "file_hdr", "file_audio_codec", "file_bitrate_band"}
 
 
 SOURCES: dict[str, Source] = {
@@ -149,7 +192,14 @@ SOURCES: dict[str, Source] = {
             "media_type": lambda: History.media_type,
             "library": lambda: History.section_id,
             "transcode_decision": lambda: History.transcode_decision,
+            "file_resolution": lambda: MediaItem.video_resolution,
+            "file_video_codec": lambda: MediaItem.video_codec,
+            "file_hdr": lambda: MediaItem.video_dynamic_range,
+            "file_audio_codec": lambda: MediaItem.audio_codec,
+            "file_bitrate_band": _bitrate_band,
         },
+        ip_column=lambda: History.ip_address,
+        rating_column=lambda: History.rating_key,
     ),
     "buffering": Source(
         key="buffering",
@@ -188,7 +238,15 @@ SOURCES: dict[str, Source] = {
             "transcode_decision": lambda: StreamEvent.transcode_decision,
             "video_resolution": lambda: StreamEvent.video_resolution,
             "quality_profile": lambda: StreamEvent.quality_profile,
+            "stall_cause": lambda: StreamEvent.cause,
+            "file_resolution": lambda: MediaItem.video_resolution,
+            "file_video_codec": lambda: MediaItem.video_codec,
+            "file_hdr": lambda: MediaItem.video_dynamic_range,
+            "file_audio_codec": lambda: MediaItem.audio_codec,
+            "file_bitrate_band": _bitrate_band,
         },
+        ip_column=lambda: StreamEvent.ip_address,
+        rating_column=lambda: StreamEvent.rating_key,
         filter_columns={
             "user_id": lambda: StreamEvent.user_id,
             "machine_id": lambda: StreamEvent.machine_id,
@@ -269,6 +327,95 @@ SOURCES: dict[str, Source] = {
     ),
 }
 
+SOURCES["streams"] = Source(
+    key="streams",
+    label="Streams",
+    blurb="Every stream seen live: how it played, why it transcoded, and whether it stalled. Recorded from when this version was installed.",
+    table=StreamSession,
+    admin_only=True,
+    joins_location=True,
+    time_column=lambda: StreamSession.started_at,
+    ip_column=lambda: StreamSession.ip_address,
+    rating_column=lambda: StreamSession.rating_key,
+    measures=[
+        Measure("streams", "Streams", "count", _count),
+        Measure("transcoded", "Transcoded", "count",
+                lambda: func.sum(case((StreamSession.transcode_decision == "transcode", 1), else_=0))),
+        Measure("hardware", "Hardware transcodes", "count",
+                lambda: func.sum(case((StreamSession.transcode_hw.is_(True), 1), else_=0))),
+        Measure("direct", "Direct plays", "count",
+                lambda: func.sum(case((StreamSession.transcode_decision == "direct play", 1), else_=0))),
+        Measure("stalled", "Streams that stalled", "count",
+                lambda: func.sum(case((StreamSession.buffer_count > 0, 1), else_=0))),
+        Measure("stall_minutes", "Time spent stalled", "minutes",
+                lambda: func.coalesce(func.sum(StreamSession.buffer_seconds), 0) / 60.0),
+        Measure("bandwidth", "Average peak bandwidth", "kbps", lambda: func.avg(StreamSession.bandwidth_max)),
+        Measure("users", "Different users", "count", lambda: func.count(func.distinct(StreamSession.user_id))),
+    ],
+    columns={
+        "user": lambda: StreamSession.user_id,
+        "device": lambda: StreamSession.machine_id,
+        "player": lambda: StreamSession.player,
+        "platform": lambda: StreamSession.platform,
+        "product": lambda: StreamSession.product,
+        "address": lambda: StreamSession.ip_address,
+        "network": lambda: IpLocation.asn_org,
+        "city": lambda: IpLocation.city,
+        "country": lambda: IpLocation.country,
+        "vpn": lambda: IpLocation.is_hosting,
+        "location": lambda: StreamSession.location,
+        "title": lambda: StreamSession.rating_key,
+        "show": lambda: func.coalesce(StreamSession.grandparent_rating_key, StreamSession.rating_key),
+        "media_type": lambda: StreamSession.media_type,
+        "transcode_decision": lambda: StreamSession.transcode_decision,
+        "transcode_cause": lambda: StreamSession.primary_cause,
+        "stream_resolution": lambda: StreamSession.stream_video_resolution,
+        "hardware": lambda: StreamSession.transcode_hw,
+        "quality_profile": lambda: StreamSession.quality_profile,
+        "file_resolution": lambda: StreamSession.video_resolution,
+        "file_video_codec": lambda: StreamSession.video_codec,
+        "file_hdr": lambda: StreamSession.video_dynamic_range,
+        "file_audio_codec": lambda: StreamSession.audio_codec,
+        "file_bitrate_band": lambda: _bitrate_band(lambda: StreamSession.file_bitrate),
+    },
+    filter_columns={
+        "user_id": lambda: StreamSession.user_id,
+        "machine_id": lambda: StreamSession.machine_id,
+        "ip_address": lambda: StreamSession.ip_address,
+        "platform": lambda: StreamSession.platform,
+        "product": lambda: StreamSession.product,
+        "player": lambda: StreamSession.player,
+        "media_type": lambda: StreamSession.media_type,
+        "transcode_decision": lambda: StreamSession.transcode_decision,
+        "location": lambda: StreamSession.location,
+        "rating_key": lambda: StreamSession.rating_key,
+        "search": lambda: StreamSession.full_title,
+        "country_code": lambda: IpLocation.country_code,
+        "city": lambda: IpLocation.city,
+        "is_hosting": lambda: IpLocation.is_hosting,
+    },
+)
+
+SOURCES["server"] = Source(
+    key="server",
+    label="Server load",
+    blurb="Upload and streams, sampled every minute from live activity. Recorded from when this version was installed.",
+    table=BandwidthSample,
+    admin_only=True,
+    epoch_time=True,
+    time_column=lambda: BandwidthSample.minute,
+    measures=[
+        Measure("peak_upload", "Peak upload", "mbps", lambda: func.max(BandwidthSample.wan_kbps) / 1000.0),
+        Measure("average_upload", "Average upload", "mbps", lambda: func.avg(BandwidthSample.wan_kbps) / 1000.0,
+                hint="Averaged over minutes with anything playing."),
+        Measure("peak_streams", "Peak streams", "count", lambda: func.max(BandwidthSample.streams)),
+        Measure("peak_remote", "Peak remote streams", "count", lambda: func.max(BandwidthSample.remote_streams)),
+        Measure("peak_transcodes", "Peak transcodes", "count", lambda: func.max(BandwidthSample.transcodes)),
+        Measure("peak_hardware", "Peak hardware transcodes", "count", lambda: func.max(BandwidthSample.hw_transcodes)),
+    ],
+    columns={},
+)
+
 # Starting points. Ordinary specs: open one, change it, save it as your own.
 PRESETS: list[dict[str, Any]] = [
     {"id": "buffering-device", "name": "Buffering by device", "source": "buffering", "measure": "episodes",
@@ -291,6 +438,16 @@ PRESETS: list[dict[str, Any]] = [
      "group": "user", "then": "network", "range": "90", "filters": "is_hosting=true"},
     {"id": "matches-rule", "name": "Rule matches by rule", "source": "matches", "measure": "matches",
      "group": "rule", "then": "outcome", "range": "30"},
+    {"id": "stall-causes", "name": "Is it me or them?", "source": "buffering", "measure": "episodes",
+     "group": "stall_cause", "then": None, "range": "30"},
+    {"id": "transcode-causes", "name": "Why streams transcode", "source": "streams", "measure": "transcoded",
+     "group": "transcode_cause", "then": "platform", "range": "30"},
+    {"id": "upload-hour", "name": "Upload by hour", "source": "server", "measure": "peak_upload",
+     "group": "hour", "then": None, "range": "30"},
+    {"id": "upload-day", "name": "Busiest days", "source": "server", "measure": "peak_upload",
+     "group": "day", "then": None, "range": "90"},
+    {"id": "plays-file-bitrate", "name": "Plays by file bitrate", "source": "plays", "measure": "plays",
+     "group": "file_bitrate_band", "then": "transcode_decision", "range": "90"},
 ]
 
 
@@ -354,10 +511,13 @@ def _where(s: Source, filters: Filters) -> tuple[list[ColumnElement[bool]], list
     needs_location = False
     time_col = s.time_column() if s.time_column else None
 
+    def moment(epoch: int):
+        return epoch if s.epoch_time else datetime.fromtimestamp(epoch, UTC)
+
     if filters.start and time_col is not None:
-        where.append(time_col >= datetime.fromtimestamp(_epoch(filters.start), UTC))
+        where.append(time_col >= moment(_epoch(filters.start)))
     if filters.end and time_col is not None:
-        where.append(time_col < datetime.fromtimestamp(_epoch(filters.end) + 86400, UTC))
+        where.append(time_col < moment(_epoch(filters.end) + 86400))
 
     for name in (
         "user_id", "machine_id", "ip_address", "platform", "product", "player", "media_type",
@@ -397,11 +557,12 @@ def _where(s: Source, filters: Filters) -> tuple[list[ColumnElement[bool]], list
     return where, ignored, needs_location
 
 
-def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: bool):
+def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: bool, needs_media: bool = False):
     stmt = select(*columns).select_from(s.table)
-    if needs_location and s.joins_location:
-        ip_col = History.ip_address if s.table is History else StreamEvent.ip_address
-        stmt = stmt.outerjoin(IpLocation, IpLocation.ip == ip_col)
+    if needs_location and s.joins_location and s.ip_column is not None:
+        stmt = stmt.outerjoin(IpLocation, IpLocation.ip == s.ip_column())
+    if needs_media and s.rating_column is not None:
+        stmt = stmt.outerjoin(MediaItem, MediaItem.rating_key == s.rating_column())
     if where:
         stmt = stmt.where(*where)
     return stmt
@@ -425,6 +586,7 @@ def run(
         d in ("network", "city", "country", "vpn") for d in (group, then) if d
     ) and s.joins_location
     needs_location = needs_location or uses_location
+    needs_media = s.table is not StreamSession and any(d in FILE_DIMENSIONS for d in (group, then) if d)
 
     is_time = group in TIME_FORMATS
     g = _dimension_expr(s, group).label("grp")
@@ -432,28 +594,28 @@ def run(
 
     # Row totals come from their own grouping, not by adding up the split, since
     # averages and "different" counts do not add up.
-    stmt = _base(s, [g, value], where, needs_location).group_by(g)
+    stmt = _base(s, [g, value], where, needs_location, needs_media).group_by(g)
     stmt = stmt.order_by(g) if is_time else stmt.order_by(value.desc(), g)
     rows = db.execute(stmt).all()
     truncated = False
     if not is_time and len(rows) > limit:
         rows, truncated = rows[:limit], True
 
-    grand = db.execute(_base(s, [m.expr().label("val")], where, needs_location)).scalar()
+    grand = db.execute(_base(s, [m.expr().label("val")], where, needs_location, needs_media)).scalar()
 
     result_rows = [{"key": r.grp, "value": _num(r.val)} for r in rows]
     columns: list[dict[str, Any]] = []
     if then:
         t = _dimension_expr(s, then).label("split")
         t_is_time = then in TIME_FORMATS
-        col_stmt = _base(s, [t, m.expr().label("val")], where, needs_location).group_by(t)
+        col_stmt = _base(s, [t, m.expr().label("val")], where, needs_location, needs_media).group_by(t)
         col_stmt = col_stmt.order_by(t) if t_is_time else col_stmt.order_by(m.expr().desc(), t)
         col_rows = db.execute(col_stmt).all()
         kept = [r.split for r in (col_rows if t_is_time else col_rows[:columns_limit])]
         has_other = not t_is_time and len(col_rows) > columns_limit
         columns = [{"key": k} for k in kept] + ([{"key": OTHER}] if has_other else [])
 
-        cell_stmt = _base(s, [g, t, m.expr().label("val")], where, needs_location).group_by(g, t)
+        cell_stmt = _base(s, [g, t, m.expr().label("val")], where, needs_location, needs_media).group_by(g, t)
         cells: dict[Any, dict[Any, float]] = {}
         additive = _additive(m)
         kept_set = set(kept)
@@ -536,7 +698,14 @@ def _num(value: Any) -> float | int | None:
 
 def _plain_label(dim: str, key: Any) -> str:
     if key is None or key == "":
-        return {"vpn": "Not looked up", "location": "Unknown"}.get(dim, "Unknown")
+        return {
+            "vpn": "Not looked up",
+            "location": "Unknown",
+            "transcode_cause": "Not transcoded",
+            "stall_cause": "Not worked out yet",
+            "file_bitrate_band": "File not checked yet",
+            "hardware": "Software or none",
+        }.get(dim, "Unknown")
     if dim == "vpn":
         return "VPN or hosting" if key in (True, 1, "1") else "Home or mobile network"
     if dim == "location":
@@ -545,6 +714,18 @@ def _plain_label(dim: str, key: Any) -> str:
         return f"{int(key):02d}:00"
     if dim == "weekday":
         return WEEKDAYS[int(key)]
+    if dim == "file_bitrate_band":
+        return BITRATE_BANDS[int(key) - 1] if str(key).isdigit() and 1 <= int(key) <= 5 else str(key)
+    if dim == "hardware":
+        return "Hardware" if key in (True, 1, "1") else "Software or none"
+    if dim == "transcode_cause":
+        from app.services.streams import CAUSES as TRANSCODE_CAUSES
+
+        return TRANSCODE_CAUSES.get(str(key), str(key))
+    if dim == "stall_cause":
+        from app.services.stalls import CAUSES as STALL_CAUSES
+
+        return STALL_CAUSES.get(str(key), str(key))
     if dim == "transcode_decision":
         return {"direct play": "Direct play", "copy": "Direct stream", "transcode": "Transcode"}.get(str(key), str(key))
     return str(key)
