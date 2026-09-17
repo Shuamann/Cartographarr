@@ -48,6 +48,11 @@ def client(monkeypatch, tmp_path):
     importlib.reload(app.services.reports)
     importlib.reload(app.services.library)
 
+    # Failed sign-ins are remembered in memory; each test starts clean.
+    from app.auth.security import login_throttle
+
+    login_throttle._failures.clear()
+
     import app.auth.deps, app.routers.auth, app.main
     import app.routers.admin, app.routers.branding, app.routers.data, app.routers.live
     import app.routers.sharing, app.routers.reports, app.routers.library

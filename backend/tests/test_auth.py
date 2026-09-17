@@ -123,3 +123,33 @@ def test_last_admin_cannot_be_demoted(client):
     response = client.put(f"/api/auth/users/{me['id']}", json={"role": "viewer"})
     assert response.status_code == 400
     assert "admin" in response.json()["detail"].lower()
+
+
+
+def test_repeated_failed_sign_ins_are_locked_out(client):
+    from app.auth.security import login_throttle
+
+    login_throttle._failures.clear()
+    claim(client)
+    client.post("/api/auth/logout")
+    for _ in range(5):
+        assert client.post("/api/auth/login", json={"username": "admin", "password": "wrong-password-x"}).status_code == 401
+    locked = client.post("/api/auth/login", json={"username": "admin", "password": "a-long-enough-password"})
+    assert locked.status_code == 429 and "Retry-After" in locked.headers
+    # Another username from the same address is not locked by those five.
+    assert client.post("/api/auth/login", json={"username": "someone", "password": "whatever-it-is"}).status_code == 401
+    login_throttle._failures.clear()
+    assert client.post("/api/auth/login", json={"username": "admin", "password": "a-long-enough-password"}).status_code == 200
+
+
+def test_the_throttle_window_moves_on():
+    from app.auth.security import LoginThrottle
+
+    t = LoginThrottle()
+    for i in range(5):
+        t.failed("pat", "10.0.0.1", 1000.0 + i)
+    assert t.blocked("pat", "10.0.0.1", 1010.0) > 0
+    assert t.blocked("pat", "10.0.0.1", 1000.0 + 15 * 60 + 5) == 0
+    for i in range(30):
+        t.failed(f"user{i}", "10.0.0.9", 2000.0)
+    assert t.blocked("fresh", "10.0.0.9", 2001.0) > 0

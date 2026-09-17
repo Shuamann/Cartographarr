@@ -23,8 +23,18 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+# Checked against when the username does not exist, so a wrong username
+# takes as long to refuse as a wrong password and replies cannot be timed to
+# find real accounts.
+_DUMMY_HASH = _hasher.hash("not a real password, only for timing")
+
+
 def verify_password(password: str, password_hash: str | None) -> bool:
     if not password_hash:
+        try:
+            _hasher.verify(_DUMMY_HASH, password)
+        except (VerifyMismatchError, InvalidHashError):
+            pass
         return False
     try:
         return _hasher.verify(password_hash, password)
@@ -55,3 +65,48 @@ def hash_token(token: str) -> str:
 
 def expiry(hours: int) -> datetime:
     return datetime.now(UTC) + timedelta(hours=hours)
+
+
+# ---- repeated failures ----------------------------------------------------------
+
+class LoginThrottle:
+    """Failed sign-ins, per username and per address, in memory.
+
+    Five failures for one username, or thirty from one address, within fifteen
+    minutes locks further attempts until the window moves on. Per address is
+    loose on purpose: behind a reverse proxy everyone can share one.
+    """
+
+    WINDOW = 15 * 60
+    PER_USER = 5
+    PER_ADDRESS = 30
+
+    def __init__(self) -> None:
+        self._failures: dict[str, list[float]] = {}
+
+    def _recent(self, key: str, now: float) -> list[float]:
+        kept = [t for t in self._failures.get(key, []) if now - t < self.WINDOW]
+        if kept:
+            self._failures[key] = kept
+        else:
+            self._failures.pop(key, None)
+        return kept
+
+    def blocked(self, username: str, address: str, now: float) -> int:
+        """Seconds until another try is allowed, or 0."""
+        waits = []
+        for key, limit in ((f"user:{username.lower()}", self.PER_USER), (f"addr:{address}", self.PER_ADDRESS)):
+            recent = self._recent(key, now)
+            if len(recent) >= limit:
+                waits.append(int(self.WINDOW - (now - recent[-limit])) + 1)
+        return max(waits, default=0)
+
+    def failed(self, username: str, address: str, now: float) -> None:
+        for key in (f"user:{username.lower()}", f"addr:{address}"):
+            self._failures.setdefault(key, []).append(now)
+
+    def succeeded(self, username: str) -> None:
+        self._failures.pop(f"user:{username.lower()}", None)
+
+
+login_throttle = LoginThrottle()

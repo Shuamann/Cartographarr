@@ -153,8 +153,21 @@ def claim(
 
 @router.post("/login")
 def login(
-    response: Response, username: str = Body(...), password: str = Body(...)
+    request: Request, response: Response, username: str = Body(...), password: str = Body(...)
 ) -> dict:
+    import time
+
+    from app.auth.security import login_throttle
+
+    now = time.time()
+    address = request.client.host if request.client else "unknown"
+    name = username.strip()
+    wait = login_throttle.blocked(name, address, now)
+    if wait:
+        raise HTTPException(
+            429, f"Too many failed sign-ins. Try again in {max(wait // 60, 1)} minute{'s' if wait >= 120 else ''}.",
+            headers={"Retry-After": str(wait)},
+        )
     with session_scope() as db:
         user = db.execute(
             select(AppUser).where(AppUser.username == username.strip())
@@ -166,12 +179,14 @@ def login(
     if user is None or not user.is_active or not verify_password(password, user.password_hash):
         # The typed name is recorded, not the password, so repeated guessing
         # against one account is visible.
+        login_throttle.failed(name, address, now)
         audit.record(
             None, "auth.failed", f"Failed sign in as {username.strip()[:64]!r}",
             actor=username.strip()[:64] or None, result="failed",
         )
         raise HTTPException(401, "That username and password do not match")
 
+    login_throttle.succeeded(name)
     audit.record(user, "auth.login", f"{user.username} signed in")
     _start_session(response, user)
     return {"user": _public(user)}
