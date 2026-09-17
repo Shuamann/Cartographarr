@@ -62,10 +62,19 @@ a {
   letter-spacing: -0.02em;
 }
 
+/* On a narrow screen the tabs scroll sideways inside the bar, rather than
+ * pushing the whole page wider than the screen. */
 .topbar nav {
   display: flex;
   gap: 4px;
   flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topbar nav .tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .tab {
@@ -2288,6 +2297,121 @@ label.locked .pill {
   .settings-nav-label {
     flex-basis: 100%;
     margin: 4px 0 0;
+  }
+}
+
+/* ---- reports -------------------------------------------------------------------- */
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.report-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px 14px;
+  padding: 18px 0 12px;
+}
+.report-builder label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.report-builder select {
+  width: 100%;
+}
+.report-result {
+  padding-top: 16px;
+  transition: opacity 0.15s;
+}
+.report-result.loading {
+  opacity: 0.55;
+}
+.report-summary {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.report-summary strong {
+  font-size: 22px;
+}
+.report-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.report-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.report-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
+}
+.report-bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 220px) minmax(0, 1fr) 90px;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+.report-bar-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.report-bar-track {
+  display: flex;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.report-bar-fill {
+  height: 100%;
+  background: var(--chart-1);
+}
+.report-bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.report-columns {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 22px;
+}
+.report-column {
+  fill: var(--chart-1);
+}
+.report-axis {
+  font-size: 11px;
+  fill: var(--ink-3);
+}
+.report-table-wrap {
+  overflow-x: auto;
+}
+.report-table td,
+.report-table th {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .report-bar-row {
+    grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) 70px;
+    gap: 8px;
   }
 }
 

@@ -35,6 +35,8 @@ rather than the player name, because anyone can rename "Living Room TV".
 - **Shared account signals**: one account playing in two places at once, or
   moving faster than a plane between plays
 - **Log** of every stream stopped and every change made in the app
+- **Reports** on plays, buffering and rule matches, grouped and split however
+  you like, with charts, tables and CSV export
 - **Links out** to Plex, IMDb, TMDB and Trakt from any title, plus Radarr,
   Sonarr and Seerr if you connect them
 
@@ -117,8 +119,23 @@ right now without stopping anything.
 Conditions that need something you have not set up, like a MaxMind key for
 country or Seerr for who requested a title, are greyed out with what they need.
 
-Rules ship in **dry run**. They record what they would have done and stop
-nothing. Watch the Log for a while, then turn dry run off in Settings.
+Some conditions take a number of seconds, times or hours:
+
+- **Buffering right now for** N seconds, **times buffered** and **time spent
+  buffering** on this stream, and **stream running for** N seconds. Timed from
+  the activity checks, so accurate to a few seconds, and started again if the
+  app restarts.
+- **N in the last H hours**: plays by this user, devices or addresses they
+  used, cities they played from, and times this user or device buffered.
+  Plays count once they finish and sync.
+
+A rule that only records or notifies does so once per stream, not again every
+check while it stays true.
+
+Each rule, and the ban list, has its own **Record only** switch. A new rule
+starts in record only: it logs what it would have done and stops nothing.
+Watch the Log for a while, then let it act. Setting `ENFORCE_DRY_RUN=true`
+locks every rule to record only.
 
 ### Coming from JBOPS kill_stream.py
 
@@ -126,10 +143,10 @@ If you block devices today with Tautulli notification agents running
 `kill_stream.py`, both will act on the same stream once rules are live. To move
 over:
 
-1. Ban each device in Cartographarr, or rebuild the rule, while dry run is on
+1. Ban each device in Cartographarr, or rebuild the rule, in record only
 2. Check the Log shows them being caught
 3. Turn off the Tautulli notification agents
-4. Turn off dry run
+4. Switch the ban list or rule to act
 
 ## Shared account signals
 
@@ -149,6 +166,24 @@ device, from where and on which network, with the distance and the time between.
 A play left paused keeps its session open for hours or days. Signals measure
 from when a play was last watched, not when the session closed, so pausing on
 a phone and later watching on the TV does not count.
+
+## Reports
+
+Pick what to report on, a measure, what to group by and optionally what to
+split each row by, then narrow it with the same filters as the map and
+History. Rows link to the user, device, address or title they name.
+
+- **Plays**: plays, watch time, completion, transcodes, and how many different
+  users, devices, addresses and titles
+- **Buffering**: how often and how long streams stalled, by device, network,
+  resolution, direct play or transcode, and so on. Recorded from live activity
+  from the day this version is installed, so it starts empty.
+- **Rule matches**: what each rule caught and what happened
+
+A few starting points are built in, such as buffering by device and when
+people watch. Admins can save their own. Buffering and rule matches are for
+admins only; with viewer privacy on, a viewer's report on people or titles
+covers only their own plays.
 
 ## Monitoring
 

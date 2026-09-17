@@ -6,6 +6,7 @@ export const TABS = [
   "Map",
   "History",
   "People",
+  "Reports",
   "Rules",
   "Log",
   "Sharing",

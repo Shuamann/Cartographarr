@@ -10,6 +10,7 @@ import Setup from "./routes/Setup";
 // MapLibre is most of the bundle and the app opens on the dashboard, so the
 // map arrives only when someone asks for it.
 const Map = lazy(() => import("./routes/Map"));
+const Reports = lazy(() => import("./routes/Reports"));
 import History from "./routes/History";
 import People, { type Selection } from "./routes/People";
 import Rules from "./routes/Rules";
@@ -251,6 +252,7 @@ function SignedIn({
                 onInitialFilterUsed={() => setPeopleFilter(null)}
               />
             )}
+            {active === "Reports" && <Reports />}
             {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}

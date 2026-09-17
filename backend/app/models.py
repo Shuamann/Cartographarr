@@ -449,6 +449,20 @@ class TravelFlag(Base):
     """Set when an ignore pattern closed this flag, rather than a person."""
 
 
+class SavedReport(Base):
+    """A report someone saved from the Reports tab. The spec is what the
+    builder sends: source, measure, group, split, range and filters."""
+
+    __tablename__ = "saved_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    spec: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime | None] = mapped_column()
+    updated_at: Mapped[datetime | None] = mapped_column()
+
+
 class SignalIgnore(Base):
     """A sharing signal that is expected for one person.
 

@@ -1,0 +1,156 @@
+"""Reports.
+
+The numbers have to be right (a split must not change a row's total, and
+averages must not be summed), every preset has to run, and a viewer must not
+be able to use a report to see what privacy hides elsewhere.
+"""
+
+from datetime import UTC, datetime
+
+from tests.test_auth import claim
+from tests.test_privacy import as_viewer
+
+
+def at(hour):
+    return datetime(2026, 9, 10, hour, 0, tzinfo=UTC)
+
+
+def seed():
+    from app.db import session_scope
+    from app.models import Device, EnforcementLog, History, IpLocation, StreamEvent, User
+
+    with session_scope() as db:
+        db.add(User(user_id=1, username="alpha", friendly_name="Alpha"))
+        db.add(User(user_id=2, username="beta"))
+        db.add(Device(machine_id="tv", user_id=1, player="Living Room", platform="Roku"))
+        db.add(IpLocation(ip="198.51.100.1", city="Springfield", asn_org="Home ISP", is_hosting=False))
+        db.add(IpLocation(ip="198.51.100.2", city="Elsewhere", asn_org="Cloud VPN", is_hosting=True))
+        plays = [
+            (1, 1, "tv", "198.51.100.1", "direct play", 3600, 90),
+            (2, 1, "tv", "198.51.100.1", "transcode", 1800, 50),
+            (3, 1, "phone", "198.51.100.2", "transcode", 600, 10),
+            (4, 2, "laptop", "198.51.100.1", "direct play", 7200, 100),
+        ]
+        for row_id, user, machine, ip, decision, secs, pct in plays:
+            db.add(History(
+                row_id=row_id, user_id=user, machine_id=machine, ip_address=ip, started=1_757_500_000 + row_id,
+                transcode_decision=decision, play_duration=secs, percent_complete=pct, media_type="movie",
+                rating_key=100 + row_id, full_title=f"Film {row_id}",
+            ))
+        stalls = [(1, "tv", 20, "transcode"), (1, "tv", 40, "transcode"), (2, "laptop", 6, "direct play")]
+        for i, (user, machine, secs, decision) in enumerate(stalls):
+            db.add(StreamEvent(
+                kind="buffering", session_key=f"s{user}", user_id=user, machine_id=machine,
+                ip_address="198.51.100.1", transcode_decision=decision, started_at=at(i), ended_at=at(i), seconds=secs,
+            ))
+        db.add(EnforcementLog(rule_name="No VPN", user_id=1, dry_run=True, result="would terminate", acted_at=at(3)))
+        db.add(EnforcementLog(rule_name="No VPN", user_id=1, dry_run=False, result="terminated", acted_at=at(4)))
+
+
+def test_plays_by_user_with_a_split_keeps_row_totals(client):
+    claim(client)
+    seed()
+    r = client.get("/api/reports/run?source=plays&measure=plays&group=user&then=transcode_decision").json()
+    rows = {row["label"]: row for row in r["rows"]}
+    assert rows["Alpha"]["value"] == 3 and rows["beta"]["value"] == 1
+    assert rows["Alpha"]["cells"] == {"direct play": 1, "transcode": 2}
+    assert r["total"] == 4
+    assert {c["label"] for c in r["columns"]} == {"Direct play", "Transcode"}
+
+
+def test_averages_and_distinct_counts_are_not_summed(client):
+    claim(client)
+    seed()
+    r = client.get("/api/reports/run?source=plays&measure=devices&group=user&then=transcode_decision").json()
+    alpha = next(row for row in r["rows"] if row["key"] == 1)
+    # Two devices overall, though the split columns count one and two.
+    assert alpha["value"] == 2
+    r = client.get("/api/reports/run?source=plays&measure=completion&group=user").json()
+    assert next(row for row in r["rows"] if row["key"] == 1)["value"] == 50
+
+
+def test_buffering_by_device_and_network(client):
+    claim(client)
+    seed()
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=device").json()
+    assert [(row["label"], row["value"]) for row in r["rows"]] == [("Living Room (Roku)", 2), ("laptop", 1)]
+    r = client.get("/api/reports/run?source=buffering&measure=longest&group=network").json()
+    assert r["rows"] == [{"key": "Home ISP", "value": 40, "label": "Home ISP"}]
+    r = client.get("/api/reports/run?source=buffering&measure=minutes&group=user&user_id=2").json()
+    assert r["rows"][0]["value"] == 0.1 and r["total"] == 0.1
+
+
+def test_filters_a_source_cannot_apply_are_reported(client):
+    claim(client)
+    seed()
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=user&section_id=4&watched=true").json()
+    assert set(r["ignored"]) == {"section_id", "watched"}
+
+
+def test_vpn_filter_outcomes_and_time_grouping(client):
+    claim(client)
+    seed()
+    r = client.get("/api/reports/run?source=plays&measure=plays&group=user&is_hosting=true").json()
+    assert [(row["key"], row["value"]) for row in r["rows"]] == [(1, 1)]
+    r = client.get("/api/reports/run?source=matches&measure=matches&group=rule&then=outcome").json()
+    assert r["rows"][0]["cells"] == {"Recorded only": 1, "Stopped": 1}
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=day").json()
+    assert r["group"]["time"] is True and sum(row["value"] for row in r["rows"]) == 3
+    # Quiet hours are kept as zeros, so the chart does not close them up.
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=hour").json()
+    assert len(r["rows"]) == 24 and sum(row["value"] for row in r["rows"]) == 3
+    r = client.get("/api/reports/run?source=buffering&measure=longest&group=weekday").json()
+    assert len(r["rows"]) == 7 and [row["value"] for row in r["rows"]].count(None) == 6
+    r = client.get("/api/reports/run?source=buffering&measure=episodes&group=user&start=2030-01-01").json()
+    assert r["rows"] == []
+
+
+def test_every_preset_runs(client):
+    claim(client)
+    seed()
+    catalog = client.get("/api/reports/catalog").json()
+    assert catalog["presets"]
+    for p in catalog["presets"]:
+        q = f"source={p['source']}&measure={p['measure']}&group={p['group']}"
+        if p.get("then"):
+            q += f"&then={p['then']}"
+        if p.get("filters"):
+            q += "&" + p["filters"]
+        res = client.get(f"/api/reports/run?{q}")
+        assert res.status_code == 200, (p["id"], res.text)
+
+
+def test_bad_specs_are_refused(client):
+    claim(client)
+    assert client.get("/api/reports/run?source=nope&measure=plays&group=user").status_code == 400
+    assert client.get("/api/reports/run?source=plays&measure=episodes&group=user").status_code == 400
+    assert client.get("/api/reports/run?source=plays&measure=plays&group=rule").status_code == 400
+    assert client.get("/api/reports/run?source=plays&measure=plays&group=user&then=user").status_code == 400
+
+
+def test_viewers_cannot_report_on_others(client):
+    as_viewer(client, "anonymised")
+    catalog = client.get("/api/reports/catalog").json()
+    assert [s["key"] for s in catalog["sources"]] == ["plays"]
+    assert client.get("/api/reports/run?source=buffering&measure=episodes&group=user").status_code == 403
+
+    # Totals still cover the server, but naming people narrows to the viewer.
+    by_type = client.get("/api/reports/run?source=plays&measure=plays&group=media_type").json()
+    assert by_type["total"] == 3
+    by_user = client.get("/api/reports/run?source=plays&measure=plays&group=user&user_id=8").json()
+    assert [row["key"] for row in by_user["rows"]] == [7]
+    by_title = client.get("/api/reports/run?source=plays&measure=plays&group=media_type&then=title").json()
+    assert by_title["total"] == 1
+
+
+def test_saved_reports_are_admin_managed_and_logged(client):
+    claim(client)
+    spec = {"name": "Stalls", "source": "buffering", "measure": "episodes", "group": "device", "then": None, "range": "30"}
+    saved = client.post("/api/reports/saved", json=spec).json()
+    assert saved["name"] == "Stalls" and saved["source"] == "buffering"
+    assert client.post("/api/reports/saved", json={**spec, "group": "rule"}).status_code == 400
+    assert client.put(f"/api/reports/saved/{saved['id']}", json={**spec, "name": "Stalls by device"}).status_code == 200
+    assert [r["name"] for r in client.get("/api/reports/saved").json()] == ["Stalls by device"]
+    assert client.delete(f"/api/reports/saved/{saved['id']}").status_code == 200
+    actions = [e["action"] for e in client.get("/api/log?kind=changes").json()]
+    assert {"report.save", "report.update", "report.delete"} <= set(actions)
