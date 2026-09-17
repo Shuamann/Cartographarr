@@ -35,8 +35,12 @@ rather than the player name, because anyone can rename "Living Room TV".
 - **Shared account signals**: one account playing in two places at once, or
   moving faster than a plane between plays
 - **Log** of every stream stopped and every change made in the app
-- **Reports** on plays, buffering and rule matches, grouped and split however
-  you like, with charts, tables and CSV export
+- **Reports** on plays, buffering, streams, server load and rule matches,
+  grouped and split however you like, with charts, tables and CSV export
+- **Library health**: files judged by how they are watched, what exactly is
+  wrong with each and how to fix it, with a hand-off to Radarr or Sonarr
+- **Access review**: who you share with, what they can see, and whether they
+  still use it
 - **Links out** to Plex, IMDb, TMDB and Trakt from any title, plus Radarr,
   Sonarr and Seerr if you connect them
 
@@ -85,7 +89,9 @@ out and the UI owns it.
 | `TAUTULLI_LOCAL_URL` | A LAN address, preferred when reachable |
 | `MAXMIND_ACCOUNT_ID`, `MAXMIND_LICENSE_KEY` | For map locations |
 | `AUTH_PROXY_ENABLED`, `TRUSTED_PROXY_IPS` | See below |
-| `ENFORCE_ENABLED`, `ENFORCE_DRY_RUN` | Whether rules run, and whether they only record |
+| `ENFORCE_ENABLED`, `ENFORCE_DRY_RUN` | Whether rules run; `ENFORCE_DRY_RUN=true` locks every rule to record only |
+| `UPLOAD_CAPACITY_MBPS` | Your upload, for stall causes and the upload alert |
+| `API_DOCS` | `true` turns on /docs and /openapi.json, off by default |
 
 ## Putting it behind a reverse proxy
 
@@ -100,10 +106,13 @@ purpose, so a broken proxy config cannot lock you out.
 
 Hit **Ban device** on a stream, on the map, or on the device in **People**. It
 asks for a reason, then adds the device to the ban list. **Unban** is in the
-same places.
+same places. On the Rules page the ban list can also ban a device found by
+name, owner or id, for an hour, a day, a week, 30 days or for good. A timed ban
+stops applying the moment it ends and leaves a Log entry. A ban's reason can be
+changed later.
 
-The ban list runs as a built-in rule ahead of all the others, so it follows
-the same dry run setting and shows up in the Log like any rule. The message a
+The ban list runs as a built-in rule ahead of all the others, with its own
+record only switch, and shows up in the Log like any rule. The message a
 banned device sees is in Settings.
 
 If you banned devices before the ban list existed, each one became its own
@@ -128,6 +137,17 @@ Some conditions take a number of seconds, times or hours:
 - **N in the last H hours**: plays by this user, devices or addresses they
   used, cities they played from, and times this user or device buffered.
   Plays count once they finish and sync.
+
+- **Times a rule caught this user (or device) before**, counting other streams
+  only. Put a stopping rule using it above a warning rule, and the first time
+  someone breaks a rule they are warned; the next time they are stopped.
+- **Country, city or network new for this user**, once they have five plays
+  of history.
+
+Besides stopping a stream, a rule can record it, notify you through Apprise,
+post to a webhook, or **message the viewer**: set a viewer message address in
+Settings, an Apprise URL with `{email}` filled in from their Plex account, for
+example `mailtos://you:app-password@gmail.com?to={email}`.
 
 A rule that only records or notifies does so once per stream, not again every
 check while it stays true.
@@ -184,6 +204,54 @@ A few starting points are built in, such as buffering by device and when
 people watch. Admins can save their own. Buffering and rule matches are for
 admins only; with viewer privacy on, a viewer's report on people or titles
 covers only their own plays.
+
+## Streams, upload and stalls
+
+While it runs, Cartographarr records every stream it sees: the worst decision
+during the stream (one that switches to a transcode when subtitles go on
+counts as a transcode), every reason it transcoded, hardware transcoding, peak
+bandwidth and stalls. It also keeps the busiest moment of each minute of
+upload. Both start empty and grow from the day this version is installed.
+
+Every stall gets a likely cause, worked out again as patterns form:
+
+- **Upload nearly full**, if you set your upload capacity in Settings
+- **Server side**: someone else stalled at the same moment
+- **The file**: other people stall on the same title
+- **The viewer**: they stall on many titles while nobody else does
+
+Set **Upload capacity** in Settings and Cartographarr also notifies you
+(through Apprise, at most every half hour) when remote streams nearly fill it.
+
+## Library health
+
+The **Library** tab (admins only) judges files by how they are actually
+watched. File details are read from Tautulli, 150 titles each sync until the
+whole library is covered.
+
+- **Problem files**: over a bitrate limit and watched remotely, stalling, or
+  transcoded for most remote viewers
+- **Why streams transcode**: each reason, on which platforms, the worst
+  titles, and the usual fix
+- **Messy files**: no audio most devices can play, image or styled
+  subtitles, piles of duplicate subtitles, untagged audio, old containers
+- **4K copies**: whether a 4K picture ever reaches a screen
+- **Requested, never watched**: Seerr requests the requester never played
+
+Open any file for what exactly is wrong with it, named from its own tracks and
+how it played, and how to fix it. For plays from before streams were recorded,
+the reason is read back from Tautulli. **Search for a replacement** asks
+Radarr or Sonarr to look for a better release (it only grabs one your quality
+profile rates higher), and **Tag for replacement** tags the title
+`cartographarr-replace` to pick one by hand. Nothing is deleted.
+
+## Access review
+
+The **Sharing** tab has two views. **Who has access** comes from Plex and can
+change which libraries someone sees or stop sharing. **Access review** comes
+from Tautulli and history, so it works without a Plex token: everyone, the
+libraries shared with them, plays, when they last watched, their devices and
+any banned ones, with people who have not watched in 90 days first.
 
 ## Monitoring
 
