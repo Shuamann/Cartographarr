@@ -1,3 +1,4 @@
+import Loading from "./Loading";
 import { displayTitle } from "../lib/titles";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
@@ -65,7 +66,7 @@ export default function SignalDetail({ id, onChanged }: { id: number; onChanged?
   const [note, setNote] = useState<string | null>(null);
 
   if (detail.error) return <p className="note bad-note">{detail.error}</p>;
-  if (!detail.data) return <p className="muted small">Loading…</p>;
+  if (!detail.data) return <Loading compact />;
   const s = detail.data;
 
   async function setStatus(status: "new" | "reviewed" | "ignored") {

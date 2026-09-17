@@ -1,3 +1,4 @@
+import Loading from "../components/Loading";
 import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
@@ -48,7 +49,7 @@ export default function DashboardRoute({
   }, []);
 
   if (data.error) return <div className="pad"><p className="note bad-note">{data.error}</p></div>;
-  if (!data.data) return <div className="pad muted">Loading…</div>;
+  if (!data.data) return <div className="pad"><Loading /></div>;
 
   const d = data.data;
   const live = activity.data ?? d.live;

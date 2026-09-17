@@ -1,3 +1,4 @@
+import Loading from "./components/Loading";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
@@ -173,7 +174,7 @@ function SignedIn({
     }
   }
 
-  if (setup.loading) return <Splash>Loading…</Splash>;
+  if (setup.loading) return <Splash><Loading /></Splash>;
 
   // Only an admin can run setup. A viewer arriving at an unconfigured install
   // gets told who to ask rather than an error.
@@ -229,7 +230,7 @@ function SignedIn({
         )}
         <main>
           <ErrorBoundary name={active} key={active}>
-            <Suspense fallback={<div className="pad muted">Loading…</div>}>
+            <Suspense fallback={<div className="pad"><Loading /></div>}>
             {active === "Dashboard" && (
               <Dashboard
                 onNavigate={setTab}

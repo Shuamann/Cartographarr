@@ -1,3 +1,4 @@
+import Loading from "./Loading";
 import { displayTitle, episodeLabel } from "../lib/titles";
 import { useApi, type MediaDetail } from "../lib/api";
 import BrandIcon from "./BrandIcon";
@@ -29,7 +30,7 @@ export default function MediaPanel({
   const media = useApi<MediaDetail>(`/media/${ratingKey}`);
 
   if (media.error) return <p className="muted small">{media.error}</p>;
-  if (!media.data) return <p className="muted small">Loading…</p>;
+  if (!media.data) return <Loading compact label="Getting title details" />;
 
   const m = media.data;
   const links = LINKS.filter((l) => m.links[l.key]);

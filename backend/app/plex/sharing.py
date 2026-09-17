@@ -71,8 +71,75 @@ def status() -> dict:
         return {"ok": False, "detail": redact(exc)}
 
 
+PLEX_TIMEOUT = 20
+
+
+def _machine_id(account=None) -> str:
+    wanted = current().plex_machine_identifier
+    if wanted:
+        return wanted
+    return _server(account or _account()).clientIdentifier
+
+
+def parse_shared_servers(xml_text: str) -> list[dict]:
+    """plex.tv's shared_servers document: one SharedServer per person, with
+    every library section and whether it is shared with them."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(xml_text)
+    out = []
+    for shared in root.iter("SharedServer"):
+        out.append(
+            {
+                "id": int(shared.get("userID") or 0) or None,
+                "username": shared.get("username") or shared.get("email") or "",
+                "email": shared.get("email") or None,
+                "thumb": None,
+                "home": False,
+                "sections": [s.get("title") for s in shared.iter("Section") if s.get("shared") == "1" and s.get("title")],
+            }
+        )
+    return out
+
+
+def _fetch_shared_servers(machine_id: str) -> str:
+    import httpx
+
+    response = httpx.get(
+        f"https://plex.tv/api/servers/{machine_id}/shared_servers",
+        headers={"X-Plex-Token": current().plex_token, "Accept": "application/xml"},
+        timeout=PLEX_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.text
+
+
 def list_shares() -> list[dict]:
-    """Everyone the server is shared with, and which libraries they see."""
+    """Everyone the server is shared with, and which libraries they see.
+
+    One request for everyone. The per-person way (plexapi's user.servers and
+    sections()) is one request each, which with a few dozen people left the
+    Sharing page loading for minutes.
+    """
+    try:
+        shares = parse_shared_servers(_fetch_shared_servers(_machine_id()))
+    except NotConfigured:
+        raise
+    except Exception as exc:  # noqa: BLE001 - fall back to the slow way rather than show nothing
+        log.warning("shared_servers lookup failed, using the slow path: %s", redact(exc))
+        return _list_shares_slow()
+    # Pictures, where plex.tv will say quickly. Not worth failing over.
+    try:
+        pictures = {u.id: (u.thumb, bool(getattr(u, "home", False))) for u in _account().users()}
+        for share in shares:
+            if share["id"] in pictures:
+                share["thumb"], share["home"] = pictures[share["id"]]
+    except Exception as exc:  # noqa: BLE001
+        log.debug("could not read Plex friends for pictures: %s", redact(exc))
+    return sorted(shares, key=lambda s: s["username"].lower())
+
+
+def _list_shares_slow() -> list[dict]:
     account = _account()
     server = _server(account)
     out: list[dict] = []
@@ -104,6 +171,18 @@ def list_shares() -> list[dict]:
 
 
 def all_sections() -> list[str]:
+    """Library names. Tautulli has already synced them, so no need to connect
+    to the server itself, which from inside a container can mean waiting out
+    every address Plex advertises."""
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import Library
+
+    with session_scope() as db:
+        names = [n for (n,) in db.execute(select(Library.name).order_by(Library.name)).all() if n]
+    if names:
+        return names
     account = _account()
     server = _server(account).connect()
     return [section.title for section in server.library.sections()]

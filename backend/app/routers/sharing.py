@@ -55,16 +55,36 @@ async def status(_: AdminUser) -> dict:
     return await sharing.run(sharing.status)
 
 
+_cache: dict[str, object] = {"at": 0.0, "value": None}
+CACHE_SECONDS = 120
+
+
+def _forget() -> None:
+    _cache["at"], _cache["value"] = 0.0, None
+
+
 @router.get("")
-async def list_shares(_: AdminUser) -> dict:
+async def list_shares(_: AdminUser, fresh: bool = False) -> dict:
+    import asyncio
+    import time
+
     if not sharing.configured():
         return {"configured": False, "users": [], "sections": []}
+    if not fresh and _cache["value"] is not None and time.time() - float(_cache["at"]) < CACHE_SECONDS:
+        return _cache["value"]  # type: ignore[return-value]
     try:
-        users = await sharing.run(sharing.list_shares)
-        sections = await sharing.run(sharing.all_sections)
+        # A time limit, so a slow plex.tv is an error on the page rather than
+        # a page that says Loading forever.
+        users, sections = await asyncio.wait_for(
+            asyncio.gather(sharing.run(sharing.list_shares), sharing.run(sharing.all_sections)), timeout=45
+        )
+    except TimeoutError as exc:
+        raise HTTPException(504, "Plex took longer than 45 seconds to answer. Try again in a moment.") from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"Plex said: {redact(exc)}") from exc
-    return {"configured": True, "users": users, "sections": sections}
+    value = {"configured": True, "users": users, "sections": sections}
+    _cache["at"], _cache["value"] = time.time(), value
+    return value
 
 
 @router.put("/{username}/sections")
@@ -72,6 +92,7 @@ async def set_sections(
     username: str, admin: AdminUser, sections: list[str] = Body(..., embed=True)
 ) -> dict:
     require_plex()
+    _forget()
     before = await sharing.run(sharing._sections_for, username)
     try:
         result = await sharing.run(sharing.set_sections, username, sections)
@@ -87,6 +108,7 @@ async def set_sections(
         f"Changed {username}'s libraries to {', '.join(result['sections']) or 'nothing'}",
         target=username, detail={"before": before, "after": result["sections"]},
     )
+    _forget()
     return result
 
 
@@ -102,6 +124,7 @@ async def unshare(username: str, admin: AdminUser, confirm: str = Body(..., embe
     if confirm.strip() != username:
         raise HTTPException(400, "Type the username exactly to confirm")
 
+    _forget()
     before = await sharing.run(sharing._sections_for, username)
     try:
         result = await sharing.run(sharing.unshare, username)
@@ -116,11 +139,12 @@ async def unshare(username: str, admin: AdminUser, confirm: str = Body(..., embe
         admin, "sharing.unshare", f"Stopped sharing with {username}",
         target=username, detail={"before": before}, result="removed",
     )
+    _forget()
     return result
 
 
 @router.get("/audit")
-def audit(_: AdminUser, limit: int = 100) -> list[dict]:
+def sharing_audit(_: AdminUser, limit: int = 100) -> list[dict]:
     from sqlalchemy import desc, select
 
     with session_scope() as db:

@@ -1,3 +1,4 @@
+import Loading from "../components/Loading";
 import { useMemo, useState } from "react";
 import FilterBar from "../components/FilterBar";
 import { api, useApi } from "../lib/api";
@@ -186,7 +187,7 @@ export default function Reports() {
   }
 
   if (catalog.error) return <p className="note bad-note pad">{catalog.error}</p>;
-  if (!source) return <p className="pad muted">Loading…</p>;
+  if (!source) return <div className="pad"><Loading /></div>;
 
   return (
     <div className="settings-layout">

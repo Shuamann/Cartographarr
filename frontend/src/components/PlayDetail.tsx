@@ -1,3 +1,4 @@
+import Loading from "./Loading";
 import { displayTitle, episodeLabel } from "../lib/titles";
 import { useState } from "react";
 import { useApi, type MediaDetail } from "../lib/api";
@@ -94,7 +95,7 @@ export default function PlayDetail({ rowId }: { rowId: number }) {
   const media = useApi<MediaDetail>(p?.rating_key ? `/media/${p.rating_key}` : null, [p?.rating_key]);
 
   if (detail.error) return <p className="note bad-note">{detail.error}</p>;
-  if (!p) return <p className="muted small">Loading…</p>;
+  if (!p) return <Loading compact label="Getting stream details from Tautulli" />;
 
   const s = p.stream ?? {};
   const links = media.data ? LINKS.filter((l) => media.data?.links[l.key]) : [];

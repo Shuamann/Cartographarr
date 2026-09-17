@@ -1,3 +1,4 @@
+import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
 import type { FilterState } from "../lib/filters";
 import { displayTitle } from "../lib/titles";
@@ -367,7 +368,7 @@ function UserProfile({
   const [error, setError] = useState<string | null>(null);
 
   if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
-  if (!detail.data) return <p className="muted pad">Loading…</p>;
+  if (!detail.data) return <div className="pad"><Loading /></div>;
   const u = detail.data;
   const name = u.friendly_name || u.username || `Account ${u.user_id}`;
   const streaming = (live?.sessions ?? []).filter((s) => Number(s.user_id) === userId);
@@ -500,7 +501,7 @@ function DeviceProfile({
   const [copied, setCopied] = useState(false);
 
   if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
-  if (!detail.data) return <p className="muted pad">Loading…</p>;
+  if (!detail.data) return <div className="pad"><Loading /></div>;
   const d = detail.data;
   const label = d.player || machineId.slice(0, 12);
   const streaming = (live?.sessions ?? []).filter((s) => s.machine_id === machineId);
@@ -699,7 +700,7 @@ function AddressProfile({
   const [tab, setTab] = useState<"overview" | "history">("overview");
 
   if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
-  if (!detail.data) return <p className="muted pad">Loading…</p>;
+  if (!detail.data) return <div className="pad"><Loading /></div>;
   const a = detail.data;
   const where = a.place ? [a.place.city, a.place.region, a.place.country].filter(Boolean).join(", ") : "";
 
@@ -994,7 +995,7 @@ function RecentPlays({
   const names = new Map((users.data ?? []).map((u) => [u.user_id, u.friendly_name || u.username]));
 
   if (page.error) return <p className="note bad-note">{page.error}</p>;
-  if (!page.data) return <p className="muted">Loading…</p>;
+  if (!page.data) return <Loading compact />;
 
   return (
     <>
@@ -1052,7 +1053,7 @@ function ActivityList({ query }: { query: string }) {
   const [open, setOpen] = useState<string | null>(null);
 
   if (events.error) return <p className="note bad-note">{events.error}</p>;
-  if (!events.data) return <p className="muted">Loading…</p>;
+  if (!events.data) return <Loading compact />;
 
   return (
     <>
