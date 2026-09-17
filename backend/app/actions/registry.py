@@ -57,6 +57,9 @@ def unmet(action: Action) -> list[str]:
     for requirement in action.requires:
         if requirement == "plex_pass" and not capabilities.plex_pass_active():
             missing.append("plex_pass")
+        elif requirement == "viewer_messaging":
+            if not (current().viewer_message_url or "").strip():
+                missing.append("viewer_messaging")
         elif requirement.startswith("integration:"):
             from app.integrations.notify import apprise_notifier, webhook_notifier
 
@@ -205,5 +208,85 @@ register(
         execute=_log_only,
         requires=(),
         param_schema={},
+    )
+)
+
+
+# ---- message the viewer ------------------------------------------------------------
+
+DEFAULT_VIEWER_MESSAGE = (
+    "Hi {name}, your stream of {title} on {player} matched a rule on this Plex server. "
+    "Nothing has been stopped. If this is unexpected, get in touch with the server owner."
+)
+
+
+def viewer_address(template: str, email: str | None, username: str | None) -> str:
+    """The Apprise URL for one person. Values are URL-quoted, so an address
+    cannot add or change parameters of the URL around it."""
+    from urllib.parse import quote
+
+    if "{email}" in template and not email:
+        raise RuntimeError("This viewer has no email address in Plex")
+    return template.replace("{email}", quote(email or "", safe="@")).replace("{username}", quote(username or "", safe=""))
+
+
+async def _message_viewer(session: Session, params: Params) -> str:
+    import asyncio
+
+    import apprise
+
+    from app.db import session_scope
+    from app.models import User
+
+    template = (current().viewer_message_url or "").strip()
+    if not template:
+        raise RuntimeError("No viewer message address in Settings")
+    user = None
+    try:
+        uid = int(session.get("user_id"))
+    except (TypeError, ValueError):
+        uid = None
+    if uid is not None:
+        with session_scope() as db:
+            user = db.get(User, uid)
+            if user is not None:
+                db.expunge(user)
+    name = session.get("friendly_name") or session.get("username") or "there"
+    body = (params.get("message") or DEFAULT_VIEWER_MESSAGE).format_map(
+        _Blank(name=name, title=session.get("full_title") or "a title", player=session.get("player") or "your device")
+    )
+    url = viewer_address(template, user.email if user else None, (user.username if user else None) or session.get("username"))
+    client = apprise.Apprise()
+    if not client.add(url):
+        raise RuntimeError("Apprise did not understand the viewer message address")
+    sent = await asyncio.to_thread(client.notify, title=params.get("title") or "About your Plex stream", body=body)
+    if not sent:
+        raise RuntimeError("Apprise reported a failure")
+    return "messaged the viewer"
+
+
+class _Blank(dict):
+    """format_map that leaves unknown {placeholders} as they are."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
+register(
+    Action(
+        name="message_viewer",
+        label="Message the viewer",
+        description="Sends the person watching a message, by email or whatever the viewer message address in Settings "
+                    "points at. Leaves the stream alone.",
+        execute=_message_viewer,
+        requires=("viewer_messaging",),
+        param_schema={
+            "title": {"type": "string", "label": "Subject", "default": "About your Plex stream"},
+            "message": {
+                "type": "string",
+                "label": "Message ({name}, {title} and {player} are filled in)",
+                "default": DEFAULT_VIEWER_MESSAGE,
+            },
+        },
     )
 )

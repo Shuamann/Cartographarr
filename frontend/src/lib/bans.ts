@@ -13,6 +13,7 @@ export type Ban = {
   last_seen: number | null;
   attempts: number;
   last_attempt: string | null;
+  expires_at: string | null;
 };
 
 /* Every component that shows a Ban or Unban button reads the list from here,
@@ -35,9 +36,17 @@ export function useBans() {
   return { list: bans.data ?? [], ids, loading: bans.loading, error: bans.error };
 }
 
-export async function ban(machineId: string, reason: string): Promise<void> {
-  await api.post("/bans", { machine_id: machineId, reason });
+export async function ban(machineId: string, reason: string, hours?: number | null): Promise<void> {
+  await api.post("/bans", { machine_id: machineId, reason, hours: hours || null });
   window.dispatchEvent(new Event(CHANGED));
+}
+
+/* When a timed ban ends, as a local date and time, or null if permanent.
+ * Stored as UTC without a zone marker. */
+export function banEnds(b: { expires_at: string | null } | undefined): string | null {
+  if (!b?.expires_at) return null;
+  const iso = /[zZ]|[+-]\d\d:\d\d$/.test(b.expires_at) ? b.expires_at : `${b.expires_at}Z`;
+  return new Date(iso).toLocaleString();
 }
 
 export async function setBanReason(machineId: string, reason: string): Promise<void> {

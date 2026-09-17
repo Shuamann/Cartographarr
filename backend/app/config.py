@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     one setting covers Discord, ntfy, Gotify, Pushover, Telegram, email and the
     hundred or so others Apprise speaks."""
 
+    viewer_message_url: str = ""
+    """An Apprise URL for messaging the person watching, with {email} and
+    {username} filled in from their Plex account. Usually email, for example
+    mailtos://you:app-password@gmail.com?to={email}. Empty turns the action
+    off."""
+
     webhook_url: str = ""
     """Posted a JSON body when a rule says to. The escape hatch for anything
     Apprise does not cover."""

@@ -104,6 +104,11 @@ const AREAS: Area[] = [
         keys: ["apprise_urls"],
       },
       {
+        title: "Messaging viewers",
+        note: "Lets a rule message the person watching instead of stopping them. An Apprise URL with {email} (and optionally {username}) filled in from their Plex account, usually email, for example mailtos://you:app-password@gmail.com?to={email}. Leave empty to keep the action off.",
+        keys: ["viewer_message_url"],
+      },
+      {
         title: "Webhook",
         note: "Receives a JSON post when a rule acts.",
         test: "webhook",
@@ -140,6 +145,11 @@ const AREAS: Area[] = [
         title: "Shared account detection",
         note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: pairs are ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance.",
         keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
+      },
+      {
+        title: "Library and access review",
+        note: "The bitrate above which a remotely watched file counts as a problem in Library, and how long without a play before Access review says someone is not watching.",
+        keys: ["library_bitrate_threshold_mbps", "access_inactive_days"],
       },
       {
         title: "Server upload",
@@ -211,6 +221,9 @@ const PAGES: Page[] = [
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
 ];
 
+/* URLs that carry a credential. Masked like keys; the server does the same. */
+const SECRET_URLS = new Set(["apprise_urls", "webhook_url", "uptime_kuma_push_url", "viewer_message_url"]);
+
 const LABELS: Record<string, string> = {
   tautulli_url: "Tautulli URL",
   tautulli_local_url: "Local URL",
@@ -233,6 +246,9 @@ const LABELS: Record<string, string> = {
   activity_poll_seconds: "Check activity every (seconds)",
   ban_message: "Message shown to a banned device",
   upload_capacity_mbps: "Upload capacity (Mbps)",
+  library_bitrate_threshold_mbps: "Problem file bitrate (Mbps)",
+  access_inactive_days: "Not watching after (days)",
+  viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes (%)",
   auth_proxy_enabled: "Trust a reverse proxy",
   trusted_proxy_ips: "Trusted proxy addresses",
@@ -408,7 +424,7 @@ function SettingsForm() {
     const locked = !setting.editable;
     const value = key in draft ? draft[key] : setting.value;
     const isBool = typeof setting.value === "boolean";
-    const isSecret = /key|token|secret|password/.test(key);
+    const isSecret = /key|token|secret|password/.test(key) || SECRET_URLS.has(key);
     // A masked secret must not be saved back as literal asterisks.
     const masked = isSecret && setting.value === "********";
 

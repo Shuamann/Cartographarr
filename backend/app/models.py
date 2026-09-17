@@ -422,6 +422,9 @@ class BannedDevice(Base):
     reason: Mapped[str | None] = mapped_column(Text)
     banned_by: Mapped[str | None] = mapped_column(String(64))
     banned_at: Mapped[datetime | None] = mapped_column()
+    # Empty for a permanent ban. After this the ban no longer applies and is
+    # removed on the next sweep, with a Log entry.
+    expires_at: Mapped[datetime | None] = mapped_column()
 
 
 class EnforcementLog(Base):

@@ -1255,10 +1255,13 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function banInfo(b: { banned_by: string | null; banned_at: string | null; reason: string | null; attempts: number } | undefined): string {
+function banInfo(
+  b: { banned_by: string | null; banned_at: string | null; reason: string | null; attempts: number; expires_at?: string | null } | undefined,
+): string {
   if (!b) return "Banned";
   const at = b.banned_at ? new Date(b.banned_at.endsWith("Z") ? b.banned_at : `${b.banned_at}Z`).toLocaleString() : "";
-  return [`Banned ${at}`.trim(), b.banned_by ? `by ${b.banned_by}` : "", b.reason ? `: ${b.reason}` : "", `, ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`]
+  const until = b.expires_at ? new Date(b.expires_at.endsWith("Z") ? b.expires_at : `${b.expires_at}Z`).toLocaleString() : null;
+  return [`Banned ${at}`.trim(), b.banned_by ? ` by ${b.banned_by}` : "", until ? `, until ${until}` : "", b.reason ? `: ${b.reason}` : "", `, ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`]
     .join("")
     .trim();
 }

@@ -22,9 +22,13 @@ log = logging.getLogger(__name__)
 
 SECRET_HINT = ("key", "token", "secret", "password")
 
+# Settings whose value is a URL that usually carries a credential: a Discord
+# webhook id and token, an SMTP password, a push token.
+SECRET_URLS = frozenset({"apprise_urls", "webhook_url", "uptime_kuma_push_url", "viewer_message_url"})
+
 
 def is_secret(key: str) -> bool:
-    return any(hint in key for hint in SECRET_HINT)
+    return key in SECRET_URLS or any(hint in key for hint in SECRET_HINT)
 
 
 def record(

@@ -230,6 +230,7 @@ const ACTION_NAMES: Record<string, string> = {
   terminate: "Stop the stream",
   notify: "Send a notification",
   webhook: "Post to a webhook",
+  message_viewer: "Message the viewer",
   log_only: "Record it",
 };
 
@@ -250,7 +251,8 @@ function outcomeOf(e: Enforcement): { label: string; tone: string } {
   if (result.startsWith("refused") || result.includes("failed")) return { label: "refused", tone: "pill bad" };
   if (actions.includes("terminate") && result.includes("terminated")) return { label: "stopped", tone: "pill banned" };
   if (actions.length === 1 && actions[0] === "log_only") return { label: "logged", tone: "pill" };
-  if (actions.includes("notify") || actions.includes("webhook")) return { label: "notified", tone: "pill warn" };
+  if (actions.includes("notify") || actions.includes("webhook") || actions.includes("message_viewer"))
+    return { label: "notified", tone: "pill warn" };
   return { label: e.result || "acted", tone: "pill warn" };
 }
 

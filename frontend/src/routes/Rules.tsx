@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import MultiSelect from "../components/MultiSelect";
-import { ban, setBanReason, useBans } from "../lib/bans";
+import { ban, banEnds, setBanReason, useBans } from "../lib/bans";
 import { useNav } from "../lib/nav";
 import {
   api,
@@ -38,6 +38,7 @@ const MAX_DEPTH = 3;
 const NEEDS: Record<string, string> = {
   geoip: "a MaxMind key in Settings",
   "integration:seerr": "Seerr in Settings",
+  viewer_messaging: "a viewer message address in Settings, Alerts and monitoring",
   "integration:apprise": "Apprise URLs in Settings",
   "integration:webhook": "a webhook URL in Settings",
   plex_pass: "Plex Pass",
@@ -345,7 +346,9 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
                     {b.label ?? b.machine_id}
                   </button>
                   <p className="muted small">
-                    {[b.user_name, b.reason, b.banned_by ? `by ${b.banned_by}` : null].filter(Boolean).join(" \u00b7 ")}
+                    {[b.user_name, b.reason, b.banned_by ? `by ${b.banned_by}` : null, banEnds(b) ? `until ${banEnds(b)}` : null]
+                      .filter(Boolean)
+                      .join(" \u00b7 ")}
                     {` \u00b7 ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`}
                   </p>
                 </div>
@@ -393,6 +396,14 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
   );
 }
 
+const LENGTHS = [
+  { hours: 0, label: "Permanently" },
+  { hours: 1, label: "1 hour" },
+  { hours: 24, label: "1 day" },
+  { hours: 24 * 7, label: "1 week" },
+  { hours: 24 * 30, label: "30 days" },
+];
+
 /* Ban a device from the ban list itself: find it by name, owner or id, give
  * a reason for the log, ban. */
 function AddBan({ banned }: { banned: Set<string> }) {
@@ -401,6 +412,7 @@ function AddBan({ banned }: { banned: Set<string> }) {
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<Device | null>(null);
   const [reason, setReason] = useState("");
+  const [hours, setHours] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -420,8 +432,9 @@ function AddBan({ banned }: { banned: Set<string> }) {
     setBusy(true);
     setMessage(null);
     try {
-      await ban(picked.machine_id, reason);
-      setMessage(`Banned ${picked.player ?? picked.machine_id}.`);
+      await ban(picked.machine_id, reason, hours);
+      const length = LENGTHS.find((l) => l.hours === hours);
+      setMessage(`Banned ${picked.player ?? picked.machine_id}${hours && length ? ` for ${length.label}` : ""}.`);
       setPicked(null);
       setSearch("");
       setReason("");
@@ -462,6 +475,16 @@ function AddBan({ banned }: { banned: Set<string> }) {
           <span>Reason, for the log</span>
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" autoComplete="off" />
         </label>
+        <label>
+          <span>For</span>
+          <select value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+            {LENGTHS.map((l) => (
+              <option key={l.hours} value={l.hours}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="btn danger" onClick={submit} disabled={!picked || busy}>
           {busy ? "Banning\u2026" : "Ban device"}
         </button>
@@ -499,6 +522,7 @@ function consequences(steps: RuleStep[]): string | null {
     names.has("terminate") ? "stop matching streams" : null,
     names.has("notify") ? "send notifications" : null,
     names.has("webhook") ? "post to the webhook" : null,
+    names.has("message_viewer") ? "message the viewer" : null,
   ].filter(Boolean) as string[];
   if (!parts.length) return null;
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;

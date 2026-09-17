@@ -197,6 +197,31 @@ FIELDS: list[Field] = [
         hint="Stalls Cartographarr recorded across all of this user's streams.",
     ),
     Field("device_buffering_window", "Times this device buffered", "Recent history", "window", lambda s, c: None),
+    Field(
+        "user_matches_window", "Times a rule caught this user before", "Recent history", "window", lambda s, c: None,
+        hint="Other streams only, not this one. Put a stopping rule with this above a warning rule, and the "
+             "first time only warns.",
+    ),
+    Field(
+        "device_matches_window", "Times a rule caught this device before", "Recent history", "window", lambda s, c: None,
+        hint="Other streams only, not this one.",
+    ),
+    # ---- new for this person ------------------------------------------------------
+    Field(
+        "new_country", "Country is new for this user", "Where", "bool", lambda s, c: c.get("new_country"),
+        requires=("geoip",),
+        hint="Never played from this country before. Needs five plays of history before anything counts as new.",
+    ),
+    Field(
+        "new_city", "City is new for this user", "Where", "bool", lambda s, c: c.get("new_city"),
+        requires=("geoip",),
+        hint="Needs five plays of history before anything counts as new.",
+    ),
+    Field(
+        "new_network", "Network is new for this user", "Where", "bool", lambda s, c: c.get("new_network"),
+        requires=("geoip",),
+        hint="An internet provider this account has never played through. Needs five plays of history.",
+    ),
     # ---- when ------------------------------------------------------------------
     Field(
         "time", "Time of day", "When", "time", lambda s, c: c.get("now"),

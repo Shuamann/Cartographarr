@@ -161,6 +161,30 @@ def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
                 )
             ).all()
         } if users else set()
+        # What each person has played from before, for the "new for this user"
+        # conditions. Too little history makes everything look new.
+        known: dict[int, dict[str, Any]] = {}
+        if users:
+            from app.models import History
+
+            for uid, country, city, network in db.execute(
+                select(History.user_id, IpLocation.country_code, IpLocation.city, IpLocation.asn_org)
+                .join(IpLocation, IpLocation.ip == History.ip_address)
+                .where(History.user_id.in_(users))
+                .distinct()
+            ).all():
+                entry = known.setdefault(uid, {"countries": set(), "cities": set(), "networks": set()})
+                if country:
+                    entry["countries"].add(country)
+                if city:
+                    entry["cities"].add((city, country))
+                if network:
+                    entry["networks"].add(network)
+            plays = dict(
+                db.execute(select(History.user_id, func.count()).where(History.user_id.in_(users)).group_by(History.user_id)).all()
+            )
+        else:
+            plays = {}
         unreviewed = {
             (mid, uid)
             for mid, uid in db.execute(
@@ -180,9 +204,26 @@ def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
             "paused_minutes": _paused_minutes(s),
             "open_travel_flag": _int(s.get("user_id")) in flagged,
             "device_unreviewed": (s.get("machine_id"), _int(s.get("user_id"))) in unreviewed,
+            **_newness(places.get(s.get("ip_address")), known.get(_int(s.get("user_id"))), plays.get(_int(s.get("user_id")), 0)),
             "now": now,
         }
         for s in sessions
+    }
+
+
+NEW_PLACE_MIN_PLAYS = 5
+
+
+def _newness(place: dict | None, known: dict | None, plays: int) -> dict[str, bool]:
+    """Whether where this stream comes from is somewhere this person has never
+    played from. False without a location or without enough history."""
+    if not place or plays < NEW_PLACE_MIN_PLAYS:
+        return {"new_country": False, "new_city": False, "new_network": False}
+    known = known or {"countries": set(), "cities": set(), "networks": set()}
+    return {
+        "new_country": bool(place.get("country_code")) and place["country_code"] not in known["countries"],
+        "new_city": bool(place.get("city")) and (place["city"], place.get("country_code")) not in known["cities"],
+        "new_network": bool(place.get("asn_org")) and place["asn_org"] not in known["networks"],
     }
 
 
@@ -251,13 +292,22 @@ def window_counter():
     def count(kind: str, session: Session, hours: float) -> int | None:
         uid = _int(session.get("user_id"))
         mid = session.get("machine_id")
-        key = (kind, uid, mid, hours)
+        this_stream = str(session.get("session_key"))
+        key = (kind, uid, mid, hours, this_stream if kind.endswith("matches_window") else None)
         if key in cache:
             return cache[key]
         since = int(time.time() - hours * 3600)
         since_dt = datetime.fromtimestamp(since, UTC)
         with session_scope() as db:
-            if kind == "device_buffering_window":
+            if kind == "device_matches_window":
+                value = None if not mid else db.execute(
+                    select(func.count()).select_from(EnforcementLog).where(
+                        EnforcementLog.machine_id == mid,
+                        EnforcementLog.session_key != this_stream,
+                        EnforcementLog.acted_at >= since_dt,
+                    )
+                ).scalar_one()
+            elif kind == "device_buffering_window":
                 value = None if not mid else db.execute(
                     select(func.count()).select_from(StreamEvent).where(
                         StreamEvent.machine_id == mid, StreamEvent.started_at >= since_dt
@@ -286,6 +336,14 @@ def window_counter():
                     select(func.count(func.distinct(IpLocation.city)))
                     .join(History, History.ip_address == IpLocation.ip)
                     .where(History.user_id == uid, History.started >= since, IpLocation.city.is_not(None))
+                ).scalar_one()
+            elif kind == "user_matches_window":
+                value = db.execute(
+                    select(func.count()).select_from(EnforcementLog).where(
+                        EnforcementLog.user_id == uid,
+                        EnforcementLog.session_key != this_stream,
+                        EnforcementLog.acted_at >= since_dt,
+                    )
                 ).scalar_one()
             elif kind == "user_buffering_window":
                 value = db.execute(
@@ -406,8 +464,16 @@ def ban_rule() -> Rule | None:
     matching, cooldown, dry run, requirement and logging path as any rule,
     rather than a second enforcement path that could drift from the first.
     """
+    now = datetime.now(UTC)
     with session_scope() as db:
-        ids = [mid for (mid,) in db.execute(select(BannedDevice.machine_id)).all()]
+        ids = [
+            mid
+            for (mid,) in db.execute(
+                select(BannedDevice.machine_id).where(
+                    (BannedDevice.expires_at.is_(None)) | (BannedDevice.expires_at > now)
+                )
+            ).all()
+        ]
     if not ids:
         return None
     settings = current()
@@ -428,9 +494,30 @@ def ban_rule() -> Rule | None:
     )
 
 
+def expire_bans() -> int:
+    """Remove bans whose time is up, each with a Log entry."""
+    from app import audit
+
+    now = datetime.now(UTC)
+    ended = []
+    with session_scope() as db:
+        for ban in db.execute(
+            select(BannedDevice).where(BannedDevice.expires_at.is_not(None), BannedDevice.expires_at <= now)
+        ).scalars():
+            ended.append((ban.machine_id, ban.label or ban.machine_id[:12]))
+            db.delete(ban)
+    for machine_id, label in ended:
+        audit.record(None, "device.ban_expired", f"Ban on {label} ended", target=machine_id, actor="Cartographarr")
+    return len(ended)
+
+
 async def run_once() -> dict[str, Any]:
     """Evaluate every enabled rule against current activity."""
     settings = current()
+    try:
+        expire_bans()
+    except Exception:  # noqa: BLE001 - a stale ban is already ignored by ban_rule
+        log.exception("could not expire bans")
     if not is_configured():
         return {"checked": 0, "matched": 0, "acted": 0}
 

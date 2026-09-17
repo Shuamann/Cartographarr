@@ -33,7 +33,7 @@ SECRET_HINT = ("key", "token", "secret", "password")
 
 
 def _redact(key: str, value: Any) -> Any:
-    if any(hint in key for hint in SECRET_HINT) and value:
+    if audit.is_secret(key) and value:
         return "********"
     return value
 

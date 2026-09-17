@@ -479,12 +479,18 @@ def ban_device(
     admin: AdminUser,
     machine_id: str = Body(..., embed=True),
     reason: str = Body("", embed=True),
+    hours: float | None = Body(None, embed=True),
 ) -> dict:
+    from datetime import timedelta
+
     from app.models import BannedDevice
 
     machine_id = machine_id.strip()
     if not machine_id:
         raise HTTPException(400, "Which device?")
+    if hours is not None and not 0 < hours <= 24 * 366:
+        raise HTTPException(400, "A timed ban can last up to a year. Leave the length empty for a permanent ban.")
+    expires = datetime.now(UTC) + timedelta(hours=hours) if hours else None
     with session_scope() as db:
         if db.get(BannedDevice, machine_id) is not None:
             raise HTTPException(409, "That device is already banned")
@@ -500,13 +506,26 @@ def ban_device(
                 reason=reason.strip() or None,
                 banned_by=admin.username,
                 banned_at=datetime.now(UTC),
+                expires_at=expires,
             )
         )
     audit.record(
-        admin, "device.ban", f"Banned {label}" + (f": {reason.strip()}" if reason.strip() else ""), target=machine_id,
+        admin, "device.ban",
+        f"Banned {label}" + (f" for {_duration(hours)}" if hours else "") + (f": {reason.strip()}" if reason.strip() else ""),
+        target=machine_id,
         detail={"reason": reason.strip() or None},
     )
     return {"machine_id": machine_id, "banned": True}
+
+
+def _duration(hours: float) -> str:
+    if hours % (24 * 7) == 0:
+        n = int(hours // (24 * 7))
+        return f"{n} week{'s' if n != 1 else ''}"
+    if hours % 24 == 0:
+        n = int(hours // 24)
+        return f"{n} day{'s' if n != 1 else ''}"
+    return f"{hours:g} hour{'s' if hours != 1 else ''}"
 
 
 @router.patch("/bans/{machine_id}")
