@@ -250,6 +250,27 @@ async def replace_file(rating_key: int, admin: AdminUser, action: str = Body(...
     return {"ok": True, "message": result}
 
 
+def _capacity():
+    from app.services.streams import upload_capacity
+
+    return upload_capacity()
+
+
+@router.get("/upload")
+def upload_settings(_: AdminUser) -> dict:
+    """What upload Cartographarr measures against, for the Settings page."""
+    from app.services.streams import plex_upload, upload_capacity
+
+    total, per_stream = plex_upload()
+    capacity, source = upload_capacity()
+    return {
+        "capacity_mbps": capacity or None,
+        "source": source,
+        "plex_upload_mbps": None if total is None else total / 1000,
+        "plex_stream_limit_mbps": None if per_stream is None else per_stream / 1000,
+    }
+
+
 @router.get("/health")
 def health_summary(_: AdminUser, db: Db) -> dict:
     """The dashboard's server health cards: stalls and what causes them,
@@ -283,7 +304,8 @@ def health_summary(_: AdminUser, db: Db) -> dict:
         "stalls_week": stalls,
         "top_stall_cause": None if top is None else STALL_CAUSES.get(top[0] or "one_off", top[0]),
         "peak_upload_mbps": round((peak or 0) / 1000, 1) if peak is not None else None,
-        "upload_capacity_mbps": current().upload_capacity_mbps or None,
+        "upload_capacity_mbps": _capacity()[0] or None,
+        "upload_capacity_source": _capacity()[1],
         "streams_week": int(streams or 0),
         "transcoded_week": int(transcoded or 0),
         "not_watching": not_watching,

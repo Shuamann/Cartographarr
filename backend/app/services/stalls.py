@@ -105,7 +105,9 @@ def reclassify(days: int = 14) -> int:
     from app.settings_store import current
 
     settings = current()
-    capacity = float(getattr(settings, "upload_capacity_mbps", 0) or 0)
+    from app.services.streams import upload_capacity
+
+    capacity, _ = upload_capacity()
     percent = int(getattr(settings, "upload_alert_percent", 90) or 90)
     since = datetime.now(UTC) - timedelta(days=days)
     changed = 0

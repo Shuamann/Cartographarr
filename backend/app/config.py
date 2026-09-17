@@ -84,7 +84,8 @@ class Settings(BaseSettings):
 
     upload_capacity_mbps: float = 0
     """Your server's upload speed. Lets stalls be blamed on a full upload, and
-    lets Cartographarr warn when it is nearly full. 0 means unknown."""
+    lets Cartographarr warn when it is nearly full. 0 uses the Internet upload
+    speed set in Plex (Settings, Remote Access), read every hour."""
 
     library_bitrate_threshold_mbps: float = 20
     """Library health lists files above this average bitrate that are watched

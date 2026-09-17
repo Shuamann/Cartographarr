@@ -153,7 +153,7 @@ const AREAS: Area[] = [
       },
       {
         title: "Server upload",
-        note: "Your server's upload speed. With it set, stalls that happen while the upload is nearly full are blamed on the upload rather than a viewer, and you get a notification (through Apprise, at most every half hour) when remote streams use more than the alert level. Leave at 0 if you do not know it.",
+        note: "Your server's upload speed. Stalls that happen while the upload is nearly full are blamed on the upload rather than a viewer, and you get a notification (through Apprise, at most every half hour) when remote streams use more than the alert level. Leave at 0 to use the Internet upload speed set in Plex under Remote Access.",
         keys: ["upload_capacity_mbps", "upload_alert_percent"],
       },
       {
@@ -578,6 +578,7 @@ function SettingsForm() {
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Syncing" && <SyncNow />}
+            {section.title === "Server upload" && <UploadSource />}
           </section>
         ))}
 
@@ -844,6 +845,38 @@ function PlexServerSelect({
               : "Pick which server sharing changes apply to."}
       </small>
     </>
+  );
+}
+
+/* Which upload figure is in use: this page's, or the one set in Plex. */
+function UploadSource() {
+  const info = useApi<{
+    capacity_mbps: number | null;
+    source: "settings" | "plex" | "unknown";
+    plex_upload_mbps: number | null;
+    plex_stream_limit_mbps: number | null;
+  }>("/library/upload");
+  const d = info.data;
+  if (!d) return null;
+  const plex =
+    d.plex_upload_mbps === null
+      ? "Plex's upload speed has not been read yet (it is read every hour)."
+      : d.plex_upload_mbps === 0
+        ? "Plex has no Internet upload speed set (Settings, Remote Access)."
+        : `Plex's Internet upload speed is ${d.plex_upload_mbps.toLocaleString()} Mbps.`;
+  const limit =
+    d.plex_stream_limit_mbps ? ` Remote streams are limited to ${d.plex_stream_limit_mbps} Mbps each.` : "";
+  const using =
+    d.source === "settings"
+      ? `Using ${d.capacity_mbps} Mbps from this page.`
+      : d.source === "plex"
+        ? `Using Plex's figure, since upload capacity here is 0.`
+        : "No upload figure yet, so stalls are not blamed on the upload.";
+  return (
+    <p className="note">
+      {plex}
+      {limit} {using}
+    </p>
   );
 }
 

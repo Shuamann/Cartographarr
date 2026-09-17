@@ -721,4 +721,8 @@ async def _heartbeat(result: dict) -> None:
 
 async def run_slow_sync(client: TautulliClient) -> dict:
     """Users and libraries. Rarely change, own schedule."""
-    return {"users": await sync_users(client), "libraries": await sync_libraries(client)}
+    from app.services.streams import read_plex_upload
+
+    result = {"users": await sync_users(client), "libraries": await sync_libraries(client)}
+    await read_plex_upload(client)
+    return result

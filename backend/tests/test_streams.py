@@ -154,3 +154,25 @@ def test_upload_alert_is_sent_from_the_sweep_thread(client, monkeypatch):
     worker.start()
     worker.join()
     assert sent == ["Upload nearly full"]
+
+
+def test_upload_capacity_comes_from_plex_unless_set(client, monkeypatch):
+    import asyncio
+
+    from app.settings_store import current
+    from tests.test_auth import claim
+
+    class FakeTautulli:
+        async def call(self, cmd, pref=None):
+            return {"WanTotalMaxUploadRate": "40000", "WanPerStreamMaxUploadRate": "8000"}[pref]
+
+    assert streams.upload_capacity() == (0.0, "unknown")
+    assert asyncio.run(streams.read_plex_upload(FakeTautulli())) == (40000, 8000)
+    assert streams.upload_capacity() == (40.0, "plex")
+    real = current()
+    monkeypatch.setattr("app.settings_store.current", lambda: real.model_copy(update={"upload_capacity_mbps": 25}))
+    assert streams.upload_capacity() == (25.0, "settings")
+
+    claim(client)
+    info = client.get("/api/library/upload").json()
+    assert info["plex_upload_mbps"] == 40 and info["plex_stream_limit_mbps"] == 8

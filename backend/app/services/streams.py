@@ -223,6 +223,53 @@ def finish(row_id: int, ended: float, buffer_count: int, buffer_seconds: float) 
 
 _last_alert = 0.0
 
+PLEX_UPLOAD_KEY = "plex_upload_kbps"
+PLEX_STREAM_LIMIT_KEY = "plex_stream_limit_kbps"
+
+
+def plex_upload() -> tuple[int | None, int | None]:
+    """Plex's own Internet upload speed and remote stream limit, in kbps, as
+    last read from the server (None if never read; 0 means unlimited)."""
+    from app.db import session_scope
+    from app.models import SyncState
+
+    with session_scope() as db:
+        values = [db.get(SyncState, k) for k in (PLEX_UPLOAD_KEY, PLEX_STREAM_LIMIT_KEY)]
+        return tuple(_int(v.value) if v is not None else None for v in values)  # type: ignore[return-value]
+
+
+def upload_capacity() -> tuple[float, str]:
+    """The upload to measure against, in Mbps, and where it came from: the
+    Settings value when set, otherwise Plex's Internet upload speed."""
+    from app.settings_store import current
+
+    configured = float(getattr(current(), "upload_capacity_mbps", 0) or 0)
+    if configured > 0:
+        return configured, "settings"
+    plex, _ = plex_upload()
+    if plex:
+        return plex / 1000, "plex"
+    return 0.0, "unknown"
+
+
+async def read_plex_upload(client) -> tuple[int | None, int | None]:
+    """Read and remember Plex's upload settings, through Tautulli."""
+    from app.db import session_scope
+    from app.models import SyncState
+
+    found = []
+    for pref, key in (("WanTotalMaxUploadRate", PLEX_UPLOAD_KEY), ("WanPerStreamMaxUploadRate", PLEX_STREAM_LIMIT_KEY)):
+        try:
+            value = _int(await client.call("get_server_pref", pref=pref))
+        except Exception as exc:  # noqa: BLE001 - an old Tautulli or a blip; keep the last value
+            log.debug("could not read %s: %s", pref, exc)
+            value = None
+        if value is not None:
+            with session_scope() as db:
+                db.merge(SyncState(key=key, value=str(value)))
+        found.append(value)
+    return found[0], found[1]
+
 
 def sample(activity: dict[str, Any], sessions: list[dict[str, Any]], now: float) -> None:
     """Fold one poll into this minute's bandwidth sample, keeping the peak."""
@@ -264,7 +311,7 @@ def _maybe_alert(wan_kbps: int, remote: int, now: float) -> None:
     from app.settings_store import current
 
     settings = current()
-    capacity = float(getattr(settings, "upload_capacity_mbps", 0) or 0)
+    capacity, _ = upload_capacity()
     percent = int(getattr(settings, "upload_alert_percent", 0) or 0)
     if capacity <= 0 or percent <= 0:
         return

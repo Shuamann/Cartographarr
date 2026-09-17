@@ -224,7 +224,7 @@ def _record(track: Track, started: float, ended: float, seconds: float) -> None:
 
             settings = current()
             event.cause, event.cause_detail = stalls.classify(
-                db, event, float(settings.upload_capacity_mbps or 0), int(settings.upload_alert_percent or 90)
+                db, event, streams.upload_capacity()[0], int(settings.upload_alert_percent or 90)
             )
         except Exception:  # noqa: BLE001 - a cause is a bonus; the stall itself is kept
             log.exception("could not classify a stall")
