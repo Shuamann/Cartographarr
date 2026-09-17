@@ -2323,6 +2323,9 @@ label.locked .pill {
   }
 }
 
+.login section > .btn {
+  width: 100%;
+}
 .plex-signin {
   display: flex;
   align-items: center;
