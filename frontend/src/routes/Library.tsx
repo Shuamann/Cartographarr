@@ -1046,7 +1046,7 @@ function ReplacementRow({ r, onChanged }: { r: Replacement; onChanged: () => voi
         )}
       </div>
       {r.status === "downloading" && r.progress != null && (
-        <div className="progress" title={`${Math.round(r.progress * 100)}%`}>
+        <div className="download-progress" title={`${Math.round(r.progress * 100)}%`}>
           <span style={{ width: `${Math.round(r.progress * 100)}%` }} />
         </div>
       )}
