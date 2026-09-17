@@ -251,10 +251,16 @@ whole library is covered.
 
 Open any file for what exactly is wrong with it, named from its own tracks and
 how it played, and how to fix it. For plays from before streams were recorded,
-the reason is read back from Tautulli. **Search for a replacement** asks
-Radarr or Sonarr to look for a better release (it only grabs one your quality
-profile rates higher), and **Tag for replacement** tags the title
-`cartographarr-replace` to pick one by hand. Nothing is deleted.
+the reason is read back from Tautulli.
+
+**Find a replacement** has Radarr or Sonarr search the indexers and compares
+each release with the current file: formats, size, rough bitrate, which
+problems it would fix, and whether it waits for you. Download one and it is
+followed until ready. Radarr and Sonarr import an upgrade by themselves;
+anything else, which is most compatibility swaps, waits under **Replacements**
+beside the current file to **Confirm** (import it in place of the old file) or
+**Deny** (delete the download and block that release). **Tag for replacement**
+tags the title `cartographarr-replace` instead, to pick one by hand.
 
 ## Access review
 
