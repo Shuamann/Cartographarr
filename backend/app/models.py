@@ -677,3 +677,44 @@ class AuditLog(Base):
     # still say who did it.
     actor: Mapped[str | None] = mapped_column(String(64))
     summary: Mapped[str | None] = mapped_column(Text)
+
+
+class Issue(Base):
+    """Something wrong with a file, as reported by a person.
+
+    Read from Seerr where it is set up, and kept here as well, so the report
+    sits next to what this app knows: the file's tracks and bitrate, who played
+    it on what, whether it transcoded, and whether it stalled while they
+    watched. See services/issues.py.
+    """
+
+    __tablename__ = "issues"
+    __table_args__ = (Index("ix_issues_status", "status"), Index("ix_issues_rating_key", "rating_key"))
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source: Mapped[str] = mapped_column(String(16), default="seerr")
+    seerr_id: Mapped[int | None] = mapped_column(Integer, unique=True)
+    issue_type: Mapped[str] = mapped_column(String(16), default="other")
+    """video, audio, subtitles or other."""
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    message: Mapped[str | None] = mapped_column(Text)
+
+    media_type: Mapped[str | None] = mapped_column(String(16))
+    tmdb_id: Mapped[int | None] = mapped_column(Integer)
+    tvdb_id: Mapped[int | None] = mapped_column(Integer)
+    rating_key: Mapped[int | None] = mapped_column(Integer)
+    """The episode where one is named, otherwise the movie or the show."""
+    show_rating_key: Mapped[int | None] = mapped_column(Integer)
+    season: Mapped[int | None] = mapped_column(Integer)
+    episode: Mapped[int | None] = mapped_column(Integer)
+    title: Mapped[str | None] = mapped_column(Text)
+
+    reporter_name: Mapped[str | None] = mapped_column(String(255))
+    reporter_user_id: Mapped[int | None] = mapped_column(Integer)
+    """Plex user id, where the reporter could be matched to someone here."""
+    comments: Mapped[str | None] = mapped_column(Text)
+    """JSON: [{"message", "author", "created_at"}], oldest first."""
+
+    created_at: Mapped[datetime | None] = mapped_column()
+    updated_at: Mapped[datetime | None] = mapped_column()
+    synced_at: Mapped[datetime | None] = mapped_column()

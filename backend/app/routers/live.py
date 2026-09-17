@@ -24,6 +24,7 @@ from app.models import (
     IpLocation,
     MediaItem,
     Rule,
+    StreamSession,
     TravelFlag,
     User,
 )
@@ -141,6 +142,21 @@ async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
                 "asn_org": place.asn_org,
             }
         )
+
+    # Where each stream was when this app first saw it, so the bar can show
+    # whether they resumed or started at the beginning. Recorded at the time,
+    # never guessed from an earlier play.
+    started = {
+        row.session_key: row.progress_start
+        for row in db.execute(
+            select(StreamSession).where(
+                StreamSession.ended_at.is_(None),
+                StreamSession.session_key.in_([s["session_key"] for s in sessions if s.get("session_key")]),
+            )
+        ).scalars()
+    }
+    for s in sessions:
+        s["started_percent"] = started.get(str(s.get("session_key")))
 
     if scope is not None:
         if scope.own_only:

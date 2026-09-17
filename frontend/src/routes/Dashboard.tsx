@@ -271,6 +271,12 @@ function StreamCard({
   const transcoding = session.transcode_decision === "transcode";
   const quality = session.stream_video_full_resolution || session.video_full_resolution;
   const rate = Number(session.stream_bitrate || session.bandwidth || 0);
+  const offset = Number(session.view_offset ?? 0);
+  const total = Number(session.duration ?? 0);
+  // Where they were when this stream started, recorded at the time. A stream
+  // first seen at the beginning says so; anything else says where they resumed.
+  const from = session.started_percent;
+  const resumed = from != null && from >= 2 ? from : null;
 
   return (
     <button className={selected ? "stream-card on" : "stream-card"} onClick={onClick}>
@@ -297,12 +303,34 @@ function StreamCard({
           {quality && <span className="muted small">{quality}</span>}
           {rate > 0 && <span className="muted small">{(rate / 1000).toFixed(1)} Mbps</span>}
         </span>
+        <span className="stream-times muted small">
+          <span>
+            {total > 0 ? `${clock(offset)} / ${clock(total)}` : `${Math.round(progress)}%`}
+          </span>
+          {from != null && (
+            <span title="Where this stream was when Cartographarr first saw it">
+              {resumed ? `started at ${Math.round(resumed)}%` : "from the start"}
+            </span>
+          )}
+        </span>
         <span className="progress" title={`${Math.round(progress)}% watched`}>
           <span className={paused ? "progress-fill paused" : "progress-fill"} style={{ width: `${progress}%` }} />
+          {resumed != null && resumed < progress && (
+            <span className="progress-mark" style={{ left: `${resumed}%` }} title={`Started watching at ${Math.round(resumed)}%`} />
+          )}
         </span>
       </span>
     </button>
   );
+}
+
+/* 1:05:12, or 5:12 for anything under an hour. */
+function clock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 function Card({

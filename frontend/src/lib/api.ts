@@ -168,6 +168,8 @@ export type LiveSession = {
   location: string | null;
   state: string | null;
   progress_percent: string | number | null;
+  /** Where this stream was when the app first saw it, as a percentage. */
+  started_percent: number | null;
   media_type: string | null;
   full_title: string | null;
   library_name: string | null;

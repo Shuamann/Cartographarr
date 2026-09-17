@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.5.0 - 2026-09-17
+
+### Added
+- Issues tab: problems people reported in Seerr, each shown with the file, its findings, the plays behind it, whether
+  those transcoded and whether they stalled during them, plus any earlier reports on the same file
+- Now playing cards show time watched of total, and where the stream was when the app first saw it, marked on the bar
+
+### Changed
+- Now playing cards are wide enough to keep the bitrate on one line
+
 ## 0.4.0 - 2026-09-17
 
 ### Added

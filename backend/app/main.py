@@ -17,7 +17,7 @@ from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
 from app import redact, tasks
-from app.routers import admin, auth, branding, data, library, live, monitoring, reports, sharing
+from app.routers import admin, auth, branding, data, issues, library, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
@@ -121,6 +121,19 @@ async def _update_check() -> str:
 tasks.register(tasks.Task(
     "update_check", "Check for updates", "Whether a newer Cartographarr is on GitHub.",
     _update_check, lambda: 12 * 3600,
+))
+async def _issue_sync() -> dict | str:
+    from app.integrations.seerr import seerr
+    from app.services import issues as issue_service
+
+    if not seerr.configured():
+        raise tasks.Skipped("Seerr is not set up")
+    return await issue_service.sync()
+
+
+tasks.register(tasks.Task(
+    "issues", "Read reported issues", "Problems people reported in Seerr, kept beside what this app knows about the file.",
+    _issue_sync, lambda: 300,
 ))
 tasks.register(tasks.Task(
     "capabilities", "Check Plex Pass and server", "Whether stopping streams is possible, and the server's name and version.",
@@ -253,6 +266,7 @@ app.include_router(data.router, dependencies=[Depends(require_user)])
 app.include_router(live.router, dependencies=[Depends(require_user)])
 app.include_router(reports.router, dependencies=[Depends(require_user)])
 app.include_router(library.router, dependencies=[Depends(require_admin)])
+app.include_router(issues.router, dependencies=[Depends(require_admin)])
 app.include_router(admin.router, dependencies=[Depends(require_admin)])
 app.include_router(sharing.router)
 # Guarded by its own token rather than a session, since monitoring tools

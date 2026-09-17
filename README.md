@@ -278,6 +278,17 @@ beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
 
+## Issues
+
+The **Issues** tab (admins only) reads what people reported in Seerr, every
+five minutes, and shows each report next to what this server knows: the file's
+tracks, bitrate and findings, the plays behind it, whether those transcoded,
+and whether they stalled while that person watched. Earlier reports on the same
+file are listed with it, and Find a replacement is one click away in the file
+card. Nothing is written back to Seerr yet.
+
+Reports on an episode land on the episode's own file, not the show.
+
 ## Access review
 
 The **Sharing** tab has two views. **Who has access** comes from Plex and can

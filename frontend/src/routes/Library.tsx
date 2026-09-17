@@ -108,7 +108,7 @@ type RequestRow = {
   file_size: number | null;
 };
 
-type FileDetail = FileInfo & {
+export type FileDetail = FileInfo & {
   findings: Finding[];
   arr: { name: string; label: string; configured: boolean };
   plays: number;
@@ -593,9 +593,7 @@ function FileRow({ file, badges, stats, days }: { file: FileInfo; badges: ReactN
 }
 
 function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
-  const nav = useNav();
   const detail = useApi<FileDetail>(`/library/file/${ratingKey}?days=${days}`);
-  const [showTitle, setShowTitle] = useState(false);
   if (detail.error) return <p className="note bad-note">{detail.error}</p>;
   if (!detail.data)
     return (
@@ -603,7 +601,14 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
         <Loading compact label="Reading the file" />
       </div>
     );
-  const f = detail.data;
+  return <FileCardView f={detail.data} days={days} />;
+}
+
+/* The card itself, given a file. Issues render it from their own payload
+ * rather than asking for the same file twice. */
+export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
+  const nav = useNav();
+  const [showTitle, setShowTitle] = useState(false);
   return (
     <div className="file-card">
       {f.findings.length > 0 ? (

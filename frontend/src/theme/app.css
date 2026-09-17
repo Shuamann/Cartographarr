@@ -755,6 +755,7 @@ code {
 .progress {
   /* Spans on the stream cards, so both need a box of their own. */
   display: block;
+  position: relative;
   height: 3px;
   margin-top: 12px;
   border-radius: 99px;
@@ -1135,7 +1136,8 @@ label.locked .pill {
 
 .stream-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  /* Wide enough for the whole facts line, so the bitrate never wraps. */
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 12px;
   margin-top: 8px;
 }
@@ -3131,5 +3133,74 @@ label.locked .pill {
 }
 
 .progress-fill.paused {
+  background: var(--ink-3);
+}
+
+/* ---- issues --------------------------------------------------------------- */
+
+.issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.issue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.issue-row:hover,
+.issue-row.on {
+  border-color: var(--accent);
+}
+
+.issue-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.issue-card {
+  margin: 4px 0 14px;
+  padding: 0 12px;
+  border-left: 2px solid var(--accent);
+}
+
+.issue-play {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+
+.issue-play.mine {
+  font-weight: 600;
+}
+
+.stream-times {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Where this stream was when the app first saw it. */
+.progress-mark {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 7px;
   background: var(--ink-3);
 }
