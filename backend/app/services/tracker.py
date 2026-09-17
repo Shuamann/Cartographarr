@@ -37,6 +37,10 @@ class Track:
     buffer_count: int = 0
     buffer_seconds: float = 0.0
     buffer_started: float | None = None
+    # Where playback was when a stall began, to tell a seek from a stall.
+    buffer_offset: int | None = None
+    buffer_progress: int | None = None
+    seeks: int = 0
     last_session: dict[str, Any] = field(default_factory=dict)
     # The stream_sessions row, and what it holds, so each poll only writes
     # when something changed or a minute has passed.
@@ -64,20 +68,21 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
             track = Track(session_key=key, first_seen=now, last_seen=now, state=state, state_since=now)
             _tracks[key] = track
             if state == BUFFERING:
-                track.buffer_count = 1
-                track.buffer_started = now
+                _start_buffering(track, session, now)
         elif state != track.state:
             if track.state == BUFFERING:
-                _end_buffering(track, now)
+                _end_buffering(track, now, session)
             if state == BUFFERING:
-                track.buffer_count += 1
-                track.buffer_started = now
+                _start_buffering(track, session, now)
             track.state = state
             track.state_since = now
         track.last_seen = now
         track.last_session = session
 
         row = streams.merge(track.row, session, now) if track.row else streams.row_for(session, now)
+        # Kept on the row as it plays, so a restart does not lose them.
+        row["buffer_count"] = track.buffer_count
+        row["buffer_seconds"] = round(track.buffer_seconds, 1)
         changed = {k: v for k, v in row.items() if k not in ("last_seen_at", "progress_end") and track.row.get(k) != v}
         if track.row_id is None or changed or now - track.written_at >= 60:
             track.row_id = streams.save(row, track.row_id)
@@ -117,11 +122,57 @@ def reset() -> None:
     _tracks.clear()
 
 
-def _end_buffering(track: Track, ended: float) -> None:
+def _int(value: Any) -> int | None:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _start_buffering(track: Track, session: dict[str, Any], now: float) -> None:
+    track.buffer_count += 1
+    track.buffer_started = now
+    track.buffer_offset = _int(session.get("view_offset"))
+    track.buffer_progress = _int(session.get("progress_percent"))
+
+
+SEEK_SLACK_MS = 20000
+END_OF_VIDEO_PERCENT = 98
+
+
+def _not_a_stall(track: Track, seconds: float, after: dict[str, Any] | None) -> str | None:
+    """Why a buffering episode is not worth counting, or None if it is.
+
+    Plex reports "buffering" whenever the player waits for data, which also
+    happens when someone skips forward or back, and for a moment as one
+    episode ends and the next starts. Counting those buried real stalls.
+    """
+    if seconds < 1:
+        return "too short to see"
+    if track.buffer_progress is not None and track.buffer_progress >= END_OF_VIDEO_PERCENT:
+        return "end of the video"
+    new_offset = _int((after or {}).get("view_offset"))
+    if track.buffer_offset is not None and new_offset is not None:
+        moved = new_offset - track.buffer_offset
+        # Playing on through a stall moves the position by at most the stall
+        # itself; a seek moves it much further, or backwards.
+        if abs(moved - seconds * 1000) > SEEK_SLACK_MS:
+            return "a seek"
+    return None
+
+
+def _end_buffering(track: Track, ended: float, after: dict[str, Any] | None = None) -> None:
     started = track.buffer_started or ended
     seconds = max(ended - started, 0.0)
-    track.buffer_seconds += seconds
     track.buffer_started = None
+    reason = _not_a_stall(track, seconds, after)
+    if reason is not None:
+        track.buffer_count = max(track.buffer_count - 1, 0)
+        if reason == "a seek":
+            track.seeks += 1
+        log.debug("buffering on %s not counted: %s", track.session_key, reason)
+        return
+    track.buffer_seconds += seconds
     try:
         _record(track, started, ended, seconds)
     except Exception:  # noqa: BLE001 - losing one event must not break the poll

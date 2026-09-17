@@ -149,3 +149,36 @@ def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
     asyncio.run(enforcer.run_once())
     asyncio.run(enforcer.run_once())
     assert logged() == 2
+
+
+
+def test_seeks_video_ends_and_blips_are_not_stalls(client):
+    """Plex says buffering when someone skips ahead and as an episode ends;
+    only real stalls count."""
+    from app.db import session_scope
+    from app.models import StreamEvent
+
+    tracker.reset()
+    t0 = 1_800_000_000.0
+
+    def at(state, offset, progress=40, key="9"):
+        return {**s(state, key=key), "view_offset": offset, "progress_percent": progress}
+
+    # A seek: 5 seconds of buffering, and the position jumped ten minutes.
+    tracker.observe([at("playing", 600_000)], now=t0)
+    tracker.observe([at("buffering", 600_000)], now=t0 + 5)
+    tracker.observe([at("playing", 1_200_000)], now=t0 + 10)
+    assert tracker.metrics("9", now=t0 + 10)["buffer_count"] == 0
+
+    # A real stall: 15 seconds, the position barely moved.
+    tracker.observe([at("buffering", 1_205_000)], now=t0 + 20)
+    tracker.observe([at("playing", 1_210_000)], now=t0 + 35)
+    assert tracker.metrics("9", now=t0 + 35)["buffer_count"] == 1
+
+    # The end of the episode: buffering at 99%, then gone.
+    tracker.observe([at("buffering", 2_500_000, progress=99)], now=t0 + 40)
+    tracker.observe([], now=t0 + 45)
+
+    with session_scope() as db:
+        rows = db.query(StreamEvent).filter(StreamEvent.session_key == "9").all()
+        assert [round(r.seconds) for r in rows] == [15]
