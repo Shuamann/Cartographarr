@@ -117,6 +117,8 @@ export default function DashboardRoute({
         />
       </section>
 
+      {isAdmin && <HealthCards onNavigate={onNavigate} />}
+
       <div className="dash-cols">
         <section>
           <h2 className="section-head">Last 30 days</h2>
@@ -297,7 +299,7 @@ function Card({
   warn,
   vpn,
 }: {
-  big: number;
+  big: number | string;
   label: string;
   sub?: string;
   onClick?: () => void;
@@ -305,15 +307,24 @@ function Card({
   warn?: boolean;
   vpn?: boolean;
 }) {
-  const className = ["card", accent && big > 0 ? "accent" : "", warn ? "warn" : "", vpn ? "vpn" : ""]
+  const className = ["card", accent && typeof big === "number" && big > 0 ? "accent" : "", warn ? "warn" : "", vpn ? "vpn" : ""]
     .filter(Boolean)
     .join(" ");
-  return (
-    <div className={className} onClick={onClick} role={onClick ? "button" : undefined}>
-      <span className="card-big">{big.toLocaleString()}</span>
+  const body = (
+    <>
+      <span className="card-big">{typeof big === "number" ? big.toLocaleString() : big}</span>
       <span className="card-label">{label}</span>
       {sub && <span className="card-sub">{sub}</span>}
-    </div>
+    </>
+  );
+  // A real button when it goes somewhere, so it can be reached and used from
+  // the keyboard; a div with a click handler could not.
+  return onClick ? (
+    <button type="button" className={`${className} card-button`} onClick={onClick}>
+      {body}
+    </button>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }
 
@@ -336,5 +347,62 @@ function Sparkline({ points }: { points: { day: string; plays: number }[] }) {
       <path d={`${path} L ${width} ${height} L 0 ${height} Z`} className="spark-fill" />
       <path d={path} className="spark-line" />
     </svg>
+  );
+}
+
+type Health = {
+  stalls_week: number;
+  top_stall_cause: string | null;
+  peak_upload_mbps: number | null;
+  upload_capacity_mbps: number | null;
+  streams_week: number;
+  transcoded_week: number;
+  not_watching: number;
+  people: number;
+  idle_days: number;
+};
+
+/* Server health at a glance, from what is recorded live: stalls, upload,
+ * transcoding, and who has stopped watching. Admins only. */
+function HealthCards({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+  const health = useApi<Health>("/library/health");
+  const h = health.data;
+  if (!h) return null;
+  const share = h.streams_week ? Math.round((h.transcoded_week / h.streams_week) * 100) : null;
+  const uploadShare =
+    h.peak_upload_mbps !== null && h.upload_capacity_mbps ? Math.round((h.peak_upload_mbps / h.upload_capacity_mbps) * 100) : null;
+  return (
+    <section className="cards">
+      <Card
+        big={h.stalls_week}
+        label={h.stalls_week === 1 ? "stall this week" : "stalls this week"}
+        sub={h.top_stall_cause ? `mostly: ${h.top_stall_cause.toLowerCase()}` : "none recorded"}
+        warn={h.stalls_week > 0}
+        onClick={() => onNavigate("Reports")}
+      />
+      <Card
+        big={h.peak_upload_mbps === null ? "none" : `${h.peak_upload_mbps} Mbps`}
+        label="peak upload today"
+        sub={
+          uploadShare !== null
+            ? `${uploadShare}% of ${h.upload_capacity_mbps} Mbps`
+            : "set upload capacity in Settings"
+        }
+        warn={uploadShare !== null && uploadShare >= 90}
+        onClick={() => onNavigate("Reports")}
+      />
+      <Card
+        big={share === null ? "none" : `${share}%`}
+        label="streams transcoded"
+        sub={h.streams_week ? `${h.transcoded_week} of ${h.streams_week} this week` : "no streams recorded yet"}
+        onClick={() => onNavigate("Library")}
+      />
+      <Card
+        big={h.not_watching}
+        label="not watching"
+        sub={`of ${h.people}, no plays in ${h.idle_days} days`}
+        onClick={() => onNavigate("Sharing")}
+      />
+    </section>
   );
 }

@@ -248,3 +248,45 @@ async def replace_file(rating_key: int, admin: AdminUser, action: str = Body(...
         raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
     audit.record(admin, f"library.{action}", result, target=str(rating_key))
     return {"ok": True, "message": result}
+
+
+@router.get("/health")
+def health_summary(_: AdminUser, db: Db) -> dict:
+    """The dashboard's server health cards: stalls and what causes them,
+    upload, how much transcodes, and who has stopped watching."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import BandwidthSample, User
+    from app.services.stalls import CAUSES as STALL_CAUSES
+
+    now = datetime.now(UTC)
+    week = now - timedelta(days=7)
+    stall_rows = db.execute(
+        select(StreamEvent.cause, func.count()).where(StreamEvent.started_at >= week).group_by(StreamEvent.cause)
+    ).all()
+    stalls = sum(n for _, n in stall_rows)
+    top = max(stall_rows, key=lambda r: r[1]) if stall_rows else None
+    peak = db.execute(
+        select(func.max(BandwidthSample.wan_kbps)).where(BandwidthSample.minute >= int((now - timedelta(days=1)).timestamp()))
+    ).scalar()
+    streams, transcoded = db.execute(
+        select(func.count(), func.sum(case((StreamSession.transcode_decision == "transcode", 1), else_=0))).where(
+            StreamSession.started_at >= week
+        )
+    ).one()
+    idle_days = int(current().access_inactive_days or 90)
+    cutoff = int((now - timedelta(days=idle_days)).timestamp())
+    last_play = dict(db.execute(select(History.user_id, func.max(History.started)).group_by(History.user_id)).all())
+    active_users = [u for (u,) in db.execute(select(User.user_id).where(User.deleted_in_tautulli.isnot(True))).all()]
+    not_watching = sum(1 for u in active_users if (last_play.get(u) or 0) < cutoff)
+    return {
+        "stalls_week": stalls,
+        "top_stall_cause": None if top is None else STALL_CAUSES.get(top[0] or "one_off", top[0]),
+        "peak_upload_mbps": round((peak or 0) / 1000, 1) if peak is not None else None,
+        "upload_capacity_mbps": current().upload_capacity_mbps or None,
+        "streams_week": int(streams or 0),
+        "transcoded_week": int(transcoded or 0),
+        "not_watching": not_watching,
+        "people": len(active_users),
+        "idle_days": idle_days,
+    }

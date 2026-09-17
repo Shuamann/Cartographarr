@@ -25,6 +25,13 @@ def _api_url(base: str) -> str:
     return f"{base}/api/v2"
 
 
+# Which address answered, shared by every client for a while. A client is
+# made per request, and each used to try the local URL afresh, so where it is
+# unreachable every call waited out the local timeout first.
+_RESOLVED: dict[tuple[str, str], tuple[str, float]] = {}
+RESOLVE_SECONDS = 600
+
+
 class TautulliClient:
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
         settings.require_tautulli()
@@ -52,11 +59,19 @@ class TautulliClient:
         """
         if self._base is not None:
             return self._base
+        import time
+
+        key = (self._local or "", self._remote)
+        known = _RESOLVED.get(key)
+        if known is not None and time.monotonic() - known[1] < RESOLVE_SECONDS:
+            self._base = known[0]
+            return self._base
         try:
             await self._request(self._local, "status", timeout=self._local_timeout)
             self._base = self._local
         except Exception:
             self._base = self._remote
+        _RESOLVED[key] = (self._base, time.monotonic())
         return self._base
 
     async def _request(self, base: str, cmd: str, timeout: float | None = None, **params: Any):
@@ -84,7 +99,15 @@ class TautulliClient:
         Tautulli answers 200 with the error in the body, so the result envelope
         is what gets checked, not the status code.
         """
-        return await self._request(await self._resolve(), cmd, **params)
+        base = await self._resolve()
+        try:
+            return await self._request(base, cmd, **params)
+        except TautulliError as exc:
+            # A connection that failed may mean the remembered address has
+            # stopped working; forget it so the next client checks again.
+            if "Error" in str(exc) or "answered 5" in str(exc):
+                _RESOLVED.pop((self._local or "", self._remote), None)
+            raise
 
     async def aclose(self) -> None:
         await self._client.aclose()

@@ -192,3 +192,25 @@ def test_playback_summary_for_a_user_and_a_device(client):
     assert user["stalled_titles"][0]["title"] == "Transcoded everywhere"
     device = client.get("/api/devices/tv/playback").json()
     assert device["streams_recorded"] == 1 and device["hardware"] == 1
+
+
+def test_health_summary(client):
+    from app.db import session_scope
+    from app.models import BandwidthSample, StreamEvent, StreamSession, User
+
+    claim(client)
+    seed()
+    now = datetime.now(UTC)
+    with session_scope() as db:
+        db.add(User(user_id=1, username="alpha"))
+        db.add(User(user_id=2, username="quiet"))
+        db.add(StreamEvent(kind="buffering", user_id=1, started_at=now - timedelta(days=1), ended_at=now, seconds=5, cause="upload"))
+        db.add(StreamEvent(kind="buffering", user_id=1, started_at=now - timedelta(days=2), ended_at=now, seconds=5, cause="upload"))
+        db.add(StreamEvent(kind="buffering", user_id=1, started_at=now - timedelta(days=30), ended_at=now, seconds=5, cause="file"))
+        db.add(BandwidthSample(minute=int(now.timestamp()) // 60 * 60 - 3600, wan_kbps=38500))
+        db.add(StreamSession(transcode_decision="transcode", started_at=now - timedelta(days=1)))
+    h = client.get("/api/library/health").json()
+    # The shared seed has one stall of its own this week, caused by the file.
+    assert h["stalls_week"] == 3 and h["top_stall_cause"] == "Server upload nearly full"
+    assert h["peak_upload_mbps"] == 38.5 and h["streams_week"] == 3 and h["transcoded_week"] == 2
+    assert h["not_watching"] == 1 and h["people"] == 2

@@ -48,3 +48,23 @@ def test_drops_none_params_and_sends_auth():
 def test_missing_config_is_refused_at_construction():
     with pytest.raises(RuntimeError, match="TAUTULLI_API_KEY"):
         TautulliClient(Settings(tautulli_url="http://x", tautulli_api_key=""))
+
+
+def test_the_working_address_is_remembered_across_clients():
+    import app.tautulli.client as module
+
+    module._RESOLVED.clear()
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        if request.url.host == "lan.example":
+            raise httpx.ConnectError("unreachable", request=request)
+        return httpx.Response(200, json={"response": {"result": "success", "data": {"ok": 1}}})
+
+    settings = Settings(tautulli_url="https://remote.example", tautulli_local_url="http://lan.example:8181", tautulli_api_key="k")
+    for _ in range(3):
+        client = TautulliClient(settings, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+        assert asyncio.run(client.call("get_activity")) == {"ok": 1}
+    # The local address was tried once, not once per client.
+    assert seen.count("lan.example") == 1 and seen.count("remote.example") == 3
