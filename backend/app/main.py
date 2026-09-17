@@ -110,6 +110,18 @@ tasks.register(tasks.Task(
     "file_details", "Read file details", "Every audio and subtitle track, a chunk at a time, until all files are read.",
     _file_details, lambda: 60,
 ))
+async def _update_check() -> str:
+    from app.services import updates
+
+    if not current().update_check_enabled:
+        raise tasks.Skipped("Update checks are off")
+    return updates.summary(await updates.check())
+
+
+tasks.register(tasks.Task(
+    "update_check", "Check for updates", "Whether a newer Cartographarr is on GitHub.",
+    _update_check, lambda: 12 * 3600,
+))
 tasks.register(tasks.Task(
     "capabilities", "Check Plex Pass and server", "Whether stopping streams is possible, and the server's name and version.",
     _capability_cycle, lambda: 3600,
@@ -145,7 +157,8 @@ async def lifespan(app: FastAPI):
     # interval before its first run, so after every restart or image update
     # names stayed stale for up to an hour.
     soon = datetime.now()
-    first = {"slow_sync": soon, "sync": soon + timedelta(seconds=20), "library_scan": soon + timedelta(seconds=45)}
+    first = {"slow_sync": soon, "sync": soon + timedelta(seconds=20), "library_scan": soon + timedelta(seconds=45),
+             "update_check": soon + timedelta(seconds=90)}
     for task in tasks.TASKS.values():
         # Passing next_run_time=None pauses a job, so it is only passed when set.
         extra = {"next_run_time": first[task.key]} if task.key in first else {}

@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 WATERMARK = "history_watermark"
 BACKFILL_OFFSET = "history_backfill_offset"
 EPISODE_NUMBERS = "history_has_episode_numbers"
+SESSIONS = "history_is_per_session"
 
 
 # ---- small coercions -------------------------------------------------------
@@ -146,6 +147,12 @@ async def sync_history(client: TautulliClient, settings: Settings, full: bool = 
             order_column="date",
             order_dir="desc",
             after=after,
+            # One row per session, not per play. Tautulli would otherwise merge
+            # a paused and resumed play into one row, keeping only the last
+            # device and address: a play carried from a phone to a TV lost
+            # where it started, and the merged row changed row id each time it
+            # was resumed, so History showed the play more than once.
+            grouping=0,
         )
         rows = (data or {}).get("data") or []
         if not rows:
@@ -169,7 +176,6 @@ async def sync_history(client: TautulliClient, settings: Settings, full: bool = 
         _set_state(session, BACKFILL_OFFSET, None)
         if newest:
             _set_state(session, WATERMARK, newest)
-
     log.info("history sync: %d rows", written)
     return written
 
@@ -605,14 +611,17 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
 
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
     """One full cycle. Safe to call concurrently with reads."""
-    # History synced before episode numbers were kept has none. Read it all
-    # again once, which fills them in; the upsert makes it safe to repeat.
+    # Two one-time re-reads: history synced before episode numbers were kept
+    # has none, and history synced as merged plays has the wrong times and only
+    # the last device. Reading it all again fixes both, and the upsert makes
+    # repeating it safe.
     with session_scope() as session:
-        needs_numbers = _state(session, EPISODE_NUMBERS) is None
-    history = await sync_history(client, settings, full=full or needs_numbers)
-    if needs_numbers:
+        again = [key for key in (EPISODE_NUMBERS, SESSIONS) if _state(session, key) is None]
+    history = await sync_history(client, settings, full=full or bool(again))
+    if again:
         with session_scope() as session:
-            _set_state(session, EPISODE_NUMBERS, "1")
+            for key in again:
+                _set_state(session, key, "1")
     # Cheap when nobody is missing, and a new unknown user should get a name
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)

@@ -205,7 +205,9 @@ class History(Base):
     )
 
     row_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
-    reference_id: Mapped[int | None] = mapped_column(Integer)
+    reference_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    """Tautulli groups a play that was paused and resumed under one reference
+    id, and gives the group the newest row id. Only that row is kept."""
     user_id: Mapped[int | None] = mapped_column(Integer)
     machine_id: Mapped[str | None] = mapped_column(String(255))
     ip_address: Mapped[str | None] = mapped_column(String(45))

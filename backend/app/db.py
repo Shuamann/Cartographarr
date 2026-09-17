@@ -59,6 +59,9 @@ def init_db() -> None:
 
     Base.metadata.create_all(engine)
     _add_missing_columns()
+    with engine.begin() as conn:
+        # create_all never indexes an existing table.
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_history_reference_id ON history (reference_id)")
 
 
 def _add_missing_columns() -> None:

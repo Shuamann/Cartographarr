@@ -1,3 +1,4 @@
+import About from "../components/About";
 import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
@@ -231,6 +232,20 @@ const PAGES: Page[] = [
   { id: "appearance", title: "Appearance", group: "Cartographarr", blurb: "The name and marks shown around the app.", keys: ["app_name"] },
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
   { id: "tasks", title: "Tasks", group: "Cartographarr", blurb: "Background jobs: how often each runs, how the last run went, and any errors. Open one for its recent runs." },
+  {
+    id: "about",
+    title: "About",
+    group: "Cartographarr",
+    blurb: "This version, whether a newer one is out, and what changed.",
+    sections: [
+      {
+        title: "Update checks",
+        note: "Twice a day Cartographarr asks GitHub for the newest version. Nothing about this server is sent. A private repository needs a token that can read it.",
+        keys: ["update_check_enabled", "update_repository", "update_github_token"],
+      },
+    ],
+    keys: ["update_check_enabled", "update_repository", "update_github_token"],
+  },
 ];
 
 /* URLs that carry a credential. The server sends them with the secret parts
@@ -292,6 +307,9 @@ const LABELS: Record<string, string> = {
   impossible_max_accuracy_km: "Ignore vaguer than (km)",
   session_ttl_hours: "Stay signed in for (hours)",
   session_cookie_secure: "Only send the cookie over HTTPS",
+  update_check_enabled: "Check for updates",
+  update_repository: "GitHub repository",
+  update_github_token: "GitHub token",
 };
 
 /* Where the rest of the stack probably lives.
@@ -356,6 +374,8 @@ function SettingsForm() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const updateStatus = useApi<{ version: string; status: string | null }>("/about/status");
+  const updateAvailable = updateStatus.data?.status === "update_available";
   const [page, setPage] = useState<string>(() => {
     try {
       return localStorage.getItem("settings.page") ?? PAGES[0].id;
@@ -559,6 +579,7 @@ function SettingsForm() {
               >
                 <span>{x.title}</span>
                 {unsaved(x) && <span className="unsaved-dot" title="Unsaved changes" />}
+                {x.id === "about" && updateAvailable && <span className="update-dot" title="Update available" />}
               </button>
             ))}
           </div>
@@ -572,6 +593,8 @@ function SettingsForm() {
         </header>
 
         {error && <p className="note bad-note">{error}</p>}
+
+        {current.id === "about" && <About />}
 
         {current.sections?.map((section) => (
           <section key={section.title} className="card-section">

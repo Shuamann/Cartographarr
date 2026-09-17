@@ -27,6 +27,12 @@ RUN pip install --no-cache-dir .
 
 # main.py looks here for the built UI and serves API-only if it's absent.
 COPY --from=ui /ui/dist /srv/static
+COPY CHANGELOG.md ./
+
+# The commit this was built from, for update checks. Optional: without it they
+# compare version numbers. Last, so a new commit rebuilds nothing above.
+ARG GIT_COMMIT=""
+ENV GIT_COMMIT=${GIT_COMMIT}
 
 VOLUME ["/data"]
 EXPOSE 6277

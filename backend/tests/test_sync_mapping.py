@@ -148,3 +148,41 @@ def test_user_sync_keeps_shared_libraries(client):
     with session_scope() as db:
         pat = db.get(User, 5)
         assert json.loads(pat.shared_libraries) == ["3", "1"] and pat.allow_sync is False
+
+
+def test_history_is_synced_one_row_per_session(client):
+    """Merged plays keep only the last device, so a play carried from a phone
+    to a TV lost where it started. Every session is its own row."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import History
+    from app.services.sync import sync_history
+    from app.settings_store import current
+
+    sessions = [
+        {"row_id": "10", "reference_id": "10", "user_id": "1", "rating_key": "5", "started": "100", "stopped": "200",
+         "media_type": "episode", "full_title": "Show - Ep", "media_index": "23", "parent_media_index": "8",
+         "grandparent_title": "Show", "machine_id": "phone", "ip_address": "1.2.3.4", "platform": "iOS"},
+        {"row_id": "13", "reference_id": "10", "user_id": "1", "rating_key": "5", "started": "900", "stopped": "1500",
+         "media_type": "episode", "full_title": "Show - Ep", "media_index": "23", "parent_media_index": "8",
+         "grandparent_title": "Show", "machine_id": "tv", "ip_address": "5.6.7.8", "platform": "Roku"},
+    ]
+    asked = []
+
+    class Fake:
+        async def call(self, cmd, **params):
+            asked.append(params)
+            if params["start"]:
+                return {"data": [], "recordsFiltered": len(sessions)}
+            return {"data": sessions, "recordsFiltered": len(sessions)}
+
+    assert asyncio.run(sync_history(Fake(), current(), full=True)) == 2
+    assert all(p["grouping"] == 0 for p in asked)
+    with session_scope() as db:
+        rows = db.execute(select(History).order_by(History.row_id)).scalars().all()
+        assert [(r.row_id, r.machine_id, r.started, r.media_index) for r in rows] == [
+            (10, "phone", 100, 23), (13, "tv", 900, 23),
+        ]

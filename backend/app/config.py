@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     app_name: str = "Cartographarr"
     log_level: str = "INFO"
 
+    # ---- Updates -----------------------------------------------------------
+    update_check_enabled: bool = True
+    """Ask GitHub twice a day whether a newer version is out. Nothing about
+    this install is sent."""
+
+    update_repository: str = "Shuamann/Cartographarr"
+    """Where updates come from, as owner/name."""
+
+    update_github_token: str = ""
+    """Only needed while the repository is private: a token that can read it."""
+
     data_dir: Path = Path("/data")
     """Writable volume: cartographarr.db, the mmdb files, and any Tautulli DB
     snapshot the source_db fallback takes."""

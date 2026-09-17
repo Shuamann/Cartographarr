@@ -213,6 +213,45 @@ async def sync_run(admin: AdminUser, full: bool = False) -> dict:
     return {**slow, **main}
 
 
+# ---- about and updates ----------------------------------------------------------------------
+
+@router.get("/about")
+async def about() -> dict:
+    from app.services import updates
+    from app.version import VERSION, changelog, commit
+
+    settings = current()
+    return {
+        "version": VERSION,
+        "commit": commit(),
+        "changelog": changelog(),
+        "check_enabled": settings.update_check_enabled,
+        "repository": settings.update_repository,
+        "update": await asyncio.to_thread(updates.stored),
+    }
+
+
+@router.get("/about/status")
+async def about_status() -> dict:
+    """Just enough for the flag on Settings."""
+    from app.services import updates
+    from app.version import VERSION
+
+    found = await asyncio.to_thread(updates.stored)
+    return {"version": VERSION, "status": (found or {}).get("status")}
+
+
+@router.post("/about/check")
+async def check_updates(admin: AdminUser) -> dict:
+    from app import tasks
+    from app.services import updates
+
+    if tasks.TASKS["update_check"].running:
+        raise HTTPException(409, "Already checking")
+    await tasks.run("update_check", trigger="manual")
+    return await asyncio.to_thread(updates.stored) or {}
+
+
 # ---- background tasks ----------------------------------------------------------------------
 
 @router.get("/tasks")

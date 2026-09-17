@@ -71,10 +71,22 @@ your appdata path and publish port 6277.
 Building from a clone, and updating later with the same line:
 
 ```bash
-cd ~/Cartographarr && git pull && docker build -t cartographarr:latest . && docker rm -f cartographarr && docker run -d --name cartographarr --restart unless-stopped -u 99:100 -p 6277:6277 -v /mnt/user/appdata/cartographarr:/data -e DATA_DIR=/data -e TZ=Etc/UTC cartographarr:latest
+cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t cartographarr:latest . && docker rm -f cartographarr && docker run -d --name cartographarr --restart unless-stopped -u 99:100 -p 6277:6277 -v /mnt/user/appdata/cartographarr:/data -e DATA_DIR=/data -e TZ=Etc/UTC cartographarr:latest
 ```
 
 Set `TZ` to your own time zone. Rules that use a time of day go by it.
+
+`GIT_COMMIT` tells the app which commit it was built from, so Settings, About
+can say how many commits behind it is. Leave it out and it compares version
+numbers instead.
+
+### Updates
+
+Settings, About shows the installed version, the changelog, and whether GitHub
+has something newer; Settings is flagged in the top bar when it does. It checks
+twice a day and sends nothing about your server. Turn it off there, point it at
+a fork, or, while the repository is private, give it a GitHub token that can
+read it. Every release adds a section to [CHANGELOG.md](CHANGELOG.md).
 
 ### Configuring by environment variable
 

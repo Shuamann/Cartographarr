@@ -92,6 +92,8 @@ function SignedIn({
   onSignOut: () => void;
 }) {
   const setup = useApi<SetupStatus>("/setup", [isAdmin]);
+  // Flags Settings when GitHub has something newer. Stored server side, so cheap to ask on each tab change.
+  const updateStatus = useApi<{ status: string | null }>(isAdmin ? "/about/status" : null, [isAdmin, tab]);
   // Held here rather than inside each route, so the same filters apply
   // wherever you go rather than resetting on every tab change.
   const [filters, setFilters] = useUrlFilters();
@@ -177,6 +179,7 @@ function SignedIn({
   }
 
   const tabs = TABS.filter((t) => isAdmin || !ADMIN_TABS.includes(t));
+  const updateAvailable = updateStatus.data?.status === "update_available";
   const active = tabs.includes(tab) ? tab : "Dashboard";
 
   return (
@@ -211,6 +214,7 @@ function SignedIn({
                 onClick={() => setTab(t)}
               >
                 {t}
+                {t === "Settings" && updateAvailable && <span className="update-dot" title="Update available" />}
               </button>
             ))}
           </nav>
