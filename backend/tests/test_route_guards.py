@@ -1,0 +1,83 @@
+"""Every route refuses someone who is not signed in, and admin routes refuse
+viewers. Enumerated from the app, so a new route is checked without anyone
+remembering to add it here."""
+
+import re
+
+from tests.test_auth import claim
+from tests.test_privacy import PASSWORD
+
+PUBLIC = {
+    ("GET", "/health"),
+    ("GET", "/api/auth/state"),
+    ("POST", "/api/auth/claim"),
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/logout"),
+    ("GET", "/api/branding"),
+    ("GET", "/api/branding/{kind}"),
+    # Trending TMDB art for the sign-in page; nothing about this server.
+    ("GET", "/api/auth/backdrops"),
+    # Token guarded, off (404) without a token.
+    ("GET", "/metrics"),
+    ("GET", "/api/summary"),
+}
+
+
+def _routes(app):
+    """From the OpenAPI schema, which lists every route in every included
+    router. app.routes does not: newer FastAPI groups included routers."""
+    for path, methods in app.openapi()["paths"].items():
+        for method in methods:
+            if method.upper() not in ("HEAD", "OPTIONS"):
+                yield method.upper(), path
+
+
+def _concrete(path):
+    return re.sub(r"\{[^}]+\}", "1", path)
+
+
+def test_nothing_answers_without_signing_in(client):
+    import app.main
+
+    claim(client)
+    client.post("/api/auth/logout")
+    open_routes = []
+    checked = list(_routes(app.main.app))
+    assert len(checked) > 80, len(checked)
+    for method, path in checked:
+        if (method, path) in PUBLIC:
+            continue
+        res = client.request(method, _concrete(path), json={})
+        if res.status_code not in (401, 403):
+            open_routes.append((method, path, res.status_code))
+    assert open_routes == []
+
+
+def test_viewers_cannot_reach_admin_routes(client):
+    import app.main
+
+    claim(client)
+    client.post("/api/auth/users", json={"username": "viewer9", "password": PASSWORD, "role": "viewer"})
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username": "viewer9", "password": PASSWORD})
+    admin_prefixes = ("/api/settings", "/api/actions", "/api/rules", "/api/bans", "/api/sharing", "/api/library", "/api/log",
+                      "/api/access-review", "/api/auth/users", "/api/sync", "/api/setup/test")
+    leaks = []
+    tried = 0
+    for method, path in _routes(app.main.app):
+        if not path.startswith(admin_prefixes):
+            continue
+        tried += 1
+        if method == "GET" and path in ("/api/bans",):
+            # Readable by viewers only while privacy is off; covered in test_privacy.
+            continue
+        res = client.request(method, _concrete(path), json={})
+        if res.status_code not in (401, 403):
+            leaks.append((method, path, res.status_code))
+    assert tried > 30, tried
+    assert leaks == []
+
+
+def test_api_docs_are_not_public(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, path

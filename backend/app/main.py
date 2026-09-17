@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -123,7 +125,17 @@ async def lifespan(app: FastAPI):
         scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Cartographarr", lifespan=lifespan)
+# No interactive docs or schema: they would hand anyone who can reach the port a
+# map of every endpoint without signing in. API_DOCS=true brings them back for
+# development.
+_docs = os.environ.get("API_DOCS", "").lower() in ("1", "true", "yes")
+app = FastAPI(
+    title="Cartographarr",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
+)
 # Auth carries its own guards: /state, /claim and /login have to be reachable
 # before anyone is signed in.
 app.include_router(auth.router)

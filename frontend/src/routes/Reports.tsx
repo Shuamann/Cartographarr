@@ -574,8 +574,12 @@ function ReportTable({ result }: { result: Result }) {
 function downloadCsv(name: string, result: Result) {
   const { group, measure, columns, rows, then } = result;
   const esc = (v: unknown) => {
-    const s = v === null || v === undefined ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = v === null || v === undefined ? "" : String(v);
+    // Names and titles come from other people. One starting with = + - @ would
+    // run as a formula when the file is opened in a spreadsheet, so text gets a
+    // leading apostrophe. Numbers are left alone.
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = [group.label, ...(then ? columns.map((c) => `${then.label}: ${c.label}`) : []), `${measure.label} (${measure.unit})`];
   const lines = [header.map(esc).join(",")];

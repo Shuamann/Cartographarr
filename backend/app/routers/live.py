@@ -81,7 +81,7 @@ async def get_capabilities(refresh: bool = False) -> dict:
 
 
 @router.get("/actions")
-def list_actions() -> list[dict]:
+def list_actions(_: AdminUser) -> list[dict]:
     """The action registry, with what each one needs. The rule editor builds
     its form from `param_schema` and greys out anything unavailable."""
     return [
@@ -223,8 +223,8 @@ def _rule_dict(rule: Rule) -> dict:
 
 
 @router.get("/rules")
-def list_rules(db: Db, scope: ViewerScope) -> list[dict]:
-    privacy.forbid_private(scope)
+def list_rules(_: AdminUser, db: Db) -> list[dict]:
+    # Admin only: conditions name devices, addresses and people.
     stmt = select(Rule).order_by(Rule.id)
     return [_rule_dict(r) for r in db.execute(stmt).scalars()]
 
@@ -719,9 +719,9 @@ def banned_on_map(db: Db, scope: ViewerScope) -> dict:
 
 
 @router.get("/rules/fields")
-def rule_fields(db: Db, scope: ViewerScope) -> dict:
-    """Everything the rule builder needs to draw its dropdowns."""
-    privacy.forbid_private(scope)
+def rule_fields(_: AdminUser, db: Db) -> dict:
+    """Everything the rule builder needs to draw its dropdowns. Admin only:
+    the options list every device and user."""
     from app.models import Library
     from app.services import conditions as cond
 
