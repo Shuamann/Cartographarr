@@ -77,6 +77,26 @@ a {
   white-space: nowrap;
 }
 
+/* On a phone the tabs get their own full-width row under the name and the
+ * account buttons, fading at the edge so it is clear there are more. */
+@media (max-width: 700px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 4px;
+    padding: 8px 12px 6px;
+  }
+  .topbar nav {
+    order: 3;
+    flex: 1 0 100%;
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  }
+  .topbar .brand,
+  .topbar .brand-mark {
+    margin-right: auto;
+  }
+}
+
 .tab {
   font: inherit;
   padding: 6px 12px;
@@ -833,16 +853,20 @@ code {
 
 .viewbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   flex: 0 0 auto;
   padding: 7px 14px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
+/* Never squeezed: on a narrow row the labels vanished and left a coloured
+ * square. Rows holding one wrap instead. */
 .segmented {
   display: inline-flex;
+  flex-shrink: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;

@@ -211,7 +211,14 @@ function SignedIn({
           <Brand />
           <nav>
             {tabs.map((t) => (
-              <button key={t} className={t === active ? "tab active" : "tab"} onClick={() => setTab(t)}>
+              <button
+                key={t}
+                className={t === active ? "tab active" : "tab"}
+                aria-current={t === active ? "page" : undefined}
+                // On a phone the tabs scroll sideways; keep the current one in view.
+                ref={t === active ? (el) => el?.scrollIntoView({ block: "nearest", inline: "nearest" }) : undefined}
+                onClick={() => setTab(t)}
+              >
                 {t}
               </button>
             ))}
