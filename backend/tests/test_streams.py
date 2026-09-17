@@ -128,3 +128,29 @@ def test_stall_causes(client):
         cause, detail = classify(db, busy, capacity_mbps=50, upload_percent=90)
         assert cause == "upload" and "47.0 of 50" in detail
         assert classify(db, busy, capacity_mbps=0)[0] == "one_off"
+
+
+def test_upload_alert_is_sent_from_the_sweep_thread(client, monkeypatch):
+    """The sweep records samples in a worker thread with no event loop; the
+    notification must still go out."""
+    import threading
+
+    from app.integrations.notify import apprise_notifier
+    from app.settings_store import current
+
+    real = current()
+    monkeypatch.setattr("app.settings_store.current", lambda: real.model_copy(update={"upload_capacity_mbps": 10, "upload_alert_percent": 50}))
+    monkeypatch.setattr("app.audit.record", lambda *a, **k: None)
+    monkeypatch.setattr(type(apprise_notifier), "configured", lambda self: True)
+    sent = []
+
+    async def fake_send(self, title, body):
+        sent.append(title)
+        return "ok"
+
+    monkeypatch.setattr(type(apprise_notifier), "send", fake_send)
+    streams._last_alert = 0.0
+    worker = threading.Thread(target=streams._maybe_alert, args=(9000, 2, 50_000.0))
+    worker.start()
+    worker.join()
+    assert sent == ["Upload nearly full"]

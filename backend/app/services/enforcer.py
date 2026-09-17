@@ -269,8 +269,12 @@ async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str 
     finally:
         await client.aclose()
     sessions: list[Session] = activity.get("sessions") or []
-    tracker.observe(sessions, activity=activity)
-    context = _build_context(sessions)
+    # Database work, every few seconds: kept off the event loop so a slow
+    # query never holds up the pages people are loading.
+    import asyncio
+
+    await asyncio.to_thread(tracker.observe, sessions, None, activity)
+    context = await asyncio.to_thread(_build_context, sessions)
     counter = window_counter()
     for s in sessions:
         ctx = context[str(s.get("session_key"))]

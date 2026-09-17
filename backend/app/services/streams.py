@@ -289,7 +289,11 @@ def _maybe_alert(wan_kbps: int, remote: int, now: float) -> None:
         try:
             asyncio.get_running_loop().create_task(apprise_notifier.send("Upload nearly full", message))
         except RuntimeError:
-            pass
+            # Called from the sweep's worker thread, which has no event loop.
+            try:
+                asyncio.run(apprise_notifier.send("Upload nearly full", message))
+            except Exception:  # noqa: BLE001 - a failed notification must not stop recording
+                log.exception("could not send the upload alert")
 
 
 def prune(keep_days: int = 400) -> int:

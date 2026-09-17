@@ -1208,6 +1208,18 @@ def delete_signal_ignore(ignore_id: int, admin: AdminUser) -> dict:
 async def dashboard(db: Db, filters: Filt, scope: ViewerScope) -> dict:
     """Everything the landing screen needs, composed in one call.
 
+    Live activity is awaited here; the history counts run in a worker thread,
+    since on a large history they take long enough to hold up every other
+    request if run on the event loop."""
+    import asyncio
+
+    live = await activity(db, scope)
+    return await asyncio.to_thread(_dashboard_payload, db, filters, scope, live)
+
+
+def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | None", live: dict) -> dict:
+    """The dashboard's history counts, with live activity already fetched.
+
     Deliberately one endpoint rather than a widget-per-request: the layout is
     still being worked out, and a dashboard that fans out to eight endpoints
     gets slow and hard to change. New sources get added to this payload.
@@ -1283,7 +1295,6 @@ async def dashboard(db: Db, filters: Filt, scope: ViewerScope) -> dict:
         else db.execute(select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(5)).scalars()
     )
 
-    live = await activity(db, scope)
     if scope is not None and not scope.own_only:
         from types import SimpleNamespace
 
