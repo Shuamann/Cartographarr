@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import MultiSelect from "../components/MultiSelect";
-import { useBans } from "../lib/bans";
+import { ban, setBanReason, useBans } from "../lib/bans";
 import { useNav } from "../lib/nav";
 import {
   api,
   useApi,
+  useUserNames,
   type ActionSpec,
+  type Device,
   type CondGroup,
   type CondLeaf,
   type Rule,
@@ -318,7 +320,7 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
           <span className="muted">When </span>the device is on the ban list
           <span className="muted"> then </span>stop the stream, with the ban message from Settings.
         </p>
-        <p className="muted small">Ban or unban a device from People, a stream card, or the map.</p>
+        <p className="muted small">Ban a device here, or from People, a stream card or the map.</p>
         {(convertible.data?.length ?? 0) > 0 && (
           <div className="note warn-note convert-note">
             <span>
@@ -332,6 +334,7 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
           </div>
         )}
         {done && <p className="note">{done}</p>}
+        {open && nav.isAdmin && <AddBan banned={bans.ids} />}
         {open && (
           <div className="mini-list">
             {bans.list.length === 0 && <p className="muted">Nothing is banned.</p>}
@@ -346,11 +349,29 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
                     {` \u00b7 ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`}
                   </p>
                 </div>
-                {nav.unbanDevice && (
-                  <button className="tab" onClick={() => nav.unbanDevice?.(b.machine_id, b.label ?? b.machine_id)}>
-                    Unban
-                  </button>
-                )}
+                <div className="row">
+                  {nav.isAdmin && (
+                    <button
+                      className="tab"
+                      onClick={async () => {
+                        const reason = window.prompt(`Reason for banning ${b.label ?? b.machine_id}, for the log:`, b.reason ?? "");
+                        if (reason === null) return;
+                        try {
+                          await setBanReason(b.machine_id, reason);
+                        } catch (err) {
+                          window.alert((err as Error).message);
+                        }
+                      }}
+                    >
+                      {b.reason ? "Edit reason" : "Add reason"}
+                    </button>
+                  )}
+                  {nav.unbanDevice && (
+                    <button className="tab" onClick={() => nav.unbanDevice?.(b.machine_id, b.label ?? b.machine_id)}>
+                      Unban
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -368,6 +389,104 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
           {open ? "Hide list" : "Show list"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* Ban a device from the ban list itself: find it by name, owner or id, give
+ * a reason for the log, ban. */
+function AddBan({ banned }: { banned: Set<string> }) {
+  const devices = useApi<Device[]>("/devices");
+  const names = useUserNames();
+  const [search, setSearch] = useState("");
+  const [picked, setPicked] = useState<Device | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || picked) return [];
+    return (devices.data ?? [])
+      .filter((d) => !banned.has(d.machine_id))
+      .filter((d) =>
+        [d.player, d.platform, d.product, d.machine_id, names.get(d.user_id)].some((v) => v?.toLowerCase().includes(q)),
+      )
+      .slice(0, 8);
+  }, [search, picked, devices.data, banned, names]);
+
+  async function submit() {
+    if (!picked) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await ban(picked.machine_id, reason);
+      setMessage(`Banned ${picked.player ?? picked.machine_id}.`);
+      setPicked(null);
+      setSearch("");
+      setReason("");
+    } catch (err) {
+      setMessage((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const describe = (d: Device) =>
+    [names.get(d.user_id), d.platform, d.product].filter(Boolean).join(" \u00b7 ");
+
+  return (
+    <div className="ban-add">
+      <div className="ban-add-fields">
+        <label>
+          <span>Device</span>
+          {picked ? (
+            <div className="ban-add-picked">
+              <span className="min0 clip">
+                <strong>{picked.player ?? "Unnamed"}</strong> <span className="muted small">{describe(picked)}</span>
+              </span>
+              <button className="tab" onClick={() => setPicked(null)}>
+                Change
+              </button>
+            </div>
+          ) : (
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by device, user or id"
+              autoComplete="off"
+            />
+          )}
+        </label>
+        <label>
+          <span>Reason, for the log</span>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" autoComplete="off" />
+        </label>
+        <button className="btn danger" onClick={submit} disabled={!picked || busy}>
+          {busy ? "Banning\u2026" : "Ban device"}
+        </button>
+      </div>
+      {matches.length > 0 && (
+        <div className="mini-list ban-add-matches">
+          {matches.map((d) => (
+            <button key={`${d.machine_id}-${d.user_id}`} className="mini mini-button" onClick={() => setPicked(d)}>
+              <div className="min0">
+                <strong>{d.player ?? "Unnamed"}</strong>
+                <p className="muted small">
+                  {describe(d)}
+                  {" \u00b7 "}
+                  <code>{d.machine_id.slice(0, 16)}</code>
+                </p>
+              </div>
+              <span className="muted small">{d.play_count.toLocaleString()} plays</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {search.trim() && !picked && matches.length === 0 && devices.data && (
+        <p className="muted small">No device matches that isn't already banned.</p>
+      )}
+      {message && <p className="note">{message}</p>}
     </div>
   );
 }

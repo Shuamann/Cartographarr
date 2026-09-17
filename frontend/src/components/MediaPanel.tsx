@@ -1,3 +1,4 @@
+import { displayTitle, episodeLabel } from "../lib/titles";
 import { useApi, type MediaDetail } from "../lib/api";
 import BrandIcon from "./BrandIcon";
 
@@ -19,9 +20,11 @@ const LINKS: { key: string; label: string }[] = [
 export default function MediaPanel({
   ratingKey,
   onFilterToTitle,
+  filterLabel = "Show on map",
 }: {
   ratingKey: number;
   onFilterToTitle?: (ratingKey: number, title: string) => void;
+  filterLabel?: string;
 }) {
   const media = useApi<MediaDetail>(`/media/${ratingKey}`);
 
@@ -46,7 +49,8 @@ export default function MediaPanel({
       />
 
       <div className="media-body">
-        <h3>{m.full_title || m.title}</h3>
+        <h3>{displayTitle(m)}</h3>
+        {episodeLabel(m) && <p className="small">{episodeLabel(m)}</p>}
         <p className="muted small">
           {[m.year, m.media_type, m.content_rating].filter(Boolean).join(" · ")}
         </p>
@@ -72,7 +76,7 @@ export default function MediaPanel({
               className="ms-btn"
               onClick={() => onFilterToTitle(m.rating_key, m.full_title || m.title || "")}
             >
-              Show on map
+              {filterLabel}
             </button>
           )}
         </div>

@@ -2108,6 +2108,53 @@ label.locked .pill {
 .mini-button:hover {
   background: var(--surface-2);
 }
+.mini-button.on {
+  background: var(--accent-soft);
+}
+.ban-add {
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.ban-add-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+.ban-add-fields label {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.ban-add-picked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 5px 5px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+.ban-add-matches {
+  margin-top: 8px;
+}
+@media (max-width: 700px) {
+  .ban-add-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.top-media-detail {
+  padding: 14px 13px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
 
 @media (max-width: 860px) {
   .people {

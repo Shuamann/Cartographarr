@@ -1,3 +1,6 @@
+import MediaPanel from "../components/MediaPanel";
+import type { FilterState } from "../lib/filters";
+import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useState } from "react";
 import { duration, when } from "../components/DataTable";
 import { StreamEntry } from "../components/EnforcementLog";
@@ -357,6 +360,7 @@ function UserProfile({
   onChanged: () => void;
 }) {
   const nav = useNav();
+  const bans = useBans();
   const detail = useApi<UserDetail>(`/users/${userId}`);
   const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState(false);
@@ -445,11 +449,11 @@ function UserProfile({
             {streaming.map((s) => (
               <StreamDetail key={s.session_key} session={s} compact />
             ))}
-            <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} />
+            <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} scope={{ user_id: [userId] }} />
           </>
         )}
         {tab === "history" && <RecentPlays query={`user_id=${userId}`} onOpenAll={() => nav.filterTo?.("History", { user_id: [userId] })} showDevice />}
-        {tab === "places" && <Places profile={u} onMap={() => nav.filterTo?.("Map", { user_id: [userId] })} />}
+        {tab === "places" && <Places profile={u} scope={{ user_id: [userId] }} onMap={() => nav.filterTo?.("Map", { user_id: [userId] })} />}
         {tab === "devices" && (
           <div className="mini-list">
             {u.devices.length === 0 && <p className="muted">No devices recorded.</p>}
@@ -458,6 +462,7 @@ function UserProfile({
                 <div className="min0">
                   <strong>{d.player || "Unnamed"}</strong>
                   {d.is_new_unreviewed && <span className="pill warn">new</span>}
+                  {bans.ids.has(d.machine_id) && <span className="pill banned">banned</span>}
                   {(live?.sessions ?? []).some((s) => s.machine_id === d.machine_id) && <span className="pill ok">streaming</span>}
                   <p className="muted small">
                     {[d.platform, d.product].filter(Boolean).join(" · ")} · first {when(d.first_seen)} · last {ago(d.last_seen)}
@@ -599,7 +604,7 @@ function DeviceProfile({
                 ))}
               </div>
             </section>
-            <Overview profile={d} extra={[["First seen", when(d.first_seen)]]} />
+            <Overview profile={d} extra={[["First seen", when(d.first_seen)]]} scope={{ machine_id: [machineId], machineLabel: label }} />
           </>
         )}
         {tab === "users" && (
@@ -665,7 +670,13 @@ function DeviceProfile({
             showUser
           />
         )}
-        {tab === "places" && <Places profile={d} onMap={() => nav.filterTo?.("Map", { machine_id: [machineId], machineLabel: label })} />}
+        {tab === "places" && (
+          <Places
+            profile={d}
+            scope={{ machine_id: [machineId], machineLabel: label }}
+            onMap={() => nav.filterTo?.("Map", { machine_id: [machineId], machineLabel: label })}
+          />
+        )}
         {tab === "activity" && <ActivityList query={`machine_id=${encodeURIComponent(machineId)}`} />}
       </div>
     </div>
@@ -808,7 +819,16 @@ function AddressProfile({
 
 // ---- shared sections -----------------------------------------------------------
 
-function Overview({ profile: p, extra = [] }: { profile: Profile; extra?: [string, string][] }) {
+function Overview({
+  profile: p,
+  extra = [],
+  scope,
+}: {
+  profile: Profile;
+  extra?: [string, string][];
+  /* The filters that mean "this user" or "this device", for links out. */
+  scope: Partial<FilterState>;
+}) {
   const vpn = p.addresses.filter((a) => a.is_hosting).length;
   return (
     <>
@@ -829,31 +849,18 @@ function Overview({ profile: p, extra = [] }: { profile: Profile; extra?: [strin
       <div className="dash-cols">
         <section className="profile-section">
           <h3>Most watched</h3>
-          <div className="mini-list">
-            {p.top_media.length === 0 && <p className="muted">Nothing yet.</p>}
-            {p.top_media.map((m) => (
-              <div key={m.rating_key} className="mini">
-                <div className="min0">
-                  <span className="clip">{m.title ?? "Unknown"}</span>
-                  <p className="muted small">
-                    {m.media_type} · {duration(m.seconds)} · last {ago(m.last_play)}
-                  </p>
-                </div>
-                <span className="muted">{m.plays.toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
+          <TopMedia items={p.top_media} scope={scope} />
         </section>
         <section className="profile-section">
           <h3>Where from</h3>
-          <PlaceList places={p.places.slice(0, 6)} />
+          <PlaceList places={p.places.slice(0, 6)} scope={scope} />
         </section>
       </div>
     </>
   );
 }
 
-function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) {
+function Places({ profile: p, onMap, scope }: { profile: Profile; onMap: () => void; scope: Partial<FilterState> }) {
   const nav = useNav();
   return (
     <>
@@ -863,7 +870,7 @@ function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) 
           Show on map
         </button>
       </div>
-      <PlaceList places={p.places} />
+      <PlaceList places={p.places} scope={scope} />
 
       <h3 className="profile-subhead">Addresses</h3>
       <div className="mini-list">
@@ -891,18 +898,79 @@ function Places({ profile: p, onMap }: { profile: Profile; onMap: () => void }) 
   );
 }
 
-function PlaceList({ places }: { places: Profile["places"] }) {
+/* Each place opens the map there, narrowed to whoever this profile is. */
+function PlaceList({ places, scope }: { places: Profile["places"]; scope?: Partial<FilterState> }) {
+  const nav = useNav();
   if (places.length === 0) return <p className="muted">No located plays.</p>;
   return (
     <div className="mini-list">
-      {places.map((x, i) => (
-        <div key={i} className="mini">
-          <div className="min0">
-            <span className="clip">{[x.city, x.region, x.country].filter(Boolean).join(", ") || "Unknown"}</span>
-            {x.is_hosting && <span className="pill vpn">VPN</span>}
-            <p className="muted small">last {ago(x.last_play)}</p>
+      {places.map((x, i) => {
+        const name = [x.city, x.region, x.country].filter(Boolean).join(", ") || "Unknown";
+        const body = (
+          <>
+            <div className="min0">
+              <span className="clip">{name}</span>
+              {x.is_hosting && <span className="pill vpn">VPN</span>}
+              <p className="muted small">last {ago(x.last_play)}</p>
+            </div>
+            <span className="muted">{x.plays.toLocaleString()}</span>
+          </>
+        );
+        return nav.showPlace && x.lat != null && x.lon != null ? (
+          <button
+            key={i}
+            className="mini mini-button"
+            title={`Show ${name} on the map`}
+            onClick={() => nav.showPlace?.({ lat: x.lat as number, lon: x.lon as number }, scope)}
+          >
+            {body}
+          </button>
+        ) : (
+          <div key={i} className="mini">
+            {body}
           </div>
-          <span className="muted">{x.plays.toLocaleString()}</span>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Titles, each opening in place to the title's own card: poster, summary,
+ * links out, and a jump to these plays in History. */
+function TopMedia({ items, scope }: { items: Profile["top_media"]; scope: Partial<FilterState> }) {
+  const nav = useNav();
+  const [open, setOpen] = useState<number | null>(null);
+  if (items.length === 0) return <p className="muted">Nothing yet.</p>;
+  return (
+    <div className="mini-list">
+      {items.map((m) => (
+        <div key={m.rating_key}>
+          <button
+            className={open === m.rating_key ? "mini mini-button on" : "mini mini-button"}
+            aria-expanded={open === m.rating_key}
+            onClick={() => setOpen(open === m.rating_key ? null : m.rating_key)}
+          >
+            <div className="min0">
+              <span className="clip">{m.title ?? "Unknown"}</span>
+              <p className="muted small">
+                {m.media_type} · {duration(m.seconds)} · last {ago(m.last_play)}
+              </p>
+            </div>
+            <span className="muted">{m.plays.toLocaleString()}</span>
+          </button>
+          {open === m.rating_key && (
+            <div className="top-media-detail">
+              <MediaPanel
+                ratingKey={m.rating_key}
+                filterLabel="These plays in History"
+                onFilterToTitle={
+                  nav.filterTo
+                    ? (ratingKey, title) => nav.filterTo?.("History", { ...scope, rating_key: ratingKey, ratingKeyLabel: title })
+                    : undefined
+                }
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -940,7 +1008,7 @@ function RecentPlays({
         {page.data.items.map((h) => (
           <div key={h.row_id} className="mini">
             <div className="min0">
-              <span className="clip">{h.full_title}</span>
+              <span className="clip">{displayTitle(h)}</span>
               <p className="muted small">
                 {when(h.started)}
                 {showUser && h.user_id != null && (

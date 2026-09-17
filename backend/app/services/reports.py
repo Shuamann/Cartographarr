@@ -578,6 +578,18 @@ def _labels(db: Session, dim: str, keys: list[Any]) -> dict[Any, str]:
             MediaItem.rating_key.in_(ints)
         )).all()
         found = {r.rating_key: (r.full_title or r.title) for r in rows}
+        if dim == "title":
+            # Episodes read with their number, as everywhere else.
+            for r in db.execute(
+                select(History.rating_key, History.grandparent_title, History.title,
+                       History.parent_media_index, History.media_index)
+                .where(History.rating_key.in_(ints), History.media_index.is_not(None),
+                       History.parent_media_index.is_not(None))
+                .group_by(History.rating_key)
+            ).all():
+                found[r.rating_key] = " - ".join(
+                    x for x in (r.grandparent_title, f"S{r.parent_media_index:02d}E{r.media_index:02d}", r.title) if x
+                )
         # Titles not in the metadata cache fall back to what the play recorded.
         missing = [k for k in ints if not found.get(k)]
         if missing:

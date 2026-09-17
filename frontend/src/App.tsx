@@ -96,6 +96,7 @@ function SignedIn({
   // Cleared once the map has used it, or going back to the tab later would
   // yank the view somewhere unexpected.
   const [focusSession, setFocusSession] = useState<LiveSession | null>(null);
+  const [focusPlace, setFocusPlace] = useState<{ lat: number; lon: number } | null>(null);
   // Which user or device People opens on, when another page sent us there.
   const [focusPerson, setFocusPerson] = useState<Selection | null>(null);
   const [peopleFilter, setPeopleFilter] = useState<PeopleFilter | null>(null);
@@ -125,6 +126,12 @@ function SignedIn({
   function filterTo(target: "Map" | "History", patch: Partial<FilterState>) {
     setFilters({ ...EMPTY, ...patch });
     setTab(target);
+  }
+
+  function showPlace(place: { lat: number; lon: number }, patch: Partial<FilterState> = {}) {
+    setFilters({ ...EMPTY, ...patch });
+    setFocusPlace(place);
+    setTab("Map");
   }
 
   function showOnMap(session: LiveSession) {
@@ -189,6 +196,7 @@ function SignedIn({
           openDevice,
           openAddress,
           showOnMap,
+          showPlace,
           blockDevice: isAdmin ? banMachine : undefined,
           unbanDevice: isAdmin ? unbanMachine : undefined,
           filterTo,
@@ -237,6 +245,8 @@ function SignedIn({
                 onOpenUser={openUser}
                 focusSession={focusSession}
                 onFocusUsed={() => setFocusSession(null)}
+                focusPlace={focusPlace}
+                onFocusPlaceUsed={() => setFocusPlace(null)}
                 filters={filters}
                 onFilters={setFilters}
               />

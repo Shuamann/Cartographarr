@@ -1,3 +1,4 @@
+import { displayTitle, episodeLabel } from "../lib/titles";
 import { useState } from "react";
 import { useApi, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
@@ -133,8 +134,9 @@ export default function PlayDetail({ rowId }: { rowId: number }) {
 
         <dl className="kv">
           <Field label="Title">
-            {p.full_title}
+            {displayTitle(p)}
             {p.year ? ` (${p.year})` : ""}
+            {episodeLabel(p) && <span className="muted small block">{episodeLabel(p)}</span>}
             {p.rating_key && nav.filterTo && (
               <button
                 className="linkish small"

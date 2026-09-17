@@ -1,3 +1,4 @@
+import { displayTitle } from "../lib/titles";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import { useBans } from "../lib/bans";
@@ -231,7 +232,7 @@ function SideCard({ title, side, ip, banned }: { title: string; side: Side; ip: 
           )}
           <dl className="spec">
             <dt>Watched</dt>
-            <dd>{p.full_title ?? "Unknown"}</dd>
+            <dd>{p.full_title ? displayTitle(p) : "Unknown"}</dd>
             <dt>When</dt>
             <dd>
               {p.started ? new Date(p.started * 1000).toLocaleString() : "?"}

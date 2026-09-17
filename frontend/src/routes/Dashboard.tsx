@@ -1,3 +1,4 @@
+import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
 import TravelFlags from "../components/TravelFlags";
@@ -269,7 +270,7 @@ function StreamCard({
         <div className="stream-poster" />
       )}
       <span className="stream-body">
-        <strong className="clip">{session.full_title}</strong>
+        <strong className="clip">{displayTitle(session)}</strong>
         <span className="muted small clip">{who}</span>
         <span className="muted small clip">
           {session.player}

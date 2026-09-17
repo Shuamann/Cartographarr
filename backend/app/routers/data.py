@@ -410,8 +410,19 @@ async def media_detail(rating_key: int, db: Db) -> dict:
     if link:
         links["seerr"] = link
 
+    out = {c.name: getattr(item, c.name) for c in MediaItem.__table__.columns}
+    if item.media_type == "episode" and out.get("media_index") is None:
+        # Cached before episode numbers were kept. History has them.
+        play = db.execute(
+            select(History.grandparent_title, History.parent_media_index, History.media_index)
+            .where(History.rating_key == rating_key, History.media_index.is_not(None))
+            .limit(1)
+        ).first()
+        if play is not None:
+            out.update(grandparent_title=play.grandparent_title, parent_media_index=play.parent_media_index,
+                       media_index=play.media_index)
     return {
-        **{c.name: getattr(item, c.name) for c in MediaItem.__table__.columns},
+        **out,
         "links": links,
         "request": await seerr.seerr.request_for(title_item) if usable_for_title else None,
     }

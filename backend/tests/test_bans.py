@@ -127,3 +127,14 @@ def test_environment_dry_run_locks_every_rule_to_record_only(client, monkeypatch
     monkeypatch.setattr(store, "locked_keys", lambda: frozenset({"enforce_dry_run"}))
     monkeypatch.setattr(enforcer, "locked_keys", lambda: frozenset({"enforce_dry_run"}))
     assert enforcer.record_only(Rule(id=5, name="acting", record_only=False)) is True
+
+
+def test_ban_reason_is_logged_and_can_be_changed(client):
+    claim(client)
+    client.post("/api/bans", json={"machine_id": "dev-3", "reason": "shared with a stranger"})
+    assert client.patch("/api/bans/dev-3", json={"reason": "  resold login  "}).json()["reason"] == "resold login"
+    assert client.get("/api/bans").json()[0]["reason"] == "resold login"
+    assert client.patch("/api/bans/nope", json={"reason": "x"}).status_code == 404
+    summaries = [e["summary"] for e in client.get("/api/log?kind=changes").json()]
+    assert any(s.endswith(": shared with a stranger") for s in summaries)
+    assert any(s.startswith("Changed the ban reason") for s in summaries)

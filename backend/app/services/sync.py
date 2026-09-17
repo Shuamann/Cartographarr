@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 WATERMARK = "history_watermark"
 BACKFILL_OFFSET = "history_backfill_offset"
+EPISODE_NUMBERS = "history_has_episode_numbers"
 
 
 # ---- small coercions -------------------------------------------------------
@@ -103,6 +104,9 @@ def _map_history(row: dict) -> dict:
         "grandparent_rating_key": _int(row.get("grandparent_rating_key")),
         "title": row.get("title") or None,
         "full_title": row.get("full_title") or None,
+        "grandparent_title": row.get("grandparent_title") or None,
+        "parent_media_index": _int(row.get("parent_media_index")),
+        "media_index": _int(row.get("media_index")),
         "year": _int(row.get("year")),
         "thumb": row.get("thumb") or None,
         "live": bool(_bool(row.get("live"))),
@@ -441,6 +445,9 @@ async def metadata_row(client: TautulliClient, rating_key: int) -> dict:
         "media_type": meta.get("media_type") or None,
         "title": meta.get("title") or None,
         "full_title": meta.get("full_title") or None,
+        "grandparent_title": meta.get("grandparent_title") or None,
+        "parent_media_index": _int(meta.get("parent_media_index")),
+        "media_index": _int(meta.get("media_index")),
         "year": _int(meta.get("year")),
         "thumb": meta.get("thumb") or None,
         "grandparent_thumb": meta.get("grandparent_thumb") or None,
@@ -517,7 +524,14 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
 
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
     """One full cycle. Safe to call concurrently with reads."""
-    history = await sync_history(client, settings, full=full)
+    # History synced before episode numbers were kept has none. Read it all
+    # again once, which fills them in; the upsert makes it safe to repeat.
+    with session_scope() as session:
+        needs_numbers = _state(session, EPISODE_NUMBERS) is None
+    history = await sync_history(client, settings, full=full or needs_numbers)
+    if needs_numbers:
+        with session_scope() as session:
+            _set_state(session, EPISODE_NUMBERS, "1")
     # Cheap when nobody is missing, and a new unknown user should get a name
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)

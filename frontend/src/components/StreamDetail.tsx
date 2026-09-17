@@ -1,3 +1,4 @@
+import { episodeCode } from "../lib/titles";
 import { useState } from "react";
 import BrandIcon from "./BrandIcon";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
@@ -63,7 +64,7 @@ export default function StreamDetail({
   const episodic = session.media_type === "episode";
   const heading = (episodic ? session.grandparent_title : session.title) || session.full_title;
   const subheading = episodic
-    ? [session.parent_title, session.title].filter(Boolean).join(" · ")
+    ? [episodeCode(session) ?? session.parent_title, session.title].filter(Boolean).join(" · ")
     : null;
 
   const canMap = !onMap && nav.showOnMap && session.geo?.lat != null;

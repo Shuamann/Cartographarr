@@ -56,7 +56,7 @@ SESSION_FIELDS = (
     "session_key session_id user_id username friendly_name user_thumb "
     "machine_id player platform product device ip_address ip_address_public "
     "location secure relayed state progress_percent view_offset duration "
-    "media_type full_title title grandparent_title parent_title year thumb "
+    "media_type full_title title grandparent_title parent_title media_index parent_media_index year thumb "
     "art rating_key section_id library_name transcode_decision "
     "video_decision audio_decision video_full_resolution stream_video_full_resolution "
     "quality_profile bandwidth container transcode_speed throttled "
@@ -502,10 +502,29 @@ def ban_device(
             )
         )
     audit.record(
-        admin, "device.ban", f"Banned {label}", target=machine_id,
+        admin, "device.ban", f"Banned {label}" + (f": {reason.strip()}" if reason.strip() else ""), target=machine_id,
         detail={"reason": reason.strip() or None},
     )
     return {"machine_id": machine_id, "banned": True}
+
+
+@router.patch("/bans/{machine_id}")
+def edit_ban(machine_id: str, admin: AdminUser, reason: str = Body("", embed=True)) -> dict:
+    from app.models import BannedDevice
+
+    with session_scope() as db:
+        ban = db.get(BannedDevice, machine_id)
+        if ban is None:
+            raise HTTPException(404, "That device is not banned")
+        before = ban.reason
+        ban.reason = reason.strip() or None
+        label = ban.label or machine_id[:12]
+        after = ban.reason
+    audit.record(
+        admin, "device.ban_reason", f"Changed the ban reason for {label}", target=machine_id,
+        detail={"before": before, "after": after},
+    )
+    return {"machine_id": machine_id, "reason": after}
 
 
 @router.delete("/bans/{machine_id}")

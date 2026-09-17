@@ -1,3 +1,4 @@
+import { displayTitle, episodeLabel } from "../lib/titles";
 import { useState } from "react";
 import { useApi, type Enforcement, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
@@ -57,7 +58,7 @@ export function StreamEntry({
       <button className="log-summary" onClick={onToggle} aria-expanded={open}>
         <span className="log-when muted small">{when(e.acted_at)}</span>
         <span className="log-what clip">
-          <strong>{e.full_title ?? "Unknown title"}</strong>
+          <strong>{e.full_title ? displayTitle(e) : "Unknown title"}</strong>
           <span className="muted small clip">
             {[e.username, e.player].filter(Boolean).join(" · ") || "Stream details not recorded"}
           </span>
@@ -116,9 +117,10 @@ function Detail({
         )}
         <dl className="kv">
           <Field label="Title">
-            {e.full_title}
+            {displayTitle(e)}
             {e.year ? ` (${e.year})` : ""}
           </Field>
+          {episodeLabel(e) && <Field label="Episode">{episodeLabel(e)}</Field>}
           <Field label="Type">
             {[e.media_type, e.library_name].filter(Boolean).join(" · ") || null}
           </Field>

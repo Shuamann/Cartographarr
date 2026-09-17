@@ -1,3 +1,4 @@
+import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -42,6 +43,8 @@ export default function MapRoute({
   onOpenUser,
   focusSession,
   onFocusUsed,
+  focusPlace,
+  onFocusPlaceUsed,
   filters,
   onFilters,
 }: {
@@ -49,6 +52,8 @@ export default function MapRoute({
   onOpenUser?: (userId: number) => void;
   focusSession?: LiveSession | null;
   onFocusUsed?: () => void;
+  focusPlace?: { lat: number; lon: number } | null;
+  onFocusPlaceUsed?: () => void;
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
@@ -133,6 +138,30 @@ export default function MapRoute({
   useEffect(() => setSelected(null), [query]);
 
   const features = points.data?.features ?? [];
+
+  // Arriving from a profile's Where from: once the points for the new filters
+  // are in, open the nearest one and fly there. Consumed either way, so it
+  // does not fire again on a later visit.
+  const [flyTarget, setFlyTarget] = useState<{ center: [number, number]; at: number } | null>(null);
+  useEffect(() => {
+    if (!focusPlace || !points.data || points.loading) return;
+    let nearest: MapPoint | null = null;
+    let best = Infinity;
+    for (const f of points.data.features) {
+      const d = (f.properties.lat - focusPlace.lat) ** 2 + (f.properties.lon - focusPlace.lon) ** 2;
+      if (d < best) {
+        best = d;
+        nearest = f;
+      }
+    }
+    // Within roughly half a degree, so a place with no plays under these
+    // filters does not open somewhere else entirely.
+    if (nearest && best < 0.25) setSelected(nearest);
+    if (canDrawMap) choose("map");
+    setFlyTarget({ center: [focusPlace.lon, focusPlace.lat], at: Date.now() });
+    onFocusPlaceUsed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPlace, points.data, points.loading]);
 
   return (
     <div className="map-page">
@@ -250,6 +279,7 @@ export default function MapRoute({
             onPinLive={() => setPinned(true)}
             focusSession={focusSession}
             onFocusUsed={onFocusUsed}
+            flyTarget={flyTarget}
             showHeat={showHeat}
             heatMetric={heatMetric}
             banned={showBanned ? bannedPoints.data ?? null : null}
@@ -347,6 +377,7 @@ function MapCanvas({
   onPinLive,
   focusSession,
   onFocusUsed,
+  flyTarget,
   showHeat,
   heatMetric,
   banned,
@@ -360,6 +391,7 @@ function MapCanvas({
   onPinLive: () => void;
   focusSession?: LiveSession | null;
   onFocusUsed?: () => void;
+  flyTarget?: { center: [number, number]; at: number } | null;
   showHeat: boolean;
   heatMetric: HeatMetric;
   banned: GeoJSON.FeatureCollection | null;
@@ -647,6 +679,13 @@ function MapCanvas({
     if (!m || !ready || !m.getLayer("heat")) return;
     m.setPaintProperty("heat", "heatmap-weight", heatWeight(heatMetric));
   }, [ready, heatMetric]);
+
+  // ---- fly to a place ------------------------------------------------------
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !flyTarget) return;
+    m.flyTo({ center: flyTarget.center, zoom: Math.max(m.getZoom(), 8), duration: 900 });
+  }, [ready, flyTarget]);
 
   // ---- fly to one stream -------------------------------------------------
   useEffect(() => {
@@ -1096,7 +1135,7 @@ function Drawer({
                       }
                     >
                       <span>
-                        {row.full_title ?? <span className="muted">Withheld, another viewer</span>}
+                        {row.full_title ? displayTitle(row) : <span className="muted">Withheld, another viewer</span>}
                         <span className="muted small block">
                           {row.user_id != null && (nav.openUser || onOpenUser) ? (
                             <span

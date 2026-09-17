@@ -40,6 +40,11 @@ export async function ban(machineId: string, reason: string): Promise<void> {
   window.dispatchEvent(new Event(CHANGED));
 }
 
+export async function setBanReason(machineId: string, reason: string): Promise<void> {
+  await api.patch(`/bans/${encodeURIComponent(machineId)}`, { reason });
+  window.dispatchEvent(new Event(CHANGED));
+}
+
 export async function unban(machineId: string): Promise<void> {
   await api.del(`/bans/${encodeURIComponent(machineId)}`);
   window.dispatchEvent(new Event(CHANGED));

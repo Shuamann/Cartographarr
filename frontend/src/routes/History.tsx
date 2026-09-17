@@ -1,3 +1,4 @@
+import { displayTitle } from "../lib/titles";
 import { useMemo, useState } from "react";
 import { useApi, useUserNames, type HistoryPage, type HistoryRow } from "../lib/api";
 import FilterBar from "../components/FilterBar";
@@ -121,7 +122,7 @@ export default function HistoryRoute({
                     {(row as HistoryRow & { anonymised?: boolean }).anonymised ? (
                       <span className="muted">Withheld, another viewer</span>
                     ) : (
-                      row.full_title
+                      displayTitle(row)
                     )}
                   </td>
                   <td>

@@ -57,3 +57,13 @@ def test_split_guids_tolerates_missing_and_partial():
     assert _split_guids(None) == {"imdb_id": None, "tmdb_id": None, "tvdb_id": None}
     assert _split_guids(["tmdb://99"])["tmdb_id"] == "99"
     assert _split_guids(["tmdb://99"])["imdb_id"] is None
+
+
+def test_map_history_keeps_episode_numbers():
+    out = _map_history({
+        "row_id": "7", "media_type": "episode", "grandparent_title": "ER",
+        "parent_media_index": "12", "media_index": 21, "title": "The Gallant Hero",
+    })
+    assert (out["grandparent_title"], out["parent_media_index"], out["media_index"]) == ("ER", 12, 21)
+    movie = _map_history({"row_id": "8", "media_type": "movie", "parent_media_index": "", "media_index": ""})
+    assert movie["parent_media_index"] is None and movie["media_index"] is None

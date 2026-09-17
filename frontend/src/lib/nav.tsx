@@ -22,6 +22,9 @@ export type Nav = {
   unbanDevice?: (machineId: string, label: string) => Promise<boolean>;
   /* Open Map or History with the filters narrowed, for example to one user. */
   filterTo?: (tab: "Map" | "History", patch: Partial<FilterState>) => void;
+  /* Open the map at a place, with the filters narrowed (to one user, say),
+   * and that place's panel open. */
+  showPlace?: (place: { lat: number; lon: number }, patch?: Partial<FilterState>) => void;
   /* Open People, optionally with one of its list filters switched on. */
   openPeople?: (filter?: PeopleFilter) => void;
   /* Switch to a tab, for links to places with no record of their own. */
