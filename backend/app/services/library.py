@@ -18,6 +18,8 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models import History, MediaItem, StreamEvent, StreamSession, User
+from app.plays import plays as count_plays
+from app.plays import plays_when as count_plays_when
 
 # Audio most TVs and sticks play without help. Anything else in a file with
 # none of these is transcoded for most people.
@@ -112,10 +114,10 @@ def play_stats(db: Session, days: int, keys: list[int] | None = None) -> dict[in
     stmt = (
         select(
             History.rating_key,
-            func.count().label("plays"),
-            func.sum(case((remote, 1), else_=0)).label("remote"),
-            func.sum(case((transcode, 1), else_=0)).label("transcodes"),
-            func.sum(case((remote & transcode, 1), else_=0)).label("remote_transcodes"),
+            count_plays(History).label("plays"),
+            count_plays_when(History, remote).label("remote"),
+            count_plays_when(History, transcode).label("transcodes"),
+            count_plays_when(History, remote & transcode).label("remote_transcodes"),
             func.count(func.distinct(History.user_id)).label("users"),
             func.max(History.started).label("last_play"),
         )
@@ -462,7 +464,7 @@ def playback_summary(db: Session, days: int, user_id: int | None = None, machine
 
     plays, transcoded = db.execute(
         narrow(
-            select(func.count(), func.sum(case((History.transcode_decision == "transcode", 1), else_=0)))
+            select(count_plays(History), count_plays_when(History, History.transcode_decision == "transcode"))
             .where(History.started >= since),
             History,
         )

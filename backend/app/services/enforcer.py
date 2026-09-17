@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from app.actions import registry
 from app.db import session_scope
 from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
+from app.plays import plays as count_plays
 from app.services import conditions, tracker
 from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
@@ -181,7 +182,7 @@ def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
                 if network:
                     entry["networks"].add(network)
             plays = dict(
-                db.execute(select(History.user_id, func.count()).where(History.user_id.in_(users)).group_by(History.user_id)).all()
+                db.execute(select(History.user_id, count_plays(History)).where(History.user_id.in_(users)).group_by(History.user_id)).all()
             )
         else:
             plays = {}
@@ -321,7 +322,7 @@ def window_counter():
                 value = None
             elif kind == "user_plays_window":
                 value = db.execute(
-                    select(func.count()).select_from(History).where(History.user_id == uid, History.started >= since)
+                    select(count_plays(History)).select_from(History).where(History.user_id == uid, History.started >= since)
                 ).scalar_one()
             elif kind == "user_devices_window":
                 value = db.execute(

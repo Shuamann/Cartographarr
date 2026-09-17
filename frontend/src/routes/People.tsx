@@ -751,7 +751,7 @@ function AddressProfile({
         {tab === "overview" && (
           <>
             <dl className="stats">
-              <Stat label="Plays" value={a.totals.plays.toLocaleString()} />
+              <Stat label="Plays" value={a.totals.plays.toLocaleString()} sub={sessionsSub(a.totals)} />
               <Stat label="Watched" value={duration(a.totals.seconds)} />
               <Stat label="Accounts" value={String(a.accounts.length)} />
               <Stat label="Devices" value={String(a.devices.length)} />
@@ -836,7 +836,7 @@ function Overview({
   return (
     <>
       <dl className="stats">
-        <Stat label="Plays" value={p.totals.plays.toLocaleString()} />
+        <Stat label="Plays" value={p.totals.plays.toLocaleString()} sub={sessionsSub(p.totals)} />
         <Stat label="Watched" value={duration(p.totals.seconds)} />
         <Stat label="Addresses" value={String(p.totals.ips)} />
         <Stat label="Places" value={String(p.places.length)} />
@@ -1350,11 +1350,16 @@ function Access({ username }: { username: string | null }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function sessionsSub(t: { plays: number; sessions: number }): string | undefined {
+  return t.sessions && t.sessions !== t.plays ? `${t.sessions.toLocaleString()} sessions` : undefined;
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="stat">
       <dt>{label}</dt>
       <dd>{value}</dd>
+      {sub && <div className="muted small">{sub}</div>}
     </div>
   );
 }

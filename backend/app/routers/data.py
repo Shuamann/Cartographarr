@@ -17,6 +17,7 @@ from app.auth.deps import AdminUser, CurrentUser
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
+from app.plays import plays, plays_in, plays_when, sessions
 from app.integrations import arr, seerr
 from app.services import capabilities
 from app.services.sync import geocode_ips
@@ -85,7 +86,7 @@ def map_points(filters: Filt, db: Db) -> dict:
             # address. Carrying the radius lets the map draw how uncertain
             # each point actually is instead of implying a rooftop.
             func.max(IpLocation.accuracy_radius).label("accuracy_km"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.count(func.distinct(History.user_id)).label("users"),
             func.count(func.distinct(History.machine_id)).label("devices"),
             func.count(func.distinct(History.ip_address)).label("ips"),
@@ -144,7 +145,7 @@ def history(
     if column is None:
         raise HTTPException(400, f"Cannot sort by {sort!r}. Try: {', '.join(SORTABLE)}")
 
-    total = db.execute(_filtered(filters, func.count()).select_from(History)).scalar_one()
+    counts = db.execute(_filtered(filters, sessions(), plays(History)).select_from(History)).one()
 
     stmt = (
         _filtered(filters, History)
@@ -155,7 +156,8 @@ def history(
     rows = db.execute(stmt).scalars().all()
 
     return {
-        "total": total,
+        "total": counts[0],
+        "plays": counts[1],
         "page": page,
         "size": size,
         "items": [
@@ -469,14 +471,14 @@ def location_detail(
         select(
             History.user_id,
             func.coalesce(User.friendly_name, User.username).label("name"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.max(History.started).label("last_play"),
         )
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .join(User, User.user_id == History.user_id, isouter=True)
         .where(*where)
         .group_by(History.user_id)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(limit)
     ).all()
 
@@ -486,13 +488,13 @@ def location_detail(
             func.max(History.player).label("player"),
             func.max(History.platform).label("platform"),
             History.user_id,
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.max(History.started).label("last_play"),
         )
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .where(*where, History.machine_id.is_not(None))
         .group_by(History.machine_id)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(limit)
     ).all()
 
@@ -501,17 +503,19 @@ def location_detail(
             History.ip_address,
             IpLocation.asn_org,
             IpLocation.is_hosting,
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.max(History.started).label("last_play"),
         )
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .where(*where)
         .group_by(History.ip_address)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(limit)
     ).all()
 
-    total = db.execute(select(func.count()).select_from(joined.subquery())).scalar_one()
+    counted = joined.subquery()
+    total = db.execute(select(plays_in(counted)).select_from(counted)).scalar_one()
+    place_sessions = db.execute(select(sessions()).select_from(counted)).scalar_one()
 
     if scope is not None and not scope.own_only:
         # Anonymised: the viewer's own rows, and everyone else folded into one
@@ -534,6 +538,7 @@ def location_detail(
         "country": country,
         "other_viewers_plays": others,
         "plays": total,
+        "sessions": place_sessions,
         "users": [
             {
                 "user_id": u.user_id,
@@ -606,7 +611,7 @@ def users(db: Db, scope: ViewerScope) -> list:
     stats = (
         select(
             History.user_id,
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.max(History.started).label("last_play"),
         )
         .group_by(History.user_id)
@@ -674,8 +679,9 @@ def _profile(db: Session, where: list) -> dict:
     """
     totals = db.execute(
         select(
-            func.count(),
+            plays(History),
             func.sum(History.play_duration),
+            sessions(),
             func.count(func.distinct(History.machine_id)),
             func.count(func.distinct(History.ip_address)),
             func.min(History.started),
@@ -692,13 +698,13 @@ def _profile(db: Session, where: list) -> dict:
             func.max(IpLocation.lat).label("lat"),
             func.max(IpLocation.lon).label("lon"),
             func.max(IpLocation.is_hosting).label("is_hosting"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.max(History.started).label("last_play"),
         )
         .join(History, History.ip_address == IpLocation.ip)
         .where(*where)
         .group_by(IpLocation.city, IpLocation.region, IpLocation.country)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(25)
     ).all()
 
@@ -709,7 +715,7 @@ def _profile(db: Session, where: list) -> dict:
             func.max(IpLocation.city).label("city"),
             func.max(IpLocation.is_hosting).label("is_hosting"),
             func.max(History.location).label("location"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.min(History.started).label("first_play"),
             func.max(History.started).label("last_play"),
         )
@@ -728,13 +734,13 @@ def _profile(db: Session, where: list) -> dict:
             show_key.label("key"),
             func.max(History.full_title).label("full_title"),
             func.max(History.media_type).label("media_type"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
             func.sum(History.play_duration).label("seconds"),
             func.max(History.started).label("last_play"),
         )
         .where(*where)
         .group_by(show_key)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(12)
     ).all()
     names = {
@@ -755,11 +761,12 @@ def _profile(db: Session, where: list) -> dict:
         "totals": {
             "plays": totals[0],
             "seconds": totals[1] or 0,
-            "devices": totals[2],
-            "ips": totals[3],
-            "first_play": totals[4],
-            "last_play": totals[5],
-            "users": totals[6],
+            "sessions": totals[2],
+            "devices": totals[3],
+            "ips": totals[4],
+            "first_play": totals[5],
+            "last_play": totals[6],
+            "users": totals[7],
         },
         "places": [
             {
@@ -862,11 +869,11 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
     # Per account on this device: how much, from where, and what they watched
     # last, so a shared device can be read account by account.
     per_user = {
-        uid: (plays, seconds, first, last, ips)
-        for uid, plays, seconds, first, last, ips in db.execute(
+        uid: (count, seconds, first, last, ips)
+        for uid, count, seconds, first, last, ips in db.execute(
             select(
                 History.user_id,
-                func.count(),
+                plays(History),
                 func.sum(History.play_duration),
                 func.min(History.started),
                 func.max(History.started),
@@ -877,22 +884,22 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
         ).all()
     }
     places: dict[int, list[dict]] = {}
-    for uid, city, region, country, hosting, plays in db.execute(
+    for uid, city, region, country, hosting, count in db.execute(
         select(
             History.user_id,
             IpLocation.city,
             IpLocation.region,
             IpLocation.country,
             func.max(IpLocation.is_hosting),
-            func.count(),
+            plays(History),
         )
         .join(IpLocation, IpLocation.ip == History.ip_address)
         .where(History.machine_id == machine_id)
         .group_by(History.user_id, IpLocation.city, IpLocation.region, IpLocation.country)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
     ).all():
         places.setdefault(uid, []).append(
-            {"city": city, "region": region, "country": country, "is_hosting": bool(hosting), "plays": plays}
+            {"city": city, "region": region, "country": country, "is_hosting": bool(hosting), "plays": count}
         )
     last_titles = {}
     for uid, title, started in db.execute(
@@ -943,8 +950,8 @@ def address_detail(ip: str, db: Db, scope: ViewerScope) -> dict:
     """One IP address: where it is, whose network, and everyone and every
     device that has played from it."""
     only = [History.user_id == scope.plex_user_id] if scope is not None else []
-    plays = db.execute(select(func.count()).where(History.ip_address == ip, *only)).scalar_one()
-    if not plays:
+    seen = db.execute(select(plays(History)).where(History.ip_address == ip, *only)).scalar_one()
+    if not seen:
         if scope is not None:
             raise HTTPException(403, "You can only see addresses you have played from")
         raise HTTPException(404, "No plays from that address")
@@ -954,7 +961,7 @@ def address_detail(ip: str, db: Db, scope: ViewerScope) -> dict:
     accounts = db.execute(
         select(
             History.user_id,
-            func.count(),
+            plays(History),
             func.sum(History.play_duration),
             func.min(History.started),
             func.max(History.started),
@@ -969,7 +976,7 @@ def address_detail(ip: str, db: Db, scope: ViewerScope) -> dict:
             func.max(History.player),
             func.max(History.platform),
             func.max(History.user_id),
-            func.count(),
+            plays(History),
             func.max(History.started),
         )
         .where(History.ip_address == ip, History.machine_id.is_not(None), *only)
@@ -1128,8 +1135,8 @@ def access_review(admin: AdminUser, db: Db) -> dict:
         for r in db.execute(
             select(
                 History.user_id,
-                func.count().label("plays"),
-                func.sum(case((History.started >= recent, 1), else_=0)).label("recent"),
+                plays(History).label("plays"),
+                plays_when(History, History.started >= recent).label("recent"),
                 func.max(History.started).label("last_play"),
                 func.count(func.distinct(History.machine_id)).label("devices"),
                 func.count(func.distinct(History.ip_address)).label("addresses"),
@@ -1266,7 +1273,8 @@ def stats_summary(filters: Filt, db: Db) -> dict:
     row = db.execute(
         _filtered(
             filters,
-            func.count().label("plays"),
+            plays(History).label("plays"),
+            sessions().label("sessions"),
             func.count(func.distinct(History.user_id)).label("users"),
             func.count(func.distinct(History.machine_id)).label("devices"),
             func.count(func.distinct(History.ip_address)).label("ips"),
@@ -1275,6 +1283,7 @@ def stats_summary(filters: Filt, db: Db) -> dict:
     ).one()
     return {
         "plays": row.plays,
+        "sessions": row.sessions,
         "users": row.users,
         "devices": row.devices,
         "ips": row.ips,
@@ -1298,10 +1307,10 @@ def stats_by(filters: Filt, db: Db, field: str = Query("media_type")) -> list:
         raise HTTPException(400, f"Cannot group by {field!r}. Try: {', '.join(groupable)}")
 
     stmt = (
-        _filtered(filters, column.label("key"), func.count().label("plays"))
+        _filtered(filters, column.label("key"), plays(History).label("plays"))
         .select_from(History)
         .group_by(column)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
     )
     return [{"key": row.key, "plays": row.plays} for row in db.execute(stmt).all()]
 
@@ -1310,7 +1319,7 @@ def stats_by(filters: Filt, db: Db, field: str = Query("media_type")) -> list:
 def stats_over_time(filters: Filt, db: Db) -> list:
     day = func.date(History.started, "unixepoch", "localtime").label("day")
     stmt = (
-        _filtered(filters, day, func.count().label("plays"))
+        _filtered(filters, day, plays(History).label("plays"))
         .select_from(History)
         .group_by(day)
         .order_by(day)

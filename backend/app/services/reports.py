@@ -135,6 +135,14 @@ def _count() -> ColumnElement:
     return func.count()
 
 
+def _plays() -> ColumnElement:
+    """Plays, not sessions: a paused and resumed play counts once."""
+    from app.models import History
+    from app.plays import plays
+
+    return plays(History)
+
+
 BITRATE_BANDS = ["Under 5 Mbps", "5 to 10 Mbps", "10 to 20 Mbps", "20 to 40 Mbps", "40 Mbps and up"]
 
 
@@ -165,7 +173,8 @@ SOURCES: dict[str, Source] = {
         epoch_time=True,
         time_column=lambda: History.started,
         measures=[
-            Measure("plays", "Plays", "count", _count),
+            Measure("plays", "Plays", "count", _plays),
+            Measure("sessions", "Sessions", "count", _count),
             Measure("hours", "Watch time", "hours", lambda: func.coalesce(func.sum(History.play_duration), 0) / 3600.0),
             Measure("users", "Different users", "count", lambda: func.count(func.distinct(History.user_id))),
             Measure("devices", "Different devices", "count", lambda: func.count(func.distinct(History.machine_id))),

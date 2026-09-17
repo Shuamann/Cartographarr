@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 
 from app.db import session_scope
 from app.models import AppUser, BannedDevice, Device, EnforcementLog, History, Rule, SyncState, TravelFlag, User
+from app.plays import plays
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 
@@ -74,8 +75,10 @@ def _counts() -> dict[str, Any]:
 
         state = {row.key: row.value for row in db.execute(select(SyncState)).scalars()}
         return {
-            "plays": count(select(func.count()).select_from(History)),
-            "plays_24h": count(select(func.count()).select_from(History).where(History.started >= day_start)),
+            "plays": count(select(plays(History)).select_from(History)),
+            "plays_24h": count(select(plays(History)).select_from(History).where(History.started >= day_start)),
+            "sessions": count(select(func.count()).select_from(History)),
+            "sessions_24h": count(select(func.count()).select_from(History).where(History.started >= day_start)),
             "users": count(select(func.count()).select_from(User)),
             "devices": count(select(func.count(func.distinct(Device.machine_id)))),
             "devices_unreviewed": count(

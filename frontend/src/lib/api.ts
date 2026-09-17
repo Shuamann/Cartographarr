@@ -316,6 +316,7 @@ export type Dashboard = {
   };
   totals: {
     plays: number;
+    sessions: number;
     users: number;
     devices: number;
     media_items: number;
@@ -390,6 +391,7 @@ export type Device = {
 export type Profile = {
   totals: {
     plays: number;
+    sessions: number;
     seconds: number;
     devices: number;
     ips: number;
@@ -508,7 +510,10 @@ export type HistoryRow = {
 };
 
 export type HistoryPage = {
+  /** Rows on this page and in the list: one per session. */
   total: number;
+  /** Those sessions grouped into plays. */
+  plays: number;
   page: number;
   size: number;
   items: HistoryRow[];

@@ -753,6 +753,8 @@ code {
 }
 
 .progress {
+  /* Spans on the stream cards, so both need a box of their own. */
+  display: block;
   height: 3px;
   margin-top: 12px;
   border-radius: 99px;
@@ -760,6 +762,7 @@ code {
   overflow: hidden;
 }
 .progress-fill {
+  display: block;
   height: 100%;
   background: var(--accent);
 }
@@ -3116,4 +3119,17 @@ label.locked .pill {
 
 .about-sub {
   margin: 14px 0 4px;
+}
+
+/* Now playing: status, how it is being sent, quality and rate, at a glance. */
+.stream-facts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.progress-fill.paused {
+  background: var(--ink-3);
 }

@@ -27,6 +27,7 @@ from app.models import (
     TravelFlag,
     User,
 )
+from app.plays import plays
 from app.services import capabilities, enforcer
 from app.settings_store import current, is_configured, trial
 from app.tautulli.client import TautulliClient
@@ -1237,11 +1238,12 @@ def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | No
 
     totals = db.execute(
         filtered(
-            func.count(),
+            plays(History),
             func.count(func.distinct(History.user_id)),
             func.count(func.distinct(History.machine_id)),
             func.count(func.distinct(History.rating_key)),
             func.count(func.distinct(History.ip_address)),
+            func.count(),
         )
     ).one()
 
@@ -1257,7 +1259,7 @@ def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | No
 
     day = func.date(History.started, "unixepoch", "localtime").label("day")
     recent = db.execute(
-        filtered(day, func.count().label("plays"))
+        filtered(day, plays(History).label("plays"))
         .group_by(day)
         .order_by(desc(day))
         .limit(30)
@@ -1267,11 +1269,11 @@ def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | No
         filtered(
             History.user_id,
             func.coalesce(User.friendly_name, User.username).label("name"),
-            func.count().label("plays"),
+            plays(History).label("plays"),
         )
         .join(User, User.user_id == History.user_id, isouter=True)
         .group_by(History.user_id)
-        .order_by(desc(func.count()))
+        .order_by(desc(plays(History)))
         .limit(5)
     ).all()
 
@@ -1324,6 +1326,7 @@ def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | No
         },
         "totals": {
             "plays": totals[0],
+            "sessions": totals[5],
             "users": totals[1],
             "devices": totals[2],
             "media_items": totals[3],

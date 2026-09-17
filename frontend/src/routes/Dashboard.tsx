@@ -85,7 +85,13 @@ export default function DashboardRoute({
         <Card
           big={d.totals.plays}
           label="plays"
-          sub={d.filtered ? "matching filters" : "all time"}
+          sub={
+            d.totals.sessions !== d.totals.plays
+              ? `${d.totals.sessions.toLocaleString()} sessions`
+              : d.filtered
+                ? "matching filters"
+                : "all time"
+          }
           onClick={() => onNavigate("Map")}
         />
         <Card
@@ -248,6 +254,8 @@ function NowPlaying({
   );
 }
 
+/* What a glance should answer: who, on what, how far in, playing or paused,
+ * whether the server is working to send it, at what quality and what cost. */
 function StreamCard({
   session,
   selected,
@@ -257,8 +265,12 @@ function StreamCard({
   selected: boolean;
   onClick: () => void;
 }) {
-  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
+  const progress = Math.min(Math.max(Number(session.progress_percent ?? 0), 0), 100);
   const who = session.friendly_name || session.username || "Unknown";
+  const paused = (session.state || "").toLowerCase() === "paused";
+  const transcoding = session.transcode_decision === "transcode";
+  const quality = session.stream_video_full_resolution || session.video_full_resolution;
+  const rate = Number(session.stream_bitrate || session.bandwidth || 0);
 
   return (
     <button className={selected ? "stream-card on" : "stream-card"} onClick={onClick}>
@@ -277,13 +289,16 @@ function StreamCard({
         <span className="muted small clip">{who}</span>
         <span className="muted small clip">
           {session.player}
-          {session.transcode_decision === "transcode" && (
-            <span className="pill warn">transcode</span>
-          )}
           {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
         </span>
-        <span className="progress">
-          <span className="progress-fill" style={{ width: `${progress}%` }} />
+        <span className="stream-facts">
+          <span className={paused ? "pill" : "pill ok"}>{paused ? "paused" : "playing"}</span>
+          <span className={transcoding ? "pill warn" : "pill"}>{transcoding ? "transcode" : "direct"}</span>
+          {quality && <span className="muted small">{quality}</span>}
+          {rate > 0 && <span className="muted small">{(rate / 1000).toFixed(1)} Mbps</span>}
+        </span>
+        <span className="progress" title={`${Math.round(progress)}% watched`}>
+          <span className={paused ? "progress-fill paused" : "progress-fill"} style={{ width: `${progress}%` }} />
         </span>
       </span>
     </button>

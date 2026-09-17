@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.4.0 - 2026-09-17
+
+### Added
+- Plays and sessions are both counted. A play paused and resumed, or carried to another device, is one play made of
+  several sessions, and History, the dashboard, profiles, reports and the metrics show both
+- Now playing cards say playing or paused, direct or transcode, the quality and the bitrate
+
+### Fixed
+- Progress bars never filled: the bar on every Now playing card, stream and log entry sat empty whatever the position
+
 ## 0.3.0 - 2026-09-17
 
 ### Added

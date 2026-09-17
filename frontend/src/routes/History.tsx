@@ -61,6 +61,7 @@ export default function HistoryRoute({
   }
 
   const total = data.data?.total ?? 0;
+  const plays = data.data?.plays ?? 0;
   const pages = Math.max(1, Math.ceil(total / SIZE));
 
   return (
@@ -69,7 +70,8 @@ export default function HistoryRoute({
 
       <div className="viewbar">
         <span className="muted small">
-          {total.toLocaleString()} {total === 1 ? "play" : "plays"}
+          {plays.toLocaleString()} {plays === 1 ? "play" : "plays"}
+          {total !== plays && ` · ${total.toLocaleString()} sessions`}
         </span>
         <div className="row" style={{ marginLeft: "auto" }}>
           <button className="ms-btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>
