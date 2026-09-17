@@ -324,21 +324,28 @@ def four_k(db: Session, days: int) -> list[dict[str, Any]]:
     return out
 
 
-async def unwatched_requests(db: Session, max_requests: int = 2000) -> dict[str, Any]:
-    """Requests that became available and the requester never watched."""
+async def unwatched_requests(db: Session | None = None, max_requests: int = 2000) -> dict[str, Any]:
+    """Requests that became available and the requester never watched.
+
+    Seerr is read asynchronously, then everything else runs in a worker
+    thread with bulk queries. It used to query the database twice per
+    request on the event loop, which with a few thousand requests froze the
+    whole app, not just this page.
+    """
+    import asyncio
+
     from app.integrations.seerr import seerr
 
     if not seerr.configured():
         return {"configured": False, "requests": []}
     requests = await seerr.all_requests(max_requests)
-    users = db.execute(select(User.user_id, User.username, User.email, User.friendly_name)).all()
-    by_name: dict[str, int] = {}
-    for u in users:
-        for v in (u.username, u.email, u.friendly_name):
-            if v:
-                by_name[str(v).strip().lower()] = u.user_id
-    now = time.time()
-    out = []
+    return await asyncio.to_thread(match_requests, requests)
+
+
+def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
+    from app.db import session_scope
+
+    wanted: list[tuple[dict, int]] = []
     for r in requests:
         media = r.get("media") or {}
         key = media.get("ratingKey4k") if r.get("is4k") else media.get("ratingKey")
@@ -347,46 +354,63 @@ async def unwatched_requests(db: Session, max_requests: int = 2000) -> dict[str,
         except (TypeError, ValueError):
             key = None
         # 5 is available, 4 partly available, in Seerr's media status.
-        if media.get("status") not in (4, 5) or key is None:
-            continue
-        who = r.get("requestedBy") or {}
-        user_id = next(
-            (by_name[str(v).strip().lower()] for v in (who.get("plexUsername"), who.get("email"), who.get("displayName"))
-             if v and str(v).strip().lower() in by_name),
-            None,
-        )
-        watched_by = db.execute(
-            select(func.count(func.distinct(History.user_id))).where(
-                (History.rating_key == key) | (History.parent_rating_key == key) | (History.grandparent_rating_key == key)
+        if media.get("status") in (4, 5) and key is not None:
+            wanted.append((r, key))
+    keys = sorted({k for _, k in wanted})
+
+    with session_scope() as db:
+        by_name: dict[str, int] = {}
+        for u in db.execute(select(User.user_id, User.username, User.email, User.friendly_name)).all():
+            for v in (u.username, u.email, u.friendly_name):
+                if v:
+                    by_name[str(v).strip().lower()] = u.user_id
+
+        # Everyone who played each title, a show counting its episodes. One
+        # pass per column in chunks, so each lookup can use an index.
+        watchers: dict[int, set[int]] = defaultdict(set)
+        for column in (History.rating_key, History.parent_rating_key, History.grandparent_rating_key):
+            for i in range(0, len(keys), 500):
+                chunk = keys[i : i + 500]
+                for key, uid in db.execute(
+                    select(column, History.user_id).where(column.in_(chunk), History.user_id.is_not(None)).distinct()
+                ).all():
+                    watchers[key].add(uid)
+
+        items: dict[int, MediaItem] = {}
+        for i in range(0, len(keys), 500):
+            for item in db.execute(select(MediaItem).where(MediaItem.rating_key.in_(keys[i : i + 500]))).scalars():
+                items[item.rating_key] = item
+
+        now = time.time()
+        out = []
+        for r, key in wanted:
+            media = r.get("media") or {}
+            who = r.get("requestedBy") or {}
+            user_id = next(
+                (by_name[str(v).strip().lower()] for v in (who.get("plexUsername"), who.get("email"), who.get("displayName"))
+                 if v and str(v).strip().lower() in by_name),
+                None,
             )
-        ).scalar() or 0
-        requester_plays = 0
-        if user_id is not None:
-            requester_plays = db.execute(
-                select(func.count()).select_from(History).where(
-                    History.user_id == user_id,
-                    (History.rating_key == key) | (History.parent_rating_key == key) | (History.grandparent_rating_key == key),
-                )
-            ).scalar() or 0
-        if requester_plays:
-            continue
-        added = media.get("mediaAddedAt") or r.get("updatedAt")
-        try:
-            added_ts = datetime.fromisoformat(str(added).replace("Z", "+00:00")).timestamp() if added else None
-        except ValueError:
-            added_ts = None
-        item = db.get(MediaItem, key)
-        out.append({
-            "rating_key": key,
-            "title": _title(item) if item is not None and item.title else None,
-            "media_type": media.get("mediaType"),
-            "tmdb_id": media.get("tmdbId"),
-            "requested_by": who.get("displayName") or who.get("plexUsername") or who.get("email"),
-            "user_id": user_id,
-            "requested_at": r.get("createdAt"),
-            "available_days": int((now - added_ts) / 86400) if added_ts else None,
-            "watched_by_others": watched_by,
-            "file_size": item.file_size if item is not None else None,
-        })
+            seen_by = watchers.get(key, set())
+            if user_id is not None and user_id in seen_by:
+                continue
+            added = media.get("mediaAddedAt") or r.get("updatedAt")
+            try:
+                added_ts = datetime.fromisoformat(str(added).replace("Z", "+00:00")).timestamp() if added else None
+            except ValueError:
+                added_ts = None
+            item = items.get(key)
+            out.append({
+                "rating_key": key,
+                "title": _title(item) if item is not None and item.title else None,
+                "media_type": media.get("mediaType"),
+                "tmdb_id": media.get("tmdbId"),
+                "requested_by": who.get("displayName") or who.get("plexUsername") or who.get("email"),
+                "user_id": user_id,
+                "requested_at": r.get("createdAt"),
+                "available_days": int((now - added_ts) / 86400) if added_ts else None,
+                "watched_by_others": len(seen_by - {user_id}),
+                "file_size": item.file_size if item is not None else None,
+            })
     out.sort(key=lambda x: -(x["available_days"] or 0))
     return {"configured": True, "requests": out}

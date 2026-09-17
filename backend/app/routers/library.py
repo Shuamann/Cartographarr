@@ -64,14 +64,26 @@ def four_k(_: AdminUser, db: Db, days: int = Query(365, ge=1, le=3650)) -> list:
     return library.four_k(db, days)
 
 
+_requests_cache: dict[str, object] = {"at": 0.0, "value": None}
+
+
 @router.get("/requests")
-async def requests(_: AdminUser, db: Db) -> dict:
+async def requests(_: AdminUser, fresh: bool = False) -> dict:
+    import asyncio
+    import time
+
+    if not fresh and _requests_cache["value"] is not None and time.time() - float(_requests_cache["at"]) < 600:
+        return _requests_cache["value"]  # type: ignore[return-value]
     try:
-        return await library.unwatched_requests(db)
+        value = await asyncio.wait_for(library.unwatched_requests(), timeout=90)
+    except TimeoutError as exc:
+        raise HTTPException(504, "Seerr took longer than 90 seconds to list its requests.") from exc
     except Exception as exc:  # noqa: BLE001
         from app.integrations.base import describe_failure
 
         raise HTTPException(502, f"Seerr: {describe_failure(exc)}") from exc
+    _requests_cache["at"], _requests_cache["value"] = time.time(), value
+    return value
 
 
 @router.get("/file/{rating_key}")

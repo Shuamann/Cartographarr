@@ -143,3 +143,32 @@ def test_library_is_admin_only(client):
     as_viewer(client, "all")
     for path in ("overview", "problems", "transcodes", "messy", "four-k", "requests", "file/1"):
         assert client.get(f"/api/library/{path}").status_code == 403, path
+
+
+def test_many_requests_do_not_freeze_the_app(client, monkeypatch):
+    """Matching once ran two queries per request on the event loop, and a few
+    thousand requests froze every page. Now bulk, in a thread, and cached."""
+    import time as clock
+
+    from app.integrations.seerr import seerr
+
+    claim(client)
+    seed()
+    calls = {"n": 0}
+
+    async def many(limit=2000):
+        calls["n"] += 1
+        return [
+            {"is4k": False, "media": {"status": 5, "ratingKey": str(1000 + i), "mediaType": "movie"},
+             "requestedBy": {"plexUsername": f"user{i % 40}"}}
+            for i in range(2000)
+        ]
+
+    monkeypatch.setattr(type(seerr), "configured", lambda self: True)
+    monkeypatch.setattr(seerr, "all_requests", many)
+    started = clock.perf_counter()
+    data = client.get("/api/library/requests?fresh=true").json()
+    assert len(data["requests"]) == 2000
+    assert clock.perf_counter() - started < 5
+    client.get("/api/library/requests")
+    assert calls["n"] == 1  # the second came from the cache
