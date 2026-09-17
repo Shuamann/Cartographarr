@@ -49,7 +49,8 @@ export function StreamEntry({
   onToggle: () => void;
   onOpenUser?: (userId: number) => void;
 }) {
-  const by = e.actor ?? (e.rule_name === "(manual)" ? "Someone, manually" : e.rule_name);
+  const by = e.actor ?? (e.rule_name === "(manual)" ? "Someone, by hand" : e.rule_name);
+  const outcome = outcomeOf(e);
 
   return (
     <article className={open ? "log-entry open" : "log-entry"}>
@@ -63,8 +64,7 @@ export function StreamEntry({
         </span>
         <span className="log-by muted small clip">{by}</span>
         <span className="log-result">
-          <span className={e.dry_run ? "pill" : "pill warn"}>{e.dry_run ? "recorded only" : "acted"}</span>
-          <span className="small">{e.result}</span>
+          <span className={outcome.tone}>{outcome.label}</span>
         </span>
         <span className="log-caret" aria-hidden="true">
           {open ? "▴" : "▾"}
@@ -167,7 +167,7 @@ function Detail({
             ) : (
               e.ip_address
             )}
-            {e.asn_org ? ` · ${e.asn_org}` : ""}
+            {e.asn_org ? <span className="muted small">{e.asn_org}</span> : null}
           </Field>
           <Field label="Playback">
             {[
@@ -181,7 +181,7 @@ function Detail({
               .join(" · ") || null}
           </Field>
           <Field label="When">{e.acted_at ? when(e.acted_at, true) : null}</Field>
-          <Field label="Stopped by">{by}</Field>
+          <Field label="Triggered by">{by}</Field>
           <Field label="Rule">
             {e.source === "manual" ? (
               "None, done by hand"
@@ -193,9 +193,9 @@ function Detail({
               e.rule_name
             )}
           </Field>
-          <Field label="Action">
-            {e.action}
-            {e.dry_run ? " (record only, nothing was done)" : ""}
+          <Field label="Actions">
+            {actionNames(e.action)}
+            {e.dry_run ? " (rule set to record only, nothing was done)" : ""}
           </Field>
           <Field label="Result">{e.result}</Field>
         </dl>
@@ -222,6 +222,34 @@ function Detail({
       </div>
     </div>
   );
+}
+
+const ACTION_NAMES: Record<string, string> = {
+  terminate: "Stop the stream",
+  notify: "Send a notification",
+  webhook: "Post to a webhook",
+  log_only: "Record it",
+};
+
+function actionNames(action: string | null): string | null {
+  if (!action) return null;
+  return action
+    .split(",")
+    .map((a) => ACTION_NAMES[a.trim()] ?? a.trim())
+    .join(", ");
+}
+
+/* What happened, in a word. A rule can match without stopping anything:
+ * set to record only, or with recording or a notification as its action. */
+function outcomeOf(e: Enforcement): { label: string; tone: string } {
+  const actions = (e.action ?? "").split(",").map((a) => a.trim());
+  const result = (e.result ?? "").toLowerCase();
+  if (e.dry_run) return { label: "recorded only", tone: "pill" };
+  if (result.startsWith("refused") || result.includes("failed")) return { label: "refused", tone: "pill bad" };
+  if (actions.includes("terminate") && result.includes("terminated")) return { label: "stopped", tone: "pill banned" };
+  if (actions.length === 1 && actions[0] === "log_only") return { label: "logged", tone: "pill" };
+  if (actions.includes("notify") || actions.includes("webhook")) return { label: "notified", tone: "pill warn" };
+  return { label: e.result || "acted", tone: "pill warn" };
 }
 
 const LINKS: { key: string; label: string }[] = [

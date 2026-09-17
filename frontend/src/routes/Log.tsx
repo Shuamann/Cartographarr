@@ -51,7 +51,7 @@ export default function LogRoute({ onOpenUser }: { onOpenUser?: (userId: number)
         </div>
       </div>
       <p className="muted small">
-        Streams that were stopped, or would have been by a rule set to record only, and every change made through
+        Streams that matched a rule or were stopped by hand, with what happened to each, and every change made through
         Cartographarr. Open an entry for the detail.
       </p>
 

@@ -120,7 +120,8 @@ export default function RulesRoute({
   }
 
   async function setRecordOnly(rule: Rule, recordOnly: boolean) {
-    if (!recordOnly && !confirm(`Let "${rule.name}" act? It will stop streams and send notifications, not just record them.`)) return;
+    const effects = consequences(rule.actions ?? []);
+    if (!recordOnly && effects && !confirm(`Let "${rule.name}" act? It will ${effects}, not just record matches.`)) return;
     await api.put(`/rules/${rule.id}`, { record_only: recordOnly });
     rules.reload();
   }
@@ -138,7 +139,7 @@ export default function RulesRoute({
                 enabled: true,
                 recordOnly: true,
                 conditions: emptyGroup(),
-                actions: [{ name: "log_only", params: {} }],
+                actions: [{ name: "terminate", params: {} }],
               })
             }
           >
@@ -214,11 +215,19 @@ export default function RulesRoute({
                 </p>
               </div>
               <div className="row">
-                <ModeSwitch
-                  recordOnly={Boolean(r.record_only_effective)}
-                  locked={locked}
-                  onChange={(v) => setRecordOnly(r, v)}
-                />
+                {consequences(r.actions ?? []) ? (
+                  <ModeSwitch
+                    recordOnly={Boolean(r.record_only_effective)}
+                    locked={locked}
+                    onChange={(v) => setRecordOnly(r, v)}
+                  />
+                ) : (
+                  // Its only action is recording, so there is nothing to switch
+                  // between. Choosing a real action in the editor brings it back.
+                  <span className="pill" title="This rule's only action is to record matches. Edit it to choose an action.">
+                    records only
+                  </span>
+                )}
                 <button className="tab" onClick={() => toggle(r)}>
                   {r.enabled ? "Disable" : "Enable"}
                 </button>
@@ -361,6 +370,19 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
   );
 }
 
+/* What letting a rule act would actually do, for the confirmation. Null when
+ * acting would do nothing more than recording. */
+function consequences(steps: RuleStep[]): string | null {
+  const names = new Set(steps.map((s) => s.name));
+  const parts = [
+    names.has("terminate") ? "stop matching streams" : null,
+    names.has("notify") ? "send notifications" : null,
+    names.has("webhook") ? "post to the webhook" : null,
+  ].filter(Boolean) as string[];
+  if (!parts.length) return null;
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
 /* Record only, or act. Two states side by side rather than a checkbox, so
  * which one a rule is in reads at a glance. */
 function ModeSwitch({
@@ -476,13 +498,18 @@ function Editor({
             <label>
               When it matches
               <select
-                value={draft.recordOnly ? "record" : "act"}
+                value={draft.recordOnly || !consequences(draft.actions) ? "record" : "act"}
+                disabled={!consequences(draft.actions)}
                 onChange={(e) => onChange({ ...draft, recordOnly: e.target.value === "record" })}
               >
                 <option value="record">Record only, do nothing</option>
                 <option value="act">Act</option>
               </select>
-              <small>Start with record only and check the Log before letting a rule act.</small>
+              <small>
+                {consequences(draft.actions)
+                  ? "Start with record only and check the Log before letting a rule act."
+                  : "Choose an action under Then to let this rule act."}
+              </small>
             </label>
           </div>
         </section>
@@ -830,7 +857,10 @@ function ActionsEditor({
   specs: ActionSpec[];
   onChange: (steps: RuleStep[]) => void;
 }) {
-  const unused = specs.filter((s) => !steps.some((step) => step.name === s.name));
+  // Recording is what Record only mode is for, so it is not offered as an
+  // action. A rule saved with it still shows it, so it can be changed.
+  const offered = specs.filter((s) => s.name !== "log_only" || steps.some((step) => step.name === "log_only"));
+  const unused = offered.filter((s) => s.name !== "log_only" && !steps.some((step) => step.name === s.name));
 
   return (
     <div className="action-list">
@@ -845,7 +875,7 @@ function ActionsEditor({
                   onChange(steps.map((s, j) => (j === i ? { name: e.target.value, params: {} } : s)))
                 }
               >
-                {specs.map((s) => (
+                {offered.map((s) => (
                   <option
                     key={s.name}
                     value={s.name}
