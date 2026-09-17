@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Float, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -153,6 +153,25 @@ class MediaItem(Base):
     radarr_slug: Mapped[str | None] = mapped_column(String(255))
     sonarr_slug: Mapped[str | None] = mapped_column(String(255))
     synced_at: Mapped[datetime | None] = mapped_column()
+
+    # The file itself, for Library health: what it is, and so what a device
+    # has to do to play it. The first version when there are several.
+    file_bitrate: Mapped[int | None] = mapped_column(Integer)  # kbps, average
+    file_container: Mapped[str | None] = mapped_column(String(16))
+    file_size: Mapped[int | None] = mapped_column(BigInteger)
+    file_path: Mapped[str | None] = mapped_column(Text)
+    versions: Mapped[int | None] = mapped_column(Integer)
+    video_codec: Mapped[str | None] = mapped_column(String(16))
+    video_resolution: Mapped[str | None] = mapped_column(String(16))
+    video_bit_depth: Mapped[int | None] = mapped_column(Integer)
+    video_dynamic_range: Mapped[str | None] = mapped_column(String(32))
+    audio_codec: Mapped[str | None] = mapped_column(String(16))
+    audio_channels: Mapped[int | None] = mapped_column(Integer)
+    # JSON lists: [{"codec", "channels", "language", "bitrate"}] and
+    # [{"codec", "language", "forced", "location"}].
+    audio_tracks: Mapped[str | None] = mapped_column(Text)
+    subtitle_tracks: Mapped[str | None] = mapped_column(Text)
+    file_checked_at: Mapped[datetime | None] = mapped_column()
 
     @property
     def poster_thumb(self) -> str | None:

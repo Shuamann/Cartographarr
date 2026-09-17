@@ -8,6 +8,7 @@ once per rating_key ever.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -428,6 +429,51 @@ def _tombstone(rating_key: int) -> dict:
     return {"rating_key": rating_key, "synced_at": datetime.now(UTC)}
 
 
+def file_details(meta: dict) -> dict:
+    """What the file is, from get_metadata's media_info. Empty values for an
+    item with no file (a show, a season, live TV)."""
+    media = meta.get("media_info") or []
+    first = media[0] if media else {}
+    parts = first.get("parts") or []
+    part = parts[0] if parts else {}
+    streams = part.get("streams") or []
+    video = next((s for s in streams if str(s.get("type")) == "1"), {})
+    audio = [s for s in streams if str(s.get("type")) == "2"]
+    subs = [s for s in streams if str(s.get("type")) == "3"]
+    return {
+        "file_bitrate": _int(first.get("bitrate")),
+        "file_container": first.get("container") or None,
+        "file_size": _int(part.get("file_size")),
+        "file_path": part.get("file") or None,
+        "versions": len(media) or None,
+        "video_codec": first.get("video_codec") or video.get("video_codec") or None,
+        "video_resolution": first.get("video_full_resolution") or None,
+        "video_bit_depth": _int(video.get("video_bit_depth")),
+        "video_dynamic_range": video.get("video_dynamic_range") or None,
+        "audio_codec": first.get("audio_codec") or None,
+        "audio_channels": _int(first.get("audio_channels")),
+        "audio_tracks": json.dumps([
+            {
+                "codec": a.get("audio_codec") or None,
+                "channels": _int(a.get("audio_channels")),
+                "language": a.get("audio_language_code") or a.get("audio_language") or None,
+                "bitrate": _int(a.get("audio_bitrate")),
+            }
+            for a in audio
+        ]) if media else None,
+        "subtitle_tracks": json.dumps([
+            {
+                "codec": s.get("subtitle_codec") or None,
+                "language": s.get("subtitle_language_code") or s.get("subtitle_language") or None,
+                "forced": bool(_int(s.get("subtitle_forced"))),
+                "location": s.get("subtitle_location") or None,
+            }
+            for s in subs
+        ]) if media else None,
+        "file_checked_at": datetime.now(UTC),
+    }
+
+
 async def metadata_row(client: TautulliClient, rating_key: int) -> dict:
     """One media_items row from Tautulli, or a tombstone if Plex has no such item."""
     try:
@@ -457,6 +503,7 @@ async def metadata_row(client: TautulliClient, rating_key: int) -> dict:
         "content_rating": meta.get("content_rating") or None,
         "summary": meta.get("summary") or None,
         **_split_guids(meta.get("guids")),
+        **file_details(meta),
         "synced_at": datetime.now(UTC),
     }
 
@@ -520,6 +567,50 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
     return len(results) - gone
 
 
+async def backfill_file_details(client: TautulliClient, settings: Settings, limit: int = 150) -> int:
+    """File details for items cached before they were kept.
+
+    A batch per sync rather than all at once: a big library is thousands of
+    get_metadata calls, and Tautulli and Plex both have better things to do.
+    Items that turn out to have no file are marked checked, so they are not
+    asked about again.
+    """
+    with session_scope() as session:
+        keys = [
+            key
+            for (key,) in session.execute(
+                select(MediaItem.rating_key)
+                .where(
+                    MediaItem.title.is_not(None),
+                    MediaItem.file_checked_at.is_(None),
+                    MediaItem.media_type.in_(("movie", "episode")),
+                )
+                .limit(limit)
+            ).all()
+        ]
+    if not keys:
+        return 0
+
+    semaphore = asyncio.Semaphore(settings.metadata_concurrency)
+
+    async def fetch(rating_key: int) -> tuple[int, dict]:
+        async with semaphore:
+            try:
+                meta = await client.call("get_metadata", rating_key=rating_key) or {}
+            except Exception as exc:  # noqa: BLE001 - gone from Plex, or a blip
+                log.debug("file details unavailable for %s: %s", rating_key, exc)
+                meta = {}
+            return rating_key, file_details(meta)
+
+    results = await asyncio.gather(*(fetch(k) for k in keys))
+    with session_scope() as session:
+        for rating_key, details in results:
+            session.execute(update(MediaItem).where(MediaItem.rating_key == rating_key).values(**details))
+    found = sum(1 for _, d in results if d.get("file_bitrate") is not None)
+    log.info("file details: %d checked, %d with a file", len(results), found)
+    return len(results)
+
+
 # ---- orchestration ---------------------------------------------------------
 
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
@@ -536,6 +627,7 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)
     metadata = await cache_new_metadata(client, settings)
+    files = await backfill_file_details(client, settings)
     devices = refresh_devices()
 
     resolver = GeoResolver(settings.geoip_dir)
@@ -550,6 +642,7 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     result = {
         "history": history,
         "metadata": metadata,
+        "file_details": files,
         "devices": devices,
         "ips": ips,
         "travel_flags": flags,

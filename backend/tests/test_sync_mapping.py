@@ -67,3 +67,46 @@ def test_map_history_keeps_episode_numbers():
     assert (out["grandparent_title"], out["parent_media_index"], out["media_index"]) == ("ER", 12, 21)
     movie = _map_history({"row_id": "8", "media_type": "movie", "parent_media_index": "", "media_index": ""})
     assert movie["parent_media_index"] is None and movie["media_index"] is None
+
+
+def test_file_details_from_metadata():
+    import json
+
+    from app.services.sync import file_details
+
+    meta = {"media_info": [{
+        "bitrate": "12236", "container": "mkv", "video_codec": "h264", "video_full_resolution": "1080p",
+        "audio_codec": "eac3", "audio_channels": "6",
+        "parts": [{"file": "/movies/Film (2012)/Film.mkv", "file_size": "8647859556", "streams": [
+            {"type": "1", "video_codec": "h264", "video_bit_depth": "8", "video_dynamic_range": "SDR"},
+            {"type": "2", "audio_codec": "eac3", "audio_channels": "6", "audio_language_code": "eng", "audio_bitrate": "1019"},
+            {"type": "2", "audio_codec": "aac", "audio_channels": "2", "audio_language_code": "eng", "audio_bitrate": "80"},
+            {"type": "3", "subtitle_codec": "srt", "subtitle_language_code": "eng", "subtitle_forced": 0, "subtitle_location": "embedded"},
+        ]}],
+    }]}
+    d = file_details(meta)
+    assert d["file_bitrate"] == 12236 and d["file_size"] == 8647859556 and d["video_bit_depth"] == 8
+    assert [a["codec"] for a in json.loads(d["audio_tracks"])] == ["eac3", "aac"]
+    assert json.loads(d["subtitle_tracks"])[0] == {"codec": "srt", "language": "eng", "forced": False, "location": "embedded"}
+    assert d["versions"] == 1 and d["file_checked_at"] is not None
+
+    # A show has no file, but is still marked checked so it is not asked again.
+    empty = file_details({"title": "A Show"})
+    assert empty["file_bitrate"] is None and empty["audio_tracks"] is None and empty["file_checked_at"] is not None
+
+
+def test_metadata_upsert_accepts_a_tombstone_beside_a_full_row(client):
+    """A deleted item's tombstone has far fewer columns than a real row, and
+    both arrive in one batch."""
+    from datetime import UTC, datetime
+
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services.sync import _tombstone, _upsert
+
+    full = {"rating_key": 1, "title": "Film", "media_type": "movie", "synced_at": datetime.now(UTC), "file_bitrate": 5000}
+    with session_scope() as db:
+        _upsert(db, MediaItem, [full, _tombstone(2)])
+    with session_scope() as db:
+        assert db.get(MediaItem, 1).file_bitrate == 5000
+        assert db.get(MediaItem, 2).title is None
