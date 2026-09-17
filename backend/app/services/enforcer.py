@@ -228,7 +228,7 @@ async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str 
     finally:
         await client.aclose()
     sessions: list[Session] = activity.get("sessions") or []
-    tracker.observe(sessions)
+    tracker.observe(sessions, activity=activity)
     context = _build_context(sessions)
     counter = window_counter()
     for s in sessions:

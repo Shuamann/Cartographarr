@@ -317,6 +317,88 @@ class StreamEvent(Base):
     started_at: Mapped[datetime | None] = mapped_column()
     ended_at: Mapped[datetime | None] = mapped_column()
     seconds: Mapped[float | None] = mapped_column(Float)
+    # Likely cause, from services/stalls.py, and why.
+    cause: Mapped[str | None] = mapped_column(String(16))
+    cause_detail: Mapped[str | None] = mapped_column(Text)
+
+
+class StreamSession(Base):
+    """One stream as live activity saw it, from services/streams.py.
+
+    Decisions are the worst seen during the stream, causes every reason it
+    was not a plain direct play. Only streams seen while Cartographarr was
+    running are here.
+    """
+
+    __tablename__ = "stream_sessions"
+    __table_args__ = (
+        Index("ix_stream_sessions_started", "started_at"),
+        Index("ix_stream_sessions_user", "user_id", "started_at"),
+        Index("ix_stream_sessions_rating_key", "rating_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_key: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    username: Mapped[str | None] = mapped_column(String(255))
+    machine_id: Mapped[str | None] = mapped_column(String(255))
+    player: Mapped[str | None] = mapped_column(String(255))
+    platform: Mapped[str | None] = mapped_column(String(64))
+    product: Mapped[str | None] = mapped_column(String(128))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    location: Mapped[str | None] = mapped_column(String(8))
+    relayed: Mapped[bool | None] = mapped_column(Boolean)
+    secure: Mapped[bool | None] = mapped_column(Boolean)
+    rating_key: Mapped[int | None] = mapped_column(Integer)
+    grandparent_rating_key: Mapped[int | None] = mapped_column(Integer)
+    full_title: Mapped[str | None] = mapped_column(Text)
+    grandparent_title: Mapped[str | None] = mapped_column(Text)
+    parent_media_index: Mapped[int | None] = mapped_column(Integer)
+    media_index: Mapped[int | None] = mapped_column(Integer)
+    media_type: Mapped[str | None] = mapped_column(String(16))
+    quality_profile: Mapped[str | None] = mapped_column(String(64))
+    file_bitrate: Mapped[int | None] = mapped_column(Integer)
+    video_codec: Mapped[str | None] = mapped_column(String(16))
+    video_resolution: Mapped[str | None] = mapped_column(String(16))
+    video_bit_depth: Mapped[int | None] = mapped_column(Integer)
+    video_dynamic_range: Mapped[str | None] = mapped_column(String(32))
+    audio_codec: Mapped[str | None] = mapped_column(String(16))
+    subtitle_codec: Mapped[str | None] = mapped_column(String(16))
+    stream_bitrate: Mapped[int | None] = mapped_column(Integer)
+    stream_video_codec: Mapped[str | None] = mapped_column(String(16))
+    stream_video_resolution: Mapped[str | None] = mapped_column(String(16))
+    stream_audio_codec: Mapped[str | None] = mapped_column(String(16))
+    transcode_decision: Mapped[str | None] = mapped_column(String(32))
+    video_decision: Mapped[str | None] = mapped_column(String(32))
+    audio_decision: Mapped[str | None] = mapped_column(String(32))
+    subtitle_decision: Mapped[str | None] = mapped_column(String(32))
+    container_decision: Mapped[str | None] = mapped_column(String(32))
+    transcode_hw: Mapped[bool | None] = mapped_column(Boolean)
+    transcode_speed_min: Mapped[float | None] = mapped_column(Float)
+    causes: Mapped[str | None] = mapped_column(String(255))
+    primary_cause: Mapped[str | None] = mapped_column(String(32))
+    bandwidth_max: Mapped[int | None] = mapped_column(Integer)
+    progress_start: Mapped[int | None] = mapped_column(Integer)
+    progress_end: Mapped[int | None] = mapped_column(Integer)
+    buffer_count: Mapped[int | None] = mapped_column(Integer)
+    buffer_seconds: Mapped[float | None] = mapped_column(Float)
+    started_at: Mapped[datetime | None] = mapped_column()
+    last_seen_at: Mapped[datetime | None] = mapped_column()
+    ended_at: Mapped[datetime | None] = mapped_column()
+
+
+class BandwidthSample(Base):
+    """The busiest moment of one minute: upload, streams and transcodes."""
+
+    __tablename__ = "bandwidth_samples"
+
+    minute: Mapped[int] = mapped_column(Integer, primary_key=True)  # unix time, start of the minute
+    wan_kbps: Mapped[int | None] = mapped_column(Integer)
+    lan_kbps: Mapped[int | None] = mapped_column(Integer)
+    streams: Mapped[int | None] = mapped_column(Integer)
+    remote_streams: Mapped[int | None] = mapped_column(Integer)
+    transcodes: Mapped[int | None] = mapped_column(Integer)
+    hw_transcodes: Mapped[int | None] = mapped_column(Integer)
 
 
 class BannedDevice(Base):

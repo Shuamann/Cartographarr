@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     enforce_cooldown_seconds: int = 60
     """Per rule, per session, to stop a stubborn client from filling the log."""
 
+    upload_capacity_mbps: float = 0
+    """Your server's upload speed. Lets stalls be blamed on a full upload, and
+    lets Cartographarr warn when it is nearly full. 0 means unknown."""
+
+    upload_alert_percent: int = 90
+    """Notify when remote streams use this much of the upload. 0 turns the
+    warning off. Needs the upload capacity set."""
+
     ban_message: str = "This device is not permitted to stream. Contact the server owner."
     """Shown to a banned device when its stream is stopped."""
 

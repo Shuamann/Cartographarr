@@ -639,6 +639,15 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # After geocoding, so newly placed addresses are considered straight away.
     flags = travel.find_flags(settings)
 
+    # A stall that looked like a one-off can become a pattern later.
+    from app.services import stalls, streams
+
+    try:
+        stalls.reclassify()
+        streams.prune()
+    except Exception:  # noqa: BLE001 - housekeeping must not fail the sync
+        log.exception("stall and sample housekeeping failed")
+
     result = {
         "history": history,
         "metadata": metadata,

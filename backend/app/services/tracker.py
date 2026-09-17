@@ -38,13 +38,20 @@ class Track:
     buffer_seconds: float = 0.0
     buffer_started: float | None = None
     last_session: dict[str, Any] = field(default_factory=dict)
+    # The stream_sessions row, and what it holds, so each poll only writes
+    # when something changed or a minute has passed.
+    row_id: int | None = None
+    row: dict[str, Any] = field(default_factory=dict)
+    written_at: float = 0.0
 
 
 _tracks: dict[str, Track] = {}
 
 
-def observe(sessions: list[dict[str, Any]], now: float | None = None) -> None:
+def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: dict[str, Any] | None = None) -> None:
     """Update every stream's history from one activity poll."""
+    from app.services import streams
+
     now = time.time() if now is None else now
     seen: set[str] = set()
 
@@ -70,11 +77,24 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None) -> None:
         track.last_seen = now
         track.last_session = session
 
+        row = streams.merge(track.row, session, now) if track.row else streams.row_for(session, now)
+        changed = {k: v for k, v in row.items() if k not in ("last_seen_at", "progress_end") and track.row.get(k) != v}
+        if track.row_id is None or changed or now - track.written_at >= 60:
+            track.row_id = streams.save(row, track.row_id)
+            track.written_at = now
+        track.row = row
+
+    if activity is not None:
+        streams.sample(activity, sessions, now)
+
     # A stream no longer in activity has ended. Close any stall it was in.
     for key in [k for k in _tracks if k not in seen]:
         track = _tracks.pop(key)
         if track.state == BUFFERING:
             _end_buffering(track, track.last_seen)
+        if track.row_id is not None:
+            streams.save(track.row, track.row_id)
+            streams.finish(track.row_id, track.last_seen, track.buffer_count, track.buffer_seconds)
 
 
 def metrics(session_key: str, now: float | None = None) -> dict[str, Any]:
@@ -121,8 +141,7 @@ def _record(track: Track, started: float, ended: float, seconds: float) -> None:
             return None
 
     with session_scope() as db:
-        db.add(
-            StreamEvent(
+        event = StreamEvent(
                 kind=BUFFERING,
                 session_key=track.session_key,
                 user_id=num(s.get("user_id")),
@@ -146,4 +165,15 @@ def _record(track: Track, started: float, ended: float, seconds: float) -> None:
                 ended_at=datetime.fromtimestamp(ended, UTC),
                 seconds=round(seconds, 1),
             )
-        )
+        db.add(event)
+        db.flush()
+        try:
+            from app.services import stalls
+            from app.settings_store import current
+
+            settings = current()
+            event.cause, event.cause_detail = stalls.classify(
+                db, event, float(settings.upload_capacity_mbps or 0), int(settings.upload_alert_percent or 90)
+            )
+        except Exception:  # noqa: BLE001 - a cause is a bonus; the stall itself is kept
+            log.exception("could not classify a stall")

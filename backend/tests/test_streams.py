@@ -1,0 +1,130 @@
+"""Stream records, upload samples and the likely cause of a stall.
+
+Each of these ends up in a report someone acts on (re-encode a file, blame a
+device, buy more upload), so the reasoning is tested case by case.
+"""
+
+from datetime import UTC, datetime, timedelta
+
+from app.services import streams, tracker
+
+
+def live(key="1", **over):
+    base = {
+        "session_key": key, "user_id": 7, "machine_id": "tv", "player": "TV", "state": "playing",
+        "rating_key": 100, "full_title": "Film", "media_type": "movie", "location": "wan",
+        "quality_profile": "Original", "transcode_decision": "direct play", "video_decision": "direct play",
+        "audio_decision": "direct play", "subtitle_decision": "", "container_decision": "direct play",
+        "video_codec": "hevc", "stream_video_codec": "hevc", "audio_codec": "eac3", "stream_audio_codec": "eac3",
+        "video_dynamic_range": "SDR", "stream_video_dynamic_range": "SDR", "bandwidth": "8000", "stream_bitrate": "7000",
+    }
+    base.update(over)
+    return base
+
+
+def test_causes_are_read_from_what_changed():
+    assert streams.transcode_causes(live()) == []
+    assert streams.transcode_causes(live(subtitle_decision="burn", video_decision="transcode")) == ["subtitle_burn"]
+    assert streams.transcode_causes(live(video_decision="transcode", stream_video_codec="h264")) == ["video_codec"]
+    hdr = live(video_decision="transcode", video_dynamic_range="HDR10", stream_video_dynamic_range="SDR", stream_video_codec="h264")
+    assert streams.transcode_causes(hdr) == ["hdr_tonemap", "video_codec"]
+    assert streams.transcode_causes(live(video_decision="transcode", quality_profile="4 Mbps 720p")) == ["quality_setting"]
+    assert streams.transcode_causes(live(video_decision="transcode")) == ["video_bitrate"]
+    assert streams.transcode_causes(live(audio_decision="transcode", stream_audio_codec="aac")) == ["audio_codec"]
+    assert streams.transcode_causes(live(audio_decision="transcode")) == ["audio_channels"]
+    assert streams.transcode_causes(live(video_decision="copy", transcode_decision="copy")) == ["container"]
+
+
+def test_a_stream_keeps_its_worst_decision_and_every_cause(client):
+    from app.db import session_scope
+    from app.models import StreamSession
+
+    tracker.reset()
+    t0 = 1_800_000_000.0
+    tracker.observe([live()], now=t0)
+    tracker.observe([live(transcode_decision="transcode", video_decision="transcode", subtitle_decision="burn", bandwidth="12000")], now=t0 + 10)
+    tracker.observe([live()], now=t0 + 20)  # subtitles off again
+    tracker.observe([], now=t0 + 30)
+
+    with session_scope() as db:
+        rows = db.query(StreamSession).all()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row.transcode_decision == "transcode" and row.subtitle_decision == "burn"
+        assert row.primary_cause == "subtitle_burn" and row.bandwidth_max == 12000
+        assert row.ended_at is not None and row.buffer_count == 0
+
+
+def test_bandwidth_samples_keep_the_peak_of_each_minute(client):
+    from app.db import session_scope
+    from app.models import BandwidthSample
+
+    minute = 1_800_000_000 // 60 * 60
+    streams.sample({"wan_bandwidth": 20000, "lan_bandwidth": 1000}, [live(), live("2")], minute + 5)
+    streams.sample({"wan_bandwidth": 35000, "lan_bandwidth": 0}, [live()], minute + 40)
+    streams.sample({"wan_bandwidth": 5000, "lan_bandwidth": 0}, [live()], minute + 50)
+    with session_scope() as db:
+        row = db.get(BandwidthSample, minute)
+        assert (row.wan_kbps, row.lan_kbps, row.streams, row.remote_streams) == (35000, 1000, 2, 2)
+
+
+def test_upload_alert_fires_once_per_half_hour(client, monkeypatch):
+    from app.settings_store import current
+
+    real = current()
+    monkeypatch.setattr("app.settings_store.current", lambda: real.model_copy(update={"upload_capacity_mbps": 40, "upload_alert_percent": 80}))
+    sent = []
+    monkeypatch.setattr("app.audit.record", lambda *a, **k: sent.append(a[2]))
+    streams._last_alert = 0.0
+    streams._maybe_alert(33000, 3, 10_000.0)
+    streams._maybe_alert(39000, 4, 10_060.0)  # still within the quiet period
+    streams._maybe_alert(20000, 1, 20_000.0)  # below the level
+    streams._maybe_alert(36000, 2, 12_000.0)  # past half an hour
+    assert len(sent) == 2 and "82%" in sent[0]
+
+
+def _stall(db, user, rating_key, start, seconds=10, machine="m"):
+    from app.models import StreamEvent
+
+    e = StreamEvent(kind="buffering", user_id=user, machine_id=machine, rating_key=rating_key,
+                    started_at=start, ended_at=start + timedelta(seconds=seconds), seconds=seconds)
+    db.add(e)
+    db.flush()
+    return e
+
+
+def test_stall_causes(client):
+    from app.db import session_scope
+    from app.models import BandwidthSample
+    from app.services.stalls import classify
+
+    t = datetime(2026, 9, 1, 20, 0, tzinfo=UTC)
+    with session_scope() as db:
+        lone = _stall(db, 1, 500, t)
+        assert classify(db, lone)[0] == "one_off"
+
+        # Someone else stalls at the same moment: server side.
+        _stall(db, 2, 600, t + timedelta(seconds=30))
+        assert classify(db, lone)[0] == "server"
+
+    t2 = t + timedelta(days=3)
+    with session_scope() as db:
+        # A different user stalled on the same title last week: the file.
+        _stall(db, 3, 700, t2 - timedelta(days=5))
+        mine = _stall(db, 4, 700, t2)
+        assert classify(db, mine)[0] == "file"
+
+    t3 = t + timedelta(days=6)
+    with session_scope() as db:
+        # One viewer stalls on three different titles, alone each time.
+        for i, key in enumerate((801, 802, 803)):
+            last = _stall(db, 5, key, t3 + timedelta(hours=i * 5))
+        assert classify(db, last)[0] == "viewer"
+
+    t4 = t + timedelta(days=9)
+    with session_scope() as db:
+        db.add(BandwidthSample(minute=int(t4.timestamp()) // 60 * 60, wan_kbps=47000))
+        busy = _stall(db, 6, 900, t4 + timedelta(seconds=5))
+        cause, detail = classify(db, busy, capacity_mbps=50, upload_percent=90)
+        assert cause == "upload" and "47.0 of 50" in detail
+        assert classify(db, busy, capacity_mbps=0)[0] == "one_off"
