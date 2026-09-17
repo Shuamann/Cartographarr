@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     """Your server's upload speed. Lets stalls be blamed on a full upload, and
     lets Cartographarr warn when it is nearly full. 0 means unknown."""
 
+    library_bitrate_threshold_mbps: float = 20
+    """Library health lists files above this average bitrate that are watched
+    remotely. Set it near what one remote stream can comfortably use."""
+
     upload_alert_percent: int = 90
     """Notify when remote streams use this much of the upload. 0 turns the
     warning off. Needs the upload capacity set."""

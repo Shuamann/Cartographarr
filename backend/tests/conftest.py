@@ -43,13 +43,14 @@ def client(monkeypatch, tmp_path):
     import app.privacy
 
     importlib.reload(app.privacy)
-    import app.services.reports
+    import app.services.reports, app.services.library
 
     importlib.reload(app.services.reports)
+    importlib.reload(app.services.library)
 
     import app.auth.deps, app.routers.auth, app.main
     import app.routers.admin, app.routers.branding, app.routers.data, app.routers.live
-    import app.routers.sharing, app.routers.reports
+    import app.routers.sharing, app.routers.reports, app.routers.library
 
     importlib.reload(app.auth.deps)
     importlib.reload(app.routers.auth)
@@ -62,6 +63,7 @@ def client(monkeypatch, tmp_path):
         app.routers.branding,
         app.routers.sharing,
         app.routers.reports,
+        app.routers.library,
     ):
         importlib.reload(router)
     importlib.reload(app.main)

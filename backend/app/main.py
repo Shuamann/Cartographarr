@@ -15,7 +15,7 @@ from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
 from app import redact
-from app.routers import admin, auth, branding, data, live, monitoring, reports, sharing
+from app.routers import admin, auth, branding, data, library, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
@@ -138,6 +138,7 @@ app.include_router(branding.router)
 app.include_router(data.router, dependencies=[Depends(require_user)])
 app.include_router(live.router, dependencies=[Depends(require_user)])
 app.include_router(reports.router, dependencies=[Depends(require_user)])
+app.include_router(library.router, dependencies=[Depends(require_admin)])
 app.include_router(admin.router, dependencies=[Depends(require_admin)])
 app.include_router(sharing.router)
 # Guarded by its own token rather than a session, since monitoring tools

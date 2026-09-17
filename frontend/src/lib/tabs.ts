@@ -7,6 +7,7 @@ export const TABS = [
   "History",
   "People",
   "Reports",
+  "Library",
   "Rules",
   "Log",
   "Sharing",
@@ -15,7 +16,7 @@ export const TABS = [
 
 export type Tab = (typeof TABS)[number];
 
-export const ADMIN_TABS: Tab[] = ["Rules", "Log", "Sharing", "Settings"];
+export const ADMIN_TABS: Tab[] = ["Library", "Rules", "Log", "Sharing", "Settings"];
 
 /* A People list filter another page can open it with. */
 export type PeopleFilter = "new" | "banned" | "deleted" | "live";

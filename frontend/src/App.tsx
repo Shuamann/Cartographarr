@@ -12,6 +12,7 @@ import Setup from "./routes/Setup";
 // map arrives only when someone asks for it.
 const Map = lazy(() => import("./routes/Map"));
 const Reports = lazy(() => import("./routes/Reports"));
+const Library = lazy(() => import("./routes/Library"));
 import History from "./routes/History";
 import People, { type Selection } from "./routes/People";
 import Rules from "./routes/Rules";
@@ -264,6 +265,7 @@ function SignedIn({
               />
             )}
             {active === "Reports" && <Reports />}
+            {active === "Library" && <Library />}
             {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}

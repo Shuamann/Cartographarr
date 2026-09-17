@@ -94,5 +94,24 @@ class SeerrIntegration:
             "status": first.get("status"),
         }
 
+    async def all_requests(self, limit: int = 2000) -> list[dict]:
+        """Every request, newest first, a page at a time."""
+        if not self.configured():
+            return []
+        out: list[dict] = []
+        page = 100
+        while len(out) < limit:
+            data = await get_json(
+                f"{self.base_url}/api/v1/request",
+                headers=self.headers,
+                params={"take": page, "skip": len(out), "filter": "all", "sort": "added"},
+            )
+            results = (data or {}).get("results") or []
+            out.extend(results)
+            total = ((data or {}).get("pageInfo") or {}).get("results")
+            if len(results) < page or (total is not None and len(out) >= int(total)):
+                break
+        return out[:limit]
+
 
 seerr = SeerrIntegration()

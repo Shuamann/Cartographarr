@@ -110,3 +110,19 @@ def test_metadata_upsert_accepts_a_tombstone_beside_a_full_row(client):
     with session_scope() as db:
         assert db.get(MediaItem, 1).file_bitrate == 5000
         assert db.get(MediaItem, 2).title is None
+
+
+def test_episode_numbers_are_copied_from_history_to_cached_titles(client):
+    from app.db import session_scope
+    from app.models import History, MediaItem
+    from app.services.sync import _copy_episode_numbers
+
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Pilot", media_type="episode"))
+        db.add(MediaItem(rating_key=6, title="Film", media_type="movie"))
+        db.add(History(row_id=1, rating_key=5, media_type="episode", grandparent_title="Show", parent_media_index=1, media_index=1))
+    _copy_episode_numbers()
+    with session_scope() as db:
+        ep = db.get(MediaItem, 5)
+        assert (ep.grandparent_title, ep.parent_media_index, ep.media_index) == ("Show", 1, 1)
+        assert db.get(MediaItem, 6).media_index is None

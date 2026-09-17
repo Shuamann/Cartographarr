@@ -520,6 +520,22 @@ async def cache_one(rating_key: int) -> None:
         _upsert(session, MediaItem, [row])
 
 
+def _copy_episode_numbers() -> None:
+    """Episode numbers for titles cached before they were kept. History has
+    them, so copying is free where fetching again would be thousands of calls."""
+    with session_scope() as session:
+        session.execute(
+            text(
+                "UPDATE media_items SET "
+                "  grandparent_title = (SELECT h.grandparent_title FROM history h WHERE h.rating_key = media_items.rating_key AND h.media_index IS NOT NULL LIMIT 1),"
+                "  parent_media_index = (SELECT h.parent_media_index FROM history h WHERE h.rating_key = media_items.rating_key AND h.media_index IS NOT NULL LIMIT 1),"
+                "  media_index = (SELECT h.media_index FROM history h WHERE h.rating_key = media_items.rating_key AND h.media_index IS NOT NULL LIMIT 1) "
+                "WHERE media_type = 'episode' AND media_index IS NULL "
+                "AND EXISTS (SELECT 1 FROM history h WHERE h.rating_key = media_items.rating_key AND h.media_index IS NOT NULL)"
+            )
+        )
+
+
 async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
     """Fetch metadata for rating_keys never seen before.
 
@@ -539,6 +555,7 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
             ).all()
         ]
 
+    _copy_episode_numbers()
     if not missing:
         return 0
 
