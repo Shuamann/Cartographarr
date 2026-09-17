@@ -77,6 +77,39 @@ tasks.register(tasks.Task(
     "enforce", "Check live streams", "Runs the rules and ban list, records streams, stalls and upload.",
     _enforce_cycle, lambda: current().activity_poll_seconds, store_every_run=False,
 ))
+async def _library_scan() -> dict:
+    from app.services import library_scan
+
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
+    client = TautulliClient(current())
+    try:
+        return await library_scan.scan(client)
+    finally:
+        await client.aclose()
+
+
+async def _file_details() -> dict | str:
+    from app.services import library_scan
+
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
+    client = TautulliClient(current())
+    try:
+        result = await library_scan.read_details(client)
+    finally:
+        await client.aclose()
+    return result if result["read"] else "all files read"
+
+
+tasks.register(tasks.Task(
+    "library_scan", "Scan the library", "Every movie and episode in Plex, watched or not, with bitrate, resolution, codecs and size.",
+    _library_scan, lambda: 6 * 3600,
+))
+tasks.register(tasks.Task(
+    "file_details", "Read file details", "Every audio and subtitle track, a chunk at a time, until all files are read.",
+    _file_details, lambda: 60,
+))
 tasks.register(tasks.Task(
     "capabilities", "Check Plex Pass and server", "Whether stopping streams is possible, and the server's name and version.",
     _capability_cycle, lambda: 3600,
@@ -112,7 +145,7 @@ async def lifespan(app: FastAPI):
     # interval before its first run, so after every restart or image update
     # names stayed stale for up to an hour.
     soon = datetime.now()
-    first = {"slow_sync": soon, "sync": soon + timedelta(seconds=20)}
+    first = {"slow_sync": soon, "sync": soon + timedelta(seconds=20), "library_scan": soon + timedelta(seconds=45)}
     for task in tasks.TASKS.values():
         # Passing next_run_time=None pauses a job, so it is only passed when set.
         extra = {"next_run_time": first[task.key]} if task.key in first else {}

@@ -237,8 +237,12 @@ Set **Upload capacity** in Settings and Cartographarr also notifies you
 ## Library health
 
 The **Library** tab (admins only) judges files by how they are actually
-watched. File details are read from Tautulli, 150 titles each sync until the
-whole library is covered.
+watched. Every movie and episode is listed from Tautulli, watched or not, in
+about a minute after startup and again every 6 hours: bitrate, resolution,
+codecs and size. Audio and subtitle tracks are then read about 3,000 files a
+minute until done. Files removed from Plex drop out at the next scan, and a
+file that changed size (an upgrade or a replacement) has its tracks read again.
+Both jobs show on the Tasks page in Settings.
 
 - **Problem files**: over a bitrate limit and watched remotely, stalling, or
   transcoded for most remote viewers

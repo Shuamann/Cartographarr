@@ -261,8 +261,10 @@ def transcode_causes(db: Session, days: int) -> dict[str, Any]:
 
 def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 200) -> dict[str, Any]:
     """Files with a known awkwardness, most watched first."""
+    from app.services.library_scan import in_library
+
     items = db.execute(
-        select(MediaItem).where(MediaItem.file_checked_at.is_not(None), MediaItem.file_bitrate.is_not(None))
+        select(MediaItem).where(MediaItem.file_checked_at.is_not(None), MediaItem.file_bitrate.is_not(None), in_library())
     ).scalars().all()
     counts: Counter = Counter()
     flagged = []
@@ -302,8 +304,10 @@ def four_k(db: Session, days: int) -> list[dict[str, Any]]:
     means scaled down). From live streams where recorded: what resolution was
     actually sent.
     """
+    from app.services.library_scan import in_library
+
     items = db.execute(
-        select(MediaItem).where(func.lower(MediaItem.video_resolution).in_(("4k", "2160", "2160p")))
+        select(MediaItem).where(func.lower(MediaItem.video_resolution).in_(("4k", "2160", "2160p")), in_library())
     ).scalars().all()
     if not items:
         return []

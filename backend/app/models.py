@@ -176,6 +176,9 @@ class MediaItem(Base):
     audio_tracks: Mapped[str | None] = mapped_column(Text)
     subtitle_tracks: Mapped[str | None] = mapped_column(Text)
     file_checked_at: Mapped[datetime | None] = mapped_column()
+    library_seen_at: Mapped[datetime | None] = mapped_column()
+    """When the library scan last found this in Plex. Older than the last scan
+    means it has gone."""
 
     @property
     def poster_thumb(self) -> str | None:

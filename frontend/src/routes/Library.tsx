@@ -61,6 +61,7 @@ type Problem = FileInfo & {
 type Overview = {
   titles: number;
   checked: number;
+  scanned_at: string | null;
   size: number;
   threshold_mbps: number;
   streams_recorded: number;
@@ -260,19 +261,24 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
         Files judged by how they are watched: which cause trouble for remote viewers, why streams transcode, which are
         awkward to play, whether 4K copies reach a 4K screen, and which requests nobody watched.
       </p>
-      {pending > 0 && (
+      {!o.scanned_at && (
         <p className="note">
-          Reading file details: {o.checked.toLocaleString()} of {o.titles.toLocaleString()} titles so far. The rest fill in
-          150 at a time with each sync, so lists grow over the next few hours.
+          Listing the whole library. This takes about a minute after the app starts, then repeats every 6 hours.
+        </p>
+      )}
+      {o.scanned_at && pending > 0 && (
+        <p className="note">
+          Reading audio and subtitle tracks: {o.checked.toLocaleString()} of {o.titles.toLocaleString()} files so far,
+          about 3,000 a minute. Messy files grows as this finishes. Bitrate, resolution and 4K lists are already complete.
         </p>
       )}
       <dl className="stats">
         <div className="stat">
-          <dt>Titles with file details</dt>
-          <dd>{o.checked.toLocaleString()}</dd>
+          <dt>Files in the library</dt>
+          <dd>{o.titles.toLocaleString()}</dd>
         </div>
         <div className="stat">
-          <dt>Size of those files</dt>
+          <dt>Library size</dt>
           <dd>{size(o.size) || "0"}</dd>
         </div>
         <div className="stat">

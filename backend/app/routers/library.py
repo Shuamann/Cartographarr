@@ -18,20 +18,25 @@ Days = Query(90, ge=1, le=3650)
 
 @router.get("/overview")
 def overview(_: AdminUser, db: Db) -> dict:
+    from app.services.library_scan import in_library, last_scan
+
     playable = MediaItem.media_type.in_(("movie", "episode"))
-    total = db.execute(select(func.count()).select_from(MediaItem).where(playable, MediaItem.title.is_not(None))).scalar() or 0
+    present = in_library()
+    total = db.execute(select(func.count()).select_from(MediaItem).where(playable, MediaItem.title.is_not(None), present)).scalar() or 0
     checked = db.execute(
-        select(func.count()).select_from(MediaItem).where(playable, MediaItem.file_checked_at.is_not(None))
+        select(func.count()).select_from(MediaItem).where(playable, MediaItem.file_checked_at.is_not(None), present)
     ).scalar() or 0
-    size = db.execute(select(func.sum(MediaItem.file_size))).scalar() or 0
+    size = db.execute(select(func.sum(MediaItem.file_size)).where(playable, present)).scalar() or 0
+    scanned = last_scan()
     resolutions = db.execute(
         select(MediaItem.video_resolution, func.count(), func.sum(MediaItem.file_size))
-        .where(MediaItem.file_bitrate.is_not(None))
+        .where(MediaItem.file_bitrate.is_not(None), playable, present)
         .group_by(MediaItem.video_resolution)
         .order_by(func.count().desc())
     ).all()
     return {
         "titles": total,
+        "scanned_at": scanned.isoformat() if scanned else None,
         "checked": checked,
         "size": size,
         "threshold_mbps": current().library_bitrate_threshold_mbps,

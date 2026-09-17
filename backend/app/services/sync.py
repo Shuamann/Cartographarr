@@ -601,50 +601,6 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
     return len(results) - gone
 
 
-async def backfill_file_details(client: TautulliClient, settings: Settings, limit: int = 150) -> int:
-    """File details for items cached before they were kept.
-
-    A batch per sync rather than all at once: a big library is thousands of
-    get_metadata calls, and Tautulli and Plex both have better things to do.
-    Items that turn out to have no file are marked checked, so they are not
-    asked about again.
-    """
-    with session_scope() as session:
-        keys = [
-            key
-            for (key,) in session.execute(
-                select(MediaItem.rating_key)
-                .where(
-                    MediaItem.title.is_not(None),
-                    MediaItem.file_checked_at.is_(None),
-                    MediaItem.media_type.in_(("movie", "episode")),
-                )
-                .limit(limit)
-            ).all()
-        ]
-    if not keys:
-        return 0
-
-    semaphore = asyncio.Semaphore(settings.metadata_concurrency)
-
-    async def fetch(rating_key: int) -> tuple[int, dict]:
-        async with semaphore:
-            try:
-                meta = await client.call("get_metadata", rating_key=rating_key) or {}
-            except Exception as exc:  # noqa: BLE001 - gone from Plex, or a blip
-                log.debug("file details unavailable for %s: %s", rating_key, exc)
-                meta = {}
-            return rating_key, file_details(meta)
-
-    results = await asyncio.gather(*(fetch(k) for k in keys))
-    with session_scope() as session:
-        for rating_key, details in results:
-            session.execute(update(MediaItem).where(MediaItem.rating_key == rating_key).values(**details))
-    found = sum(1 for _, d in results if d.get("file_bitrate") is not None)
-    log.info("file details: %d checked, %d with a file", len(results), found)
-    return len(results)
-
-
 # ---- orchestration ---------------------------------------------------------
 
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
@@ -661,7 +617,6 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)
     metadata = await cache_new_metadata(client, settings)
-    files = await backfill_file_details(client, settings)
     devices = refresh_devices()
 
     resolver = GeoResolver(settings.geoip_dir)
@@ -685,7 +640,6 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     result = {
         "history": history,
         "metadata": metadata,
-        "file_details": files,
         "devices": devices,
         "ips": ips,
         "travel_flags": flags,
