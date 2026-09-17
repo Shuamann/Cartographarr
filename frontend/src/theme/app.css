@@ -1176,7 +1176,7 @@ label.locked .pill {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-dim);
+  color: var(--ink-3);
 }
 .stream-detail .kv dd {
   margin: 2px 0 0;
@@ -1587,7 +1587,7 @@ label.locked .pill {
   justify-self: end;
 }
 .log-caret {
-  color: var(--ink-dim);
+  color: var(--ink-3);
 }
 .log-detail {
   display: flex;
@@ -1614,7 +1614,7 @@ label.locked .pill {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-dim);
+  color: var(--ink-3);
 }
 .log-detail .kv dd {
   margin: 2px 0 0;
@@ -1723,7 +1723,7 @@ label.locked .pill {
   font-size: 13px;
 }
 .spec dt {
-  color: var(--ink-dim);
+  color: var(--ink-3);
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.06em;
@@ -1963,7 +1963,7 @@ label.locked .pill {
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: var(--ink-dim);
+  color: var(--ink-3);
   font: inherit;
   cursor: pointer;
 }
