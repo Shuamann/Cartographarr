@@ -136,6 +136,30 @@ app = FastAPI(
     redoc_url="/redoc" if _docs else None,
     openapi_url="/openapi.json" if _docs else None,
 )
+
+
+@app.middleware("http")
+async def refuse_cross_site_writes(request, call_next):
+    """No other website can make a signed-in browser change anything here.
+
+    The session cookie is SameSite=Lax and writes only take JSON, which covers
+    most of it. Reverse proxy sign-in is the gap: the proxy's own login rides
+    along on any request. Browsers mark a request another site started with
+    Sec-Fetch-Site: cross-site, which a page cannot forge and proxies pass
+    through untouched, so writes marked that way are refused. Host headers are
+    not compared, since proxies rewrite them.
+    """
+    if (
+        request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and request.url.path.startswith("/api/")
+        and request.headers.get("sec-fetch-site", "").lower() == "cross-site"
+    ):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"detail": "Refused a change requested by another website"}, status_code=403)
+    return await call_next(request)
+
+
 # Auth carries its own guards: /state, /claim and /login have to be reachable
 # before anyone is signed in.
 app.include_router(auth.router)

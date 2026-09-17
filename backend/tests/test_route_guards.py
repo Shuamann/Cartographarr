@@ -81,3 +81,15 @@ def test_viewers_cannot_reach_admin_routes(client):
 def test_api_docs_are_not_public(client):
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404, path
+
+
+def test_cross_site_writes_are_refused(client):
+    claim(client)
+    res = client.post("/api/bans", json={"machine_id": "x"}, headers={"Sec-Fetch-Site": "cross-site"})
+    assert res.status_code == 403
+    assert client.get("/api/bans").json() == []
+    # The app's own page, and tools that send no such header, still work.
+    assert client.post("/api/bans", json={"machine_id": "x"}, headers={"Sec-Fetch-Site": "same-origin"}).status_code == 200
+    assert client.request("DELETE", "/api/bans/x").status_code == 200
+    # Reading is unaffected.
+    assert client.get("/api/bans", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 200
