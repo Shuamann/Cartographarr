@@ -398,6 +398,13 @@ function MapCanvas({
 
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     m.on("load", () => setReady(true));
+    // Off unless localStorage has debug.map set: lets a browser test reach the
+    // map to compare where a pin is drawn with where it answers the pointer.
+    try {
+      if (localStorage.getItem("debug.map")) (window as unknown as { __map?: maplibregl.Map }).__map = m;
+    } catch {
+      /* storage unavailable */
+    }
     // MapLibre swallows style and tile failures by default, which turns a bad
     // source into a blank rectangle with no explanation.
     m.on("error", (e) => {
