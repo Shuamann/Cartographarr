@@ -172,6 +172,11 @@ class Settings(BaseSettings):
     """What viewer accounts can see: `all` of the server, only their `own`
     data, or everything with other people `anonymised`. Admins see all."""
 
+    allow_framing: bool = False
+    """Let other pages show Cartographarr inside a frame, for dashboards such as
+    Organizr or Homarr. Off, only Cartographarr itself may frame it, which stops
+    another site tricking a click on Ban or Unshare."""
+
     plex_signin_enabled: bool = False
     """Offer "Sign in with Plex" on the sign-in page. A Plex account signs in as
     the Cartographarr account linked to it, or a viewer account with the same

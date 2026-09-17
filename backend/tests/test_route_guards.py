@@ -115,3 +115,11 @@ def test_branding_uploads_are_checked_and_sandboxed(client):
     served = client.get("/api/branding/logo")
     assert "sandbox" in served.headers["Content-Security-Policy"]
     client.delete("/api/branding/logo")
+
+
+
+def test_framing_can_be_allowed_in_settings(client):
+    claim(client)
+    assert client.get("/health").headers.get("X-Frame-Options") == "SAMEORIGIN"
+    client.put("/api/settings", json={"allow_framing": True})
+    assert "X-Frame-Options" not in client.get("/health").headers

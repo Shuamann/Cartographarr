@@ -92,7 +92,7 @@ out and the UI owns it.
 | `ENFORCE_ENABLED`, `ENFORCE_DRY_RUN` | Whether rules run; `ENFORCE_DRY_RUN=true` locks every rule to record only |
 | `UPLOAD_CAPACITY_MBPS` | Your upload, for stall causes and the upload alert |
 | `API_DOCS` | `true` turns on /docs and /openapi.json, off by default |
-| `ALLOW_FRAMING` | `true` lets dashboards such as Organizr show Cartographarr in a frame |
+| `ALLOW_FRAMING` | `true` lets dashboards such as Organizr show Cartographarr in a frame (also in Settings, Access) |
 
 ## Signing in with Plex
 

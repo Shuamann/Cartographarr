@@ -178,6 +178,11 @@ const AREAS: Area[] = [
         keys: ["viewer_privacy"],
       },
       {
+        title: "Showing inside other dashboards",
+        note: "Turn this on if you open Cartographarr inside Organizr, Homarr or another dashboard that shows apps in a frame; otherwise it shows blank there. Off, no other site can put Cartographarr in a frame, which stops a hidden page tricking a click on Ban or Unshare.",
+        keys: ["allow_framing"],
+      },
+      {
         title: "Plex sign in",
         note: "Adds Sign in with Plex to the sign-in page. A Plex account signs in as the Cartographarr account linked to it under Accounts, or a viewer account with the same email. Usernames are never matched, and an admin account must be linked to its Plex account first. With new viewers allowed, anyone the server is shared with gets a viewer account the first time they sign in. Nobody becomes an admin through Plex, and Cartographarr does not keep their Plex token.",
         keys: ["plex_signin_enabled", "plex_signin_new_viewers"],
@@ -256,6 +261,7 @@ const LABELS: Record<string, string> = {
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes (%)",
   auth_proxy_enabled: "Trust a reverse proxy",
+  allow_framing: "Allow showing inside other dashboards",
   plex_signin_enabled: "Offer Sign in with Plex",
   plex_signin_new_viewers: "Let people you share with sign in as viewers",
   trusted_proxy_ips: "Trusted proxy addresses",
