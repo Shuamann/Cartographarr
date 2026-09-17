@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.redact import redact
 
 
 class TautulliError(RuntimeError):
@@ -63,8 +64,14 @@ class TautulliClient:
         query.update(apikey=self._api_key, cmd=cmd, out_type="json")
 
         kwargs = {"timeout": timeout} if timeout is not None else {}
-        resp = await self._client.get(base, params=query, **kwargs)
-        resp.raise_for_status()
+        try:
+            resp = await self._client.get(base, params=query, **kwargs)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # The request URL carries the API key, and so does httpx's message.
+            raise TautulliError(f"{cmd}: Tautulli answered {exc.response.status_code}") from None
+        except httpx.HTTPError as exc:
+            raise TautulliError(f"{cmd}: {type(exc).__name__} {redact(exc)}".strip()) from None
 
         response = resp.json().get("response") or {}
         if response.get("result") != "success":

@@ -20,6 +20,7 @@ import logging
 from typing import Any
 
 from app.settings_store import current
+from app.redact import redact
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ def status() -> dict:
         server = _server(account)
         return {"ok": True, "detail": f"Signed in as {account.username}", "server": server.name}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "detail": str(exc)}
+        return {"ok": False, "detail": redact(exc)}
 
 
 def list_shares() -> list[dict]:

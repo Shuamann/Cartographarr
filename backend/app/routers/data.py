@@ -37,6 +37,7 @@ def get_session():
 Db = Annotated[Session, Depends(get_session)]
 from app import privacy
 from app.privacy import ScopedFilt, ViewerScope
+from app.redact import redact
 
 # Filters narrowed to what the signed-in viewer may see (app/privacy.py).
 Filt = ScopedFilt
@@ -213,7 +214,7 @@ async def history_detail(row_id: int, db: Db, scope: ViewerScope) -> dict:
         base["stream"] = await client.call("get_stream_data", row_id=row_id)
     except Exception as exc:  # noqa: BLE001 - detail is a bonus, not the row
         base["stream"] = None
-        base["stream_error"] = str(exc)
+        base["stream_error"] = redact(exc)
     finally:
         await client.aclose()
     return base
@@ -328,7 +329,7 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
             upstream = await client.get(f"{base}/api/v2", params=params)
             upstream.raise_for_status()
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(502, f"Could not fetch artwork: {exc}") from exc
+            raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
 
     return Response(
         content=upstream.content,
@@ -649,8 +650,8 @@ async def restore_in_tautulli(user_id: int, admin: AdminUser, db: Db) -> dict:
         after = await client.call("get_user", user_id=user_id) or {}
     except Exception as exc:  # noqa: BLE001
         audit.record(admin, "user.restore", f"Tried to restore {name} in Tautulli",
-                     target=str(user_id), result=f"failed: {exc}")
-        raise HTTPException(502, f"Tautulli refused: {exc}") from exc
+                     target=str(user_id), result=f"failed: {redact(exc)}")
+        raise HTTPException(502, f"Tautulli refused: {redact(exc)}") from exc
     finally:
         await client.aclose()
 

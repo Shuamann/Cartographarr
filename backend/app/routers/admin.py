@@ -23,6 +23,7 @@ from app.settings_store import (
     save,
 )
 from app.tautulli.client import TautulliClient
+from app.redact import redact
 
 router = APIRouter(prefix="/api")
 
@@ -87,7 +88,7 @@ async def test_tautulli(
                 "version": info.get("pms_version"),
             }
         except Exception as exc:  # noqa: BLE001 - the failure IS the answer here
-            return {"tried": True, "ok": False, "error": str(exc)}
+            return {"tried": True, "ok": False, "error": redact(exc)}
         finally:
             await client.aclose()
 
@@ -111,7 +112,7 @@ def test_maxmind(
             settings.geoip_dir, maxmind_account_id, maxmind_license_key, max_age_days=0
         )
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": redact(exc)}
 
     ready = (settings.geoip_dir / "city.mmdb").exists()
     return {
@@ -136,7 +137,7 @@ def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[d
     try:
         save(values)
     except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(400, redact(exc)) from exc
 
     changes = {
         key: (

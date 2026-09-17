@@ -47,6 +47,7 @@ log = logging.getLogger(__name__)
 
 from app import privacy
 from app.privacy import ScopedFilt, ViewerScope
+from app.redact import redact
 
 Filt = ScopedFilt
 
@@ -111,7 +112,7 @@ async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
     try:
         data = await client.call("get_activity") or {}
     except Exception as exc:  # noqa: BLE001
-        return {"stream_count": 0, "sessions": [], "error": str(exc)}
+        return {"stream_count": 0, "sessions": [], "error": redact(exc)}
     finally:
         await client.aclose()
 
@@ -184,7 +185,7 @@ async def terminate(
     try:
         result = await action.execute({"session_key": session_key}, {"message": message})
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"Plex refused: {exc}") from exc
+        raise HTTPException(502, f"Plex refused: {redact(exc)}") from exc
 
     with session_scope() as db:
         db.add(
@@ -324,7 +325,7 @@ def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, A
         try:
             tree = cond.validate(tree)
         except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
+            raise HTTPException(400, redact(exc)) from exc
         if not cond.count(tree):
             raise HTTPException(400, "Add at least one condition. An empty rule would match every stream.")
         payload["conditions"] = json.dumps(tree)
@@ -770,7 +771,7 @@ async def preview_rule(_: AdminUser, conditions: dict[str, Any] = Body(..., embe
     try:
         tree = cond.validate(conditions)
     except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(400, redact(exc)) from exc
 
     missing = enforcer.unmet_requirements(tree)
     sessions, context, error = await enforcer.live_context()
@@ -831,7 +832,7 @@ async def _tautulli_health() -> Health:
     try:
         info = await client.call("get_server_info") or {}
     except Exception as exc:  # noqa: BLE001 - the failure is the answer
-        return Health(False, str(exc))
+        return Health(False, redact(exc))
     finally:
         await client.aclose()
     name = info.get("pms_name")
@@ -866,7 +867,7 @@ async def _maxmind_health() -> Health:
             max_age_days=0,
         )
     except Exception as exc:  # noqa: BLE001
-        return Health(False, str(exc))
+        return Health(False, redact(exc))
     if not (settings.geoip_dir / "city.mmdb").exists():
         return Health(False, "Download failed. A new key can take a few minutes to work.")
     return Health(True, "Databases downloaded")
@@ -920,7 +921,7 @@ async def test_integration(
         with trial(values):
             health = await check()
     except ValueError as exc:  # a value on the page that does not parse
-        raise HTTPException(400, str(exc)) from exc
+        raise HTTPException(400, redact(exc)) from exc
     return {"ok": health.ok, "detail": health.detail, "version": health.version}
 
 

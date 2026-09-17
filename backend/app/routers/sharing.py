@@ -17,6 +17,7 @@ from app import audit
 from app.db import session_scope
 from app.models import AuditLog
 from app.plex import sharing
+from app.redact import redact
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def list_servers(_: AdminUser, values: dict = Body(default_factory=dict, e
         try:
             return {"servers": await sharing.run(sharing.servers), "error": None}
         except Exception as exc:  # noqa: BLE001 - the failure is the answer
-            text = str(exc)
+            text = redact(exc)
             if "401" in text or "Unauthorized" in text:
                 text = "Plex rejected that token"
             return {"servers": [], "error": text}
@@ -62,7 +63,7 @@ async def list_shares(_: AdminUser) -> dict:
         users = await sharing.run(sharing.list_shares)
         sections = await sharing.run(sharing.all_sections)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"Plex said: {exc}") from exc
+        raise HTTPException(502, f"Plex said: {redact(exc)}") from exc
     return {"configured": True, "users": users, "sections": sections}
 
 
@@ -77,9 +78,9 @@ async def set_sections(
     except Exception as exc:  # noqa: BLE001
         audit.record(
             admin, "sharing.sections", f"Tried to change {username}'s libraries",
-            target=username, detail={"sections": sections}, result=f"failed: {exc}",
+            target=username, detail={"sections": sections}, result=f"failed: {redact(exc)}",
         )
-        raise HTTPException(502, f"Plex refused: {exc}") from exc
+        raise HTTPException(502, f"Plex refused: {redact(exc)}") from exc
 
     audit.record(
         admin, "sharing.sections",
@@ -107,9 +108,9 @@ async def unshare(username: str, admin: AdminUser, confirm: str = Body(..., embe
     except Exception as exc:  # noqa: BLE001
         audit.record(
             admin, "sharing.unshare", f"Tried to stop sharing with {username}",
-            target=username, detail={"before": before}, result=f"failed: {exc}",
+            target=username, detail={"before": before}, result=f"failed: {redact(exc)}",
         )
-        raise HTTPException(502, f"Plex refused: {exc}") from exc
+        raise HTTPException(502, f"Plex refused: {redact(exc)}") from exc
 
     audit.record(
         admin, "sharing.unshare", f"Stopped sharing with {username}",

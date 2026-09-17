@@ -24,6 +24,7 @@ from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, T
 from app.services import conditions, tracker
 from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
+from app.redact import redact
 
 log = logging.getLogger(__name__)
 
@@ -223,7 +224,7 @@ async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str 
     try:
         activity = await client.call("get_activity") or {}
     except Exception as exc:  # noqa: BLE001
-        return [], {}, str(exc)
+        return [], {}, redact(exc)
     finally:
         await client.aclose()
     sessions: list[Session] = activity.get("sessions") or []
@@ -513,7 +514,7 @@ async def run_once() -> dict[str, Any]:
                     results.append(await spec.execute(session, step.get("params") or {}))
                     acted += 1
                 except Exception as exc:  # noqa: BLE001 - one failure mustn't stop the sweep
-                    results.append(f"{spec.name} failed: {exc}")
+                    results.append(f"{spec.name} failed: {redact(exc)}")
                     log.warning("action %s failed: %s", spec.name, exc)
             _record(rule, session, False, "; ".join(results))
             if not any(spec.name == "terminate" for _, spec in specs):

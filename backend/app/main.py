@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
+from app import redact
 from app.routers import admin, auth, branding, data, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
@@ -68,6 +69,7 @@ async def _slow_cycle() -> None:
 async def lifespan(app: FastAPI):
     settings = current()
     logging.basicConfig(level=settings.log_level, format="%(levelname)s %(name)s: %(message)s")
+    redact.install()
     init_db()
     ensure_databases(
         settings.geoip_dir,

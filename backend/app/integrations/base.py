@@ -13,6 +13,8 @@ from typing import Protocol
 
 import httpx
 
+from app.redact import redact
+
 log = logging.getLogger(__name__)
 
 
@@ -58,4 +60,4 @@ def describe_failure(exc: Exception) -> str:
         return "Could not connect. Check the address and that it is running."
     if isinstance(exc, httpx.TimeoutException):
         return "Timed out"
-    return str(exc)
+    return redact(exc)

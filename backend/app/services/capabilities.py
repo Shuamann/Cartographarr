@@ -20,6 +20,7 @@ from app.db import session_scope
 from app.models import SyncState
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
+from app.redact import redact
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ async def refresh() -> dict[str, Any]:
                 machine_identifier=info.get("pms_identifier"),
             )
         except Exception as exc:  # noqa: BLE001 - unknown is a valid answer
-            result["error"] = str(exc)
+            result["error"] = redact(exc)
             log.warning("capability probe failed: %s", exc)
         finally:
             await client.aclose()

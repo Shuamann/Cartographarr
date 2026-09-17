@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.db import session_scope
+from app.redact import redact
 from app.models import AppUser, AuditLog
 
 log = logging.getLogger(__name__)
@@ -46,9 +47,9 @@ def record(
                     actor=actor or (who.username if who else None),
                     action=action,
                     target=target,
-                    summary=summary,
+                    summary=redact(summary),
                     payload=json.dumps(detail, default=str) if detail else None,
-                    result=result,
+                    result=redact(result),
                     created_at=datetime.now(UTC),
                 )
             )
