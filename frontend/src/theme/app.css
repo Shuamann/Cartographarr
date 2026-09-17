@@ -2323,6 +2323,33 @@ label.locked .pill {
   }
 }
 
+.dialog {
+  width: min(440px, calc(100% - 32px));
+  padding: 20px 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+.dialog h2 {
+  margin-bottom: 6px;
+  font-size: 17px;
+}
+.dialog select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+.dialog-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 .ban-add {
   margin: 10px 0 12px;
   padding: 12px;

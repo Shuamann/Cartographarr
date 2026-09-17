@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import MultiSelect from "../components/MultiSelect";
-import { ban, banEnds, setBanReason, useBans } from "../lib/bans";
+import { BAN_LENGTHS as LENGTHS, ban, banEnds, setBanReason, useBans } from "../lib/bans";
 import { useNav } from "../lib/nav";
 import {
   api,
@@ -395,14 +395,6 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
     </div>
   );
 }
-
-const LENGTHS = [
-  { hours: 0, label: "Permanently" },
-  { hours: 1, label: "1 hour" },
-  { hours: 24, label: "1 day" },
-  { hours: 24 * 7, label: "1 week" },
-  { hours: 24 * 30, label: "30 days" },
-];
 
 /* Ban a device from the ban list itself: find it by name, owner or id, give
  * a reason for the log, ban. */

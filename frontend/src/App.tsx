@@ -1,3 +1,4 @@
+import BanDialog, { type BanRequest } from "./components/BanDialog";
 import Loading from "./components/Loading";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
@@ -22,7 +23,7 @@ import Sharing from "./routes/Sharing";
 import type { LiveSession } from "./lib/api";
 import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext } from "./lib/nav";
-import { ban, unban } from "./lib/bans";
+import { unban } from "./lib/bans";
 
 import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
 
@@ -147,21 +148,10 @@ function SignedIn({
   // Banning adds the device to one managed list, which the enforcer treats as
   // a rule of its own. It used to open a new rule per device, which filled the
   // Rules page with one-device rules.
-  async function banMachine(machineId: string, label: string): Promise<boolean> {
-    const reason = window.prompt(
-      `Ban ${label}?\n\nAny stream from this device will be stopped while rules are on ` +
-        `(or only recorded, if the ban list is set to record only on the Rules page). You can unban it from People.\n\n` +
-        `Reason, for the log (optional):`,
-      "",
-    );
-    if (reason === null) return false;
-    try {
-      await ban(machineId, reason);
-      return true;
-    } catch (err) {
-      window.alert((err as Error).message);
-      return false;
-    }
+  // The Ban dialog, open while a request waits for its answer.
+  const [banRequest, setBanRequest] = useState<BanRequest | null>(null);
+  function banMachine(machineId: string, label: string): Promise<boolean> {
+    return new Promise((resolve) => setBanRequest({ machineId, label, resolve }));
   }
 
   async function unbanMachine(machineId: string, label: string): Promise<boolean> {
@@ -207,6 +197,7 @@ function SignedIn({
         }}
       >
       <div className="app">
+        <BanDialog request={banRequest} onClose={() => setBanRequest(null)} />
         <header className="topbar">
           <Brand />
           <nav>

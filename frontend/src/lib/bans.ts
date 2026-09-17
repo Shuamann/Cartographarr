@@ -41,6 +41,15 @@ export async function ban(machineId: string, reason: string, hours?: number | nu
   window.dispatchEvent(new Event(CHANGED));
 }
 
+/* How long a ban can last. Zero is permanent. */
+export const BAN_LENGTHS = [
+  { hours: 0, label: "Permanently" },
+  { hours: 1, label: "1 hour" },
+  { hours: 24, label: "1 day" },
+  { hours: 24 * 7, label: "1 week" },
+  { hours: 24 * 30, label: "30 days" },
+];
+
 /* When a timed ban ends, as a local date and time, or null if permanent.
  * Stored as UTC without a zone marker. */
 export function banEnds(b: { expires_at: string | null } | undefined): string | null {
