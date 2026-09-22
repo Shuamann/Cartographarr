@@ -310,6 +310,19 @@ card. Nothing is written back to Seerr yet.
 
 Reports on an episode land on the episode's own file, not the show.
 
+## Storage
+
+A Plex library can span more than one place: an array share and a network SSD,
+say. **Library, Storage** reads the mount each file sits on from the path Plex
+reports, and shows what each one holds and how watching from it goes: size,
+average bitrate, plays, how many transcoded, and stalls per 100 plays. When one
+store stalls far more than the rest, it says so.
+
+Give two mounts the same name and they count as one store, which is how several
+shares off one box read together. Where several libraries share a mount
+(`/mnt/user/movies`, `/mnt/user/tv`), raise **library_store_depth** so the name
+goes deeper than the first part of the path.
+
 ## Access review
 
 The **Sharing** tab has two views. **Who has access** comes from Plex and can

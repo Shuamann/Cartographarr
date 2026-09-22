@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException, Query
 from sqlalchemy import case, func, select
 
+from app import audit
 from app.auth.deps import AdminUser
 from app.models import History, MediaItem, StreamEvent, StreamSession
 from app.routers.data import Db
@@ -133,9 +134,12 @@ def _file_payload(rating_key: int, days: int) -> dict | None:
                 .limit(3)
             ).all()
         ]
+        from app.services import stores as store_service
+
         return {
             **library.describe_file(item),
             "media_type": item.media_type,
+            "store": store_service.name_for(item.file_path),
             "plays": int(stats.get("plays") or 0),
             "remote_plays": int(stats.get("remote") or 0),
             "transcodes": int(stats.get("transcodes") or 0),
@@ -173,6 +177,31 @@ async def _causes_from_history(row_ids: list[int]) -> list[dict]:
     finally:
         await client.aclose()
     return [{"cause": c, "streams": n, "from_history": True} for c, n in counts.items()]
+
+
+@router.get("/stores")
+async def stores(_: AdminUser, days: int = Query(30, ge=1, le=3650)) -> dict:
+    """Each storage mount: what it holds, and what goes wrong watching from it."""
+    import asyncio
+
+    from app.services import stores as store_service
+
+    return await asyncio.to_thread(store_service.summary, days)
+
+
+@router.put("/stores/{prefix:path}")
+def name_store(prefix: str, admin: AdminUser, label: str = Body("", embed=True)) -> dict:
+    """Name a mount. Two mounts with the same name are one store, which is how
+    several shares off one box are read together."""
+    from app.services import stores as store_service
+
+    prefix = "/" + prefix.strip("/")
+    known = {root for store in store_service.summary(1)["stores"] for root in store["roots"]}
+    if prefix not in known:
+        raise HTTPException(404, "No files are stored there")
+    store_service.rename(prefix, label.strip())
+    audit.record(admin, "library.store", f"Called {prefix} {label.strip() or prefix}", target=prefix)
+    return {"prefix": prefix, "label": label.strip()}
 
 
 @router.get("/file/{rating_key}")

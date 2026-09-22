@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     lets Cartographarr warn when it is nearly full. 0 uses the Internet upload
     speed set in Plex (Settings, Remote Access), read every hour."""
 
+    library_store_depth: int = 1
+    """How much of a file path names its storage. Plex usually reports a mount
+    per library, so one part (/movies, /tv) is right. Raise it where several
+    libraries share a mount (/mnt/user/movies, /mnt/user/tv)."""
+
     library_bitrate_threshold_mbps: float = 20
     """Library health lists files above this average bitrate that are watched
     remotely. Set it near what one remote stream can comfortably use."""

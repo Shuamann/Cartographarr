@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.8.0 - 2026-09-22
+
+### Added
+- Storage, under Library: which mount each file sits on, read from the paths Plex reports, with size, average bitrate,
+  plays, transcodes and stalls per 100 plays for each. Give two mounts the same name and they count as one store, so
+  several shares off one box read together. The file card says where a file lives
+
+### Changed
+- Tests no longer read the .env file sitting next to the code, so a developer's real addresses and keys stay out of
+  the suite. It also stopped every test waiting three seconds on a LAN Tautulli it could not reach: 235 tests now run
+  in 2 minutes 18 rather than 9 minutes 48
+
 ## 0.7.0 - 2026-09-21
 
 ### Added

@@ -109,6 +109,7 @@ type RequestRow = {
 };
 
 export type FileDetail = FileInfo & {
+  store?: string | null;
   findings: Finding[];
   arr: { name: string; label: string; configured: boolean };
   plays: number;
@@ -127,6 +128,7 @@ const SECTIONS = [
   { id: "transcodes", title: "Why streams transcode" },
   { id: "messy", title: "Messy files" },
   { id: "four-k", title: "4K copies" },
+  { id: "storage", title: "Storage" },
   { id: "requests", title: "Requested, never watched" },
   { id: "replacements", title: "Replacements" },
 ] as const;
@@ -242,6 +244,7 @@ export default function Library() {
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "messy" && <MessyFiles days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
+        {section === "storage" && <StorageSection days={days} />}
         {section === "requests" && <Requests />}
         {section === "replacements" && <Replacements />}
       </div>
@@ -640,6 +643,12 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
           <dt>Format</dt>
           <dd>{format(f) || "Not checked yet"}</dd>
         </div>
+        {f.store && (
+          <div>
+            <dt>Stored on</dt>
+            <dd>{f.store}</dd>
+          </div>
+        )}
         <div>
           <dt>Bitrate and size</dt>
           <dd>{[mbps(f.file_bitrate), size(f.file_size), f.versions && f.versions > 1 ? `${f.versions} versions` : null].filter(Boolean).join(" · ")}</dd>
@@ -1349,5 +1358,129 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
       )}
       {error && <p className="note bad-note">{error}</p>}
     </div>
+  );
+}
+
+
+/* Storage: which mount each file sits on, and how watching from it goes.
+ *
+ * A library can span an array share and a network SSD, and until now nothing
+ * here knew the difference, so a file that stalls could not be traced to the
+ * box it lives on. Mounts are read from the file paths, and two mounts given
+ * the same name are treated as one store, which is how several shares off one
+ * NAS read together. */
+type Store = {
+  store: string;
+  roots: string[];
+  files: number;
+  size: number;
+  plays: number;
+  remote_plays: number;
+  transcodes: number;
+  stalls: number;
+  average_bitrate: number | null;
+  stalls_per_100: number | null;
+  transcode_percent: number | null;
+};
+
+function StorageSection({ days }: { days: number }) {
+  const data = useApi<{ stores: Store[]; days: number; depth: number }>(`/library/stores?days=${days}`, [days]);
+  const [naming, setNaming] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(store: Store) {
+    setError(null);
+    try {
+      // Every mount in this store takes the name, so they stay together.
+      await Promise.all(store.roots.map((root) => api.put(`/library/stores${root}`, { label: name })));
+      setNaming(null);
+      data.reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (!data.data) return <Loading label="Reading storage" />;
+  const stores = data.data.stores;
+  // Worth saying only when one store is clearly worse than the rest put
+  // together, and only where enough has been watched from it to mean anything.
+  const used = stores.filter((s) => s.plays >= 20);
+  const worst = [...used].sort((x, y) => (y.stalls_per_100 ?? 0) - (x.stalls_per_100 ?? 0))[0];
+  const others = used.filter((s) => s !== worst);
+  const elsewhere = others.reduce((sum, s) => sum + s.stalls, 0);
+  const elsewherePlays = others.reduce((sum, s) => sum + s.plays, 0);
+  const elsewhereRate = elsewherePlays ? Math.round((elsewhere / elsewherePlays) * 1000) / 10 : null;
+
+  return (
+    <>
+      <p className="muted">
+        Where each file is, read from the paths Plex reports. Give two mounts the same name and they count as one
+        store, which is how several shares off one box read together.
+      </p>
+      {error && <p className="note bad-note">{error}</p>}
+      {worst && elsewhereRate != null && (worst.stalls_per_100 ?? 0) > elsewhereRate * 2 && (
+        <p className="note">
+          Watching from <strong>{worst.store}</strong> stalls {worst.stalls_per_100} times per 100 plays, against{" "}
+          {elsewhereRate} everywhere else. Worth a look at that storage before blaming the files on it.
+        </p>
+      )}
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Store</th>
+            <th className="num">Files</th>
+            <th className="num">Size</th>
+            <th className="num">Average bitrate</th>
+            <th className="num">Plays, {days} days</th>
+            <th className="num">Transcoded</th>
+            <th className="num">Stalls per 100</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {stores.map((s) => (
+            <tr key={s.store}>
+              <td>
+                {naming === s.store ? (
+                  <span className="row">
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Array, SSD NAS" />
+                    <button className="btn" onClick={() => save(s)}>
+                      Save
+                    </button>
+                  </span>
+                ) : (
+                  <>
+                    <strong>{s.store}</strong>
+                    <div className="muted small">{s.roots.join(", ")}</div>
+                  </>
+                )}
+              </td>
+              <td className="num">{s.files.toLocaleString()}</td>
+              <td className="num">{size(s.size)}</td>
+              <td className="num">{mbps(s.average_bitrate)}</td>
+              <td className="num">
+                {s.plays.toLocaleString()}
+                {s.plays > 0 && <div className="muted small">{s.remote_plays} remote</div>}
+              </td>
+              <td className="num">{s.transcode_percent == null ? "" : `${s.transcode_percent}%`}</td>
+              <td className="num">{s.stalls_per_100 == null ? "" : s.stalls_per_100}</td>
+              <td>
+                <button
+                  className="tab"
+                  onClick={() => {
+                    setNaming(naming === s.store ? null : s.store);
+                    setName(s.store.startsWith("/") ? "" : s.store);
+                  }}
+                >
+                  {naming === s.store ? "Cancel" : "Name"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }

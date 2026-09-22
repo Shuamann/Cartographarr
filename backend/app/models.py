@@ -762,3 +762,16 @@ class HomeLink(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     custom: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class LibraryStore(Base):
+    """A name for one storage mount, so several mounts on one box read as one.
+
+    Only names live here. Which mounts exist is worked out from the file paths
+    each time. See services/stores.py.
+    """
+
+    __tablename__ = "library_stores"
+
+    prefix: Mapped[str] = mapped_column(String(255), primary_key=True)
+    label: Mapped[str | None] = mapped_column(String(64))
