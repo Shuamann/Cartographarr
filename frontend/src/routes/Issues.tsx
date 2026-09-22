@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Loading from "../components/Loading";
-import { useApi } from "../lib/api";
+import { api, useApi } from "../lib/api";
 import { FileCardView, type FileDetail } from "./Library";
 import { useNav } from "../lib/nav";
 
@@ -81,6 +81,7 @@ export default function Issues() {
   const [status, setStatus] = useState<"open" | "resolved" | "all">("open");
   const [type, setType] = useState<string>("");
   const [open, setOpen] = useState<number | null>(null);
+  const [raising, setRaising] = useState(false);
   const query = `/issues?status=${status}${type ? `&issue_type=${type}` : ""}`;
   const data = useApi<Listing>(query, [status, type]);
 
@@ -93,6 +94,9 @@ export default function Issues() {
       <div className="row-between">
         <h1>Issues</h1>
         <div className="row">
+          <button className="btn" onClick={() => setRaising(!raising)}>
+            {raising ? "Cancel" : "Raise an issue"}
+          </button>
           <div className="segmented">
             {(["open", "resolved", "all"] as const).map((s) => (
               <button key={s} className={status === s ? "seg on" : "seg"} onClick={() => setStatus(s)}>
@@ -113,9 +117,20 @@ export default function Issues() {
       </div>
 
       <p className="muted">
-        What people reported, with the file, the plays behind it and what went wrong during them. Reports are read from
-        Seerr every five minutes.
+        What people reported, with the file, the plays behind it and what went wrong during them. Issues are kept here,
+        and anything reported in Seerr is read in every five minutes.
       </p>
+
+      {raising && (
+        <RaiseIssue
+          onDone={(id) => {
+            setRaising(false);
+            data.reload();
+            setStatus("open");
+            setOpen(id);
+          }}
+        />
+      )}
 
       {d.items.length === 0 && (
         <p className="note">
@@ -138,7 +153,7 @@ export default function Issues() {
               <span className="muted small">{i.reporter_name ?? "Someone"}</span>
               <span className="muted small">{when(i.created_at)}</span>
             </button>
-            {open === i.id && <IssueCard id={i.id} seerrUrl={d.seerr_url} />}
+            {open === i.id && <IssueCard id={i.id} seerrUrl={d.seerr_url} onChanged={data.reload} />}
           </div>
         ))}
       </div>
@@ -146,13 +161,32 @@ export default function Issues() {
   );
 }
 
-function IssueCard({ id, seerrUrl }: { id: number; seerrUrl: string | null }) {
+function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string | null; onChanged: () => void }) {
   const nav = useNav();
   const detail = useApi<IssueDetail>(`/issues/${id}`);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function act(run: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await run();
+      detail.reload();
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (detail.error) return <p className="note bad-note">{detail.error}</p>;
   if (!detail.data) return <Loading compact label="Reading the report" />;
   const d = detail.data;
   const mine = d.plays.filter((p) => p.mine);
+  const local = d.source === "local";
 
   return (
     <div className="issue-card">
@@ -174,6 +208,35 @@ function IssueCard({ id, seerrUrl }: { id: number; seerrUrl: string | null }) {
             </a>
           )}
         </p>
+        {error && <p className="note bad-note">{error}</p>}
+        {local ? (
+          <div className="row wrap">
+            <input
+              placeholder="Add a note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <button
+              className="btn"
+              disabled={busy || !note.trim()}
+              onClick={async () => {
+                await act(() => api.post(`/issues/${id}/comment`, { message: note }));
+                setNote("");
+              }}
+            >
+              Comment
+            </button>
+            <button
+              className="tab"
+              disabled={busy}
+              onClick={() => act(() => api.post(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" }))}
+            >
+              {d.status === "open" ? "Mark resolved" : "Reopen"}
+            </button>
+          </div>
+        ) : (
+          <p className="muted small">This one came from Seerr, so it is commented and closed there.</p>
+        )}
       </section>
 
       <section className="card-section">
@@ -224,5 +287,86 @@ function IssueCard({ id, seerrUrl }: { id: number; seerrUrl: string | null }) {
         )}
       </section>
     </div>
+  );
+}
+
+
+/* Report a problem from here. Issues live in this app, so they work whether or
+ * not Seerr is set up; Seerr is a second place they can come from. */
+function RaiseIssue({ onDone }: { onDone: (id: number) => void }) {
+  const [term, setTerm] = useState("");
+  const [picked, setPicked] = useState<{ rating_key: number; title: string } | null>(null);
+  const [kind, setKind] = useState("other");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const found = useApi<{ rating_key: number; title: string; year: number | null }[]>(
+    term.trim().length > 1 && !picked ? `/media/search?q=${encodeURIComponent(term.trim())}&limit=8` : null,
+    [term, picked],
+  );
+
+  return (
+    <section className="card-section">
+      <h3>Raise an issue</h3>
+      {error && <p className="note bad-note">{error}</p>}
+      {picked ? (
+        <p className="row">
+          <strong>{picked.title}</strong>
+          <button
+            className="tab"
+            onClick={() => {
+              setPicked(null);
+              setTerm("");
+            }}
+          >
+            Change
+          </button>
+        </p>
+      ) : (
+        <>
+          <input placeholder="Which title?" value={term} onChange={(e) => setTerm(e.target.value)} />
+          <div className="mini-list">
+            {(found.data ?? []).map((m) => (
+              <button
+                key={m.rating_key}
+                className="mini linkish"
+                onClick={() => setPicked({ rating_key: m.rating_key, title: m.title })}
+              >
+                {m.title}
+                {m.year ? ` (${m.year})` : ""}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="row wrap">
+        <select value={kind} onChange={(e) => setKind(e.target.value)}>
+          {Object.keys(TYPES).map((t) => (
+            <option key={t} value={t}>
+              {TYPES[t]}
+            </option>
+          ))}
+        </select>
+        <input placeholder="What is wrong?" value={message} onChange={(e) => setMessage(e.target.value)} />
+        <button
+          className="btn"
+          disabled={!picked || !message.trim()}
+          onClick={async () => {
+            setError(null);
+            try {
+              const made = await api.post<{ id: number }>("/issues", {
+                rating_key: picked!.rating_key,
+                issue_type: kind,
+                message,
+              });
+              onDone(made.id);
+            } catch (err) {
+              setError((err as Error).message);
+            }
+          }}
+        >
+          Report it
+        </button>
+      </div>
+    </section>
   );
 }

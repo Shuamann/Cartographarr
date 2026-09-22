@@ -444,6 +444,7 @@ def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
 
 
 BAN_RULE_NAME = "Banned devices"
+COUNTRY_RULE_NAME = "Blocked countries"
 
 
 def dry_run_locked() -> bool:
@@ -458,7 +459,12 @@ def record_only(rule: Rule) -> bool:
     if dry_run_locked():
         return True
     settings = current()
-    value = settings.ban_record_only if rule.id == 0 else rule.record_only
+    if rule.id == 0:
+        value = settings.ban_record_only
+    elif rule.id < 0:  # the country list
+        value = settings.geo_block_record_only
+    else:
+        value = rule.record_only
     return bool(settings.enforce_dry_run) if value is None else bool(value)
 
 
@@ -497,6 +503,61 @@ def ban_rule() -> Rule | None:
         ),
         actions=json.dumps([{"name": "terminate", "params": {"message": settings.ban_message}}]),
     )
+
+
+# What each mode does when a stream matches. Flag records it and nothing else,
+# which is where a country should usually start.
+COUNTRY_ACTIONS = {
+    "stop": "terminate",
+    "warn": "message_viewer",
+    "flag": "log_only",
+}
+
+
+def country_rules() -> list[Rule]:
+    """The country list as rules, one per mode, or none when nothing is listed.
+
+    Built fresh each sweep like the ban list, so blocking goes through the same
+    matching, cooldown, record only, requirement and logging path as any rule.
+    An allow list is the same thing inverted: anything not listed matches.
+    """
+    from app.models import BlockedCountry
+
+    with session_scope() as db:
+        listed = [(c.code.upper(), c.mode or "flag") for c in db.execute(select(BlockedCountry)).scalars() if c.code]
+    if not listed:
+        return []
+    settings = current()
+    message = settings.geo_block_message
+    out = []
+    if settings.geo_block_allow_list:
+        # Everywhere else, flagged. One rule, because an allow list has no
+        # per country mode to read.
+        modes = {"flag": [code for code, _ in listed]}
+        op = "none"
+    else:
+        modes = {}
+        for code, mode in listed:
+            modes.setdefault(mode if mode in COUNTRY_ACTIONS else "flag", []).append(code)
+        op = "any"
+    for index, (mode, codes) in enumerate(sorted(modes.items())):
+        action = COUNTRY_ACTIONS[mode]
+        params = {"message": message} if action in ("terminate", "message_viewer") else {}
+        out.append(Rule(
+            # Negative ids keep these apart from saved rules and from the ban
+            # list, and stay stable so cooldowns work.
+            id=-1 - index,
+            name=COUNTRY_RULE_NAME,
+            enabled=True,
+            action=action,
+            message=message,
+            conditions=json.dumps({
+                "type": "group", "op": "and",
+                "items": [{"type": "condition", "field": "country", "op": op, "value": codes}],
+            }),
+            actions=json.dumps([{"name": action, "params": params}]),
+        ))
+    return out
 
 
 def expire_bans() -> int:
@@ -539,10 +600,12 @@ async def run_once() -> dict[str, Any]:
         rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True)).order_by(Rule.id)).scalars())
         for rule in rules:
             db.expunge(rule)
-    # First, so a ban wins over any other rule that would also match.
+    # A ban wins over anything else that would match, then the country list,
+    # then saved rules: a place can stop a stream, but a banned device is the
+    # stronger statement.
     banned = ban_rule()
-    if banned is not None:
-        rules.insert(0, banned)
+    first = ([banned] if banned is not None else []) + country_rules()
+    rules = first + rules
     if not rules:
         return {"checked": len(sessions), "matched": 0, "acted": 0}
 

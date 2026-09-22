@@ -718,3 +718,23 @@ class Issue(Base):
     created_at: Mapped[datetime | None] = mapped_column()
     updated_at: Mapped[datetime | None] = mapped_column()
     synced_at: Mapped[datetime | None] = mapped_column()
+
+
+class BlockedCountry(Base):
+    """A country whose streams are flagged, warned or stopped.
+
+    The same idea as the ban list, by place rather than by device. Each entry
+    says what should happen, so somewhere worth watching can be flagged without
+    cutting anyone off. See services/enforcer.py, country_rules().
+    """
+
+    __tablename__ = "blocked_countries"
+
+    code: Mapped[str] = mapped_column(String(2), primary_key=True)
+    """Two letter country code, as GeoIP reports it."""
+    name: Mapped[str | None] = mapped_column(String(128))
+    mode: Mapped[str] = mapped_column(String(8), default="flag")
+    """flag, warn or stop."""
+    reason: Mapped[str | None] = mapped_column(Text)
+    blocked_by: Mapped[str | None] = mapped_column(String(64))
+    blocked_at: Mapped[datetime | None] = mapped_column()

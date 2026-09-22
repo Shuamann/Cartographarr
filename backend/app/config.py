@@ -114,6 +114,17 @@ class Settings(BaseSettings):
     """Shown to a banned device when its stream is stopped."""
 
     ban_record_only: bool | None = None
+
+    geo_block_message: str = "Streaming is not permitted from this location. Contact the server owner."
+    """Shown to a viewer whose country is set to warn or stop."""
+
+    geo_block_allow_list: bool = False
+    """Turn the country list around: anything NOT listed is flagged instead.
+    For a server meant to be watched from one or two countries only."""
+
+    geo_block_record_only: bool | None = None
+    """The country list's own record only switch. Unset follows the global dry
+    run, the same way the ban list does."""
     """The ban list's own record only switch. Unset means it follows the old
     global dry run setting, so upgrading changes nothing until someone chooses."""
 

@@ -3204,3 +3204,12 @@ label.locked .pill {
   height: 7px;
   background: var(--ink-3);
 }
+
+.add-country {
+  margin: 8px 0;
+}
+
+.add-country input {
+  min-width: 200px;
+  flex: 1;
+}

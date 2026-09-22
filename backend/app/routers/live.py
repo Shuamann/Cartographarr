@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
@@ -127,6 +128,22 @@ async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
         row.ip: row
         for row in db.execute(select(IpLocation).where(IpLocation.ip.in_(ips))).scalars()
     }
+    # Someone watching from an address history has never seen would otherwise
+    # sit off the map for the whole stream: the sync only geocodes addresses
+    # that have finished plays. Looking them up here is a local database read.
+    missing = ips - set(locations)
+    if missing:
+        from app.services.sync import geocode_ips
+
+        try:
+            if await asyncio.to_thread(geocode_ips, missing):
+                db.expire_all()
+                locations.update({
+                    row.ip: row
+                    for row in db.execute(select(IpLocation).where(IpLocation.ip.in_(missing))).scalars()
+                })
+        except Exception as exc:  # noqa: BLE001 - a missing location is not worth failing the page
+            log.debug("could not place live addresses: %s", redact(exc))
     for s in sessions:
         place = locations.get(s.get("ip_address"))
         s["geo"] = (
@@ -498,8 +515,6 @@ def ban_device(
     reason: str = Body("", embed=True),
     hours: float | None = Body(None, embed=True),
 ) -> dict:
-    from datetime import timedelta
-
     from app.models import BannedDevice
 
     machine_id = machine_id.strip()
@@ -576,6 +591,174 @@ def unban_device(machine_id: str, admin: AdminUser) -> dict:
         db.delete(ban)
     audit.record(admin, "device.unban", f"Unbanned {label}", target=machine_id)
     return {"machine_id": machine_id, "banned": False}
+
+
+# ---- blocked countries -----------------------------------------------------
+
+MODES = ("flag", "warn", "stop")
+
+
+def _country_row(row, counts: dict, acted: dict) -> dict:
+    played, last = counts.get(row.code.upper(), (0, None))
+    return {
+        "code": row.code.upper(),
+        "name": row.name,
+        "mode": row.mode,
+        "reason": row.reason,
+        "blocked_by": row.blocked_by,
+        "blocked_at": row.blocked_at.isoformat() if row.blocked_at else None,
+        "plays": played,
+        "last_play": last,
+        "acted": acted.get(row.code.upper(), 0),
+    }
+
+
+def _country_plays(db) -> dict[str, tuple[int, int | None]]:
+    """How much has been watched from each country, for the list and picker."""
+    return {
+        (code or "").upper(): (int(n or 0), last)
+        for code, n, last in db.execute(
+            select(IpLocation.country_code, func.count(), func.max(History.started))
+            .join(History, History.ip_address == IpLocation.ip)
+            .where(IpLocation.country_code.is_not(None))
+            .group_by(IpLocation.country_code)
+        ).all()
+    }
+
+
+@router.get("/geoblocks")
+def list_blocked_countries(db: Db, _: AdminUser) -> dict:
+    from app.models import BlockedCountry
+
+    rows = db.execute(select(BlockedCountry).order_by(BlockedCountry.code)).scalars().all()
+    counts = _country_plays(db)
+    acted: dict[str, int] = {}
+    settings = current()
+    return {
+        "items": [_country_row(r, counts, acted) for r in rows],
+        "allow_list": settings.geo_block_allow_list,
+        "message": settings.geo_block_message,
+        "record_only": enforcer.record_only(enforcer.Rule(id=-1, name=enforcer.COUNTRY_RULE_NAME)),
+        "dry_run_locked": enforcer.dry_run_locked(),
+    }
+
+
+@router.get("/geoblocks/countries")
+def countries_seen(db: Db, _: AdminUser) -> list[dict]:
+    """Every country anyone has played from, most watched first, for the picker."""
+    from app.models import BlockedCountry
+
+    blocked = {c.code.upper() for c in db.execute(select(BlockedCountry)).scalars()}
+    names = {
+        (code or "").upper(): name
+        for code, name in db.execute(
+            select(IpLocation.country_code, func.max(IpLocation.country)).group_by(IpLocation.country_code)
+        ).all()
+    }
+    out = [
+        {"code": code, "name": names.get(code) or code, "plays": played, "last_play": last, "blocked": code in blocked}
+        for code, (played, last) in _country_plays(db).items()
+        if code
+    ]
+    out.sort(key=lambda c: -c["plays"])
+    return out
+
+
+@router.post("/geoblocks")
+def block_country(
+    admin: AdminUser,
+    code: str = Body(..., embed=True),
+    mode: str = Body("flag", embed=True),
+    reason: str = Body("", embed=True),
+) -> dict:
+    from app.models import BlockedCountry
+
+    code = (code or "").strip().upper()
+    if len(code) != 2 or not code.isalpha():
+        raise HTTPException(400, "A country code is two letters, as the map shows it")
+    if mode not in MODES:
+        raise HTTPException(400, f"Mode should be one of {', '.join(MODES)}")
+    with session_scope() as db:
+        name = db.execute(
+            select(func.max(IpLocation.country)).where(func.upper(IpLocation.country_code) == code)
+        ).scalar()
+        db.merge(BlockedCountry(
+            code=code, name=name, mode=mode, reason=reason or None,
+            blocked_by=admin.username, blocked_at=datetime.now(UTC),
+        ))
+    audit.record(
+        admin, "country.block", f"Set {name or code} to {mode}", target=code,
+        detail={"mode": {"after": mode}, "reason": {"after": reason or None}},
+    )
+    with session_scope() as db:
+        return list_blocked_countries(db, admin)
+
+
+@router.delete("/geoblocks/{code}")
+def unblock_country(code: str, admin: AdminUser) -> dict:
+    from app.models import BlockedCountry
+
+    code = (code or "").strip().upper()
+    with session_scope() as db:
+        row = db.get(BlockedCountry, code)
+        if row is None:
+            raise HTTPException(404, "That country is not on the list")
+        name = row.name or code
+        db.delete(row)
+    audit.record(admin, "country.unblock", f"Removed {name} from the country list", target=code)
+    return {"code": code, "blocked": False}
+
+
+@router.put("/geoblocks/settings")
+def set_country_settings(
+    admin: AdminUser,
+    allow_list: bool | None = Body(None, embed=True),
+    record_only: bool | None = Body(None, embed=True),
+    message: str | None = Body(None, embed=True),
+) -> dict:
+    from app.settings_store import save
+
+    values: dict[str, object] = {}
+    if allow_list is not None:
+        values["geo_block_allow_list"] = allow_list
+    if record_only is not None:
+        values["geo_block_record_only"] = record_only
+    if message is not None:
+        values["geo_block_message"] = message
+    if values:
+        save(values)
+        audit.record(admin, "rule.update", "Changed the country list settings", target="countries", detail={
+            k: {"after": v} for k, v in values.items()
+        })
+    with session_scope() as db:
+        return list_blocked_countries(db, admin)
+
+
+@router.get("/geoblocks/preview")
+def preview_blocking(db: Db, _: AdminUser, days: int = Query(90, ge=1, le=3650)) -> dict:
+    """What the list would have caught: plays from listed countries, or from
+    everywhere else when it is an allow list. Nothing is acted on here."""
+    from app.models import BlockedCountry
+
+    since = int((datetime.now(UTC) - timedelta(days=days)).timestamp())
+    listed = [c.code.upper() for c in db.execute(select(BlockedCountry)).scalars()]
+    if not listed:
+        return {"plays": 0, "users": 0, "countries": [], "days": days}
+    upper = func.upper(IpLocation.country_code)
+    where = upper.not_in(listed) if current().geo_block_allow_list else upper.in_(listed)
+    rows = db.execute(
+        select(upper, func.max(IpLocation.country), func.count(), func.count(func.distinct(History.user_id)))
+        .join(History, History.ip_address == IpLocation.ip)
+        .where(where, History.started >= since, IpLocation.country_code.is_not(None))
+        .group_by(upper)
+        .order_by(func.count().desc())
+    ).all()
+    return {
+        "plays": sum(r[2] for r in rows),
+        "users": max((r[3] for r in rows), default=0),
+        "countries": [{"code": r[0], "name": r[1] or r[0], "plays": r[2], "users": r[3]} for r in rows],
+        "days": days,
+    }
 
 
 def _ban_only_devices(rule: Rule) -> list[str] | None:

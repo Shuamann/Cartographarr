@@ -2,7 +2,7 @@ import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import {
+import { api,
   useApi,
   useUserNames,
   type Activity,
@@ -57,6 +57,7 @@ export default function MapRoute({
   filters: FilterState;
   onFilters: (next: FilterState) => void;
 }) {
+  const nav = useNav();
   const query = useMemo(() => toQuery(filters), [filters]);
 
   const points = useApi<MapPoints>(`/map/points${query}`);
@@ -105,7 +106,11 @@ export default function MapRoute({
   // silently missing.
   const allLive = live.data?.sessions ?? [];
   const liveSessions = allLive.filter((s) => s.geo?.lat != null);
-  const unplaceable = allLive.length - liveSessions.length;
+  // Two different reasons a stream is missing from the map, and they call for
+  // different words: a LAN address has no public location at all, a public one
+  // just has not been looked up yet.
+  const onNetwork = allLive.filter((s) => s.geo?.lat == null && s.location !== "wan").length;
+  const unlocated = allLive.length - liveSessions.length - onNetwork;
   const [hovered, setHovered] = useState<Hover | null>(null);
   const [pinned, setPinned] = useState(false);
 
@@ -248,9 +253,14 @@ export default function MapRoute({
                 <span className="ms-count live">{liveSessions.length}</span>
               )}
             </label>
-            {unplaceable > 0 && (
-              <span className="muted small" title="Local addresses have no public location">
-                {unplaceable} on your network, not mappable
+            {onNetwork > 0 && (
+              <span className="muted small" title="An address on your own network has no public location">
+                {onNetwork} on your network, not mappable
+              </span>
+            )}
+            {unlocated > 0 && (
+              <span className="muted small" title="The location database has no answer for this address yet">
+                {unlocated} waiting for a location
               </span>
             )}
           </div>
@@ -290,8 +300,9 @@ export default function MapRoute({
 
         {!geoipReady && (
           <div className="map-banner">
-            No location database installed, so there's nothing to place yet. Add a MaxMind key in
-            Settings.
+            {nav.isAdmin
+              ? "No location database installed, so there's nothing to place yet. Add a MaxMind key in Settings."
+              : "Locations are not set up on this server yet, so there is nothing to place. Ask an admin."}
           </div>
         )}
         {geoipReady && features.length === 0 && !points.loading && (
@@ -1044,6 +1055,8 @@ function Drawer({
         </p>
       )}
 
+      {nav.isAdmin && place.country_code && <BlockCountry code={place.country_code} name={place.country} />}
+
       <div className="segmented drawer-tabs">
         <button className={tab === "who" ? "seg on" : "seg"} onClick={() => setTab("who")}>
           Who
@@ -1356,4 +1369,45 @@ function emptyCollection(): GeoJSON.FeatureCollection {
  * rather than burying the place names. */
 function firstSymbolLayer(map: maplibregl.Map): string | undefined {
   return map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
+}
+
+
+/* Add the country this pin is in to the country list, from the map. Flag to
+ * start with: it records every stream from there without cutting anyone off,
+ * and the mode can be raised in Rules once you have seen what it catches. */
+function BlockCountry({ code, name }: { code: string; name: string | null }) {
+  const [state, setState] = useState<"idle" | "saving" | "done" | string>("idle");
+  const listed = useApi<{ items: { code: string; mode: string }[] }>("/geoblocks");
+  const already = listed.data?.items.find((c) => c.code === code.toUpperCase());
+
+  if (already) {
+    return (
+      <p className="muted small">
+        {name || code} is on the country list, set to {already.mode}. Change it in Rules.
+      </p>
+    );
+  }
+  return (
+    <p className="muted small">
+      <button
+        className="tab"
+        disabled={state === "saving" || state === "done"}
+        onClick={async () => {
+          const reason = window.prompt(`Why add ${name || code} to the country list? Streams from there will be recorded.`, "");
+          if (reason === null) return;
+          setState("saving");
+          try {
+            await api.post("/geoblocks", { code, mode: "flag", reason });
+            setState("done");
+            listed.reload();
+          } catch (err) {
+            setState((err as Error).message);
+          }
+        }}
+      >
+        {state === "done" ? `${name || code} is flagged` : `Flag streams from ${name || code}`}
+      </button>
+      {typeof state === "string" && !["idle", "saving", "done"].includes(state) && <span className="danger-text"> {state}</span>}
+    </p>
+  );
 }

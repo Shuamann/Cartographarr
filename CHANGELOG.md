@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.6.0 - 2026-09-21
+
+### Added
+- Blocked countries: a list beside the ban list, each country set to flag, warn or stop, added from Rules or from a
+  place on the map, with what it would have caught before you let it act
+- Issues can be raised, commented on and resolved here, so the ticket system works whether or not Seerr is set up
+
+### Fixed
+- A live stream from an address never seen before sat off the map for its whole run. Those addresses are looked up
+  while the stream is playing, and the map now separates "on your network" from "waiting for a location"
+- Viewers were told to add a MaxMind key on an empty map, which is an admin's job, not theirs
+
 ## 0.5.0 - 2026-09-17
 
 ### Added

@@ -14,7 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 _HERE = Path(__file__).resolve()
 _SHA = re.compile(r"^[0-9a-f]{7,40}$")

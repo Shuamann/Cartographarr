@@ -278,6 +278,16 @@ beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
 
+## Blocked countries
+
+Beside the ban list, in **Rules**, sits a list of countries. Each one says what
+should happen when a stream comes from there: **flag** records it in the Log,
+**warn** messages the viewer, **stop** ends the stream. Add a country from that
+list, or from a place on the map. Like the ban list it starts recording only,
+and **What would this have caught?** counts the plays it would have matched
+before you let it act. Turned around, the list becomes the only places allowed,
+and everywhere else is flagged.
+
 ## Issues
 
 The **Issues** tab (admins only) reads what people reported in Seerr, every

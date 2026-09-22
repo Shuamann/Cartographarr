@@ -11,9 +11,10 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from sqlalchemy import func, select
 
+from app import audit
 from app.auth.deps import AdminUser
 from app.db import session_scope
 from app.models import History, Issue, MediaItem, StreamEvent, StreamSession, User
@@ -171,6 +172,94 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
         ]
     data["file"] = _file_payload(key, days)
     return data
+
+
+TYPES = ("video", "audio", "subtitles", "other")
+
+
+@router.post("")
+def raise_issue(
+    admin: AdminUser,
+    rating_key: int = Body(..., embed=True),
+    issue_type: str = Body("other", embed=True),
+    message: str = Body("", embed=True),
+) -> dict:
+    """Report a problem with a file, here rather than in Seerr.
+
+    Issues live in this app, so they work whether or not Seerr is set up. A
+    report made here stays here for now; mirroring into Seerr comes with the
+    write side.
+    """
+    if issue_type not in TYPES:
+        raise HTTPException(400, f"Kind should be one of {', '.join(TYPES)}")
+    if not message.strip():
+        raise HTTPException(400, "Say what is wrong, so whoever picks this up knows where to look")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is None:
+            raise HTTPException(404, "No such title")
+        issue = Issue(
+            source="local",
+            issue_type=issue_type,
+            status="open",
+            message=message.strip(),
+            media_type=item.media_type,
+            tmdb_id=item.tmdb_id,
+            tvdb_id=item.tvdb_id,
+            rating_key=rating_key,
+            show_rating_key=item.grandparent_rating_key,
+            season=item.parent_media_index,
+            episode=item.media_index,
+            title=item.full_title or item.title,
+            reporter_name=admin.username,
+            reporter_user_id=admin.plex_user_id,
+            comments=json.dumps([{"message": message.strip(), "author": admin.username, "created_at": now.isoformat()}]),
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(issue)
+        db.flush()
+        issue_id, title = issue.id, issue.title
+    audit.record(admin, "issue.create", f"Reported {issue_type} trouble with {title}", target=str(issue_id))
+    return {"id": issue_id}
+
+
+@router.post("/{issue_id}/comment")
+def comment(issue_id: int, admin: AdminUser, message: str = Body(..., embed=True)) -> dict:
+    if not message.strip():
+        raise HTTPException(400, "Nothing to add")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        if issue is None:
+            raise HTTPException(404, "No such issue")
+        if issue.source != "local":
+            raise HTTPException(409, "This one came from Seerr. Comment there until writing back is built.")
+        notes = _comments(issue)
+        notes.append({"message": message.strip(), "author": admin.username, "created_at": now.isoformat()})
+        issue.comments = json.dumps(notes)
+        issue.updated_at = now
+        title = issue.title
+    audit.record(admin, "issue.comment", f"Commented on {title}", target=str(issue_id))
+    return {"id": issue_id, "comments": len(notes)}
+
+
+@router.post("/{issue_id}/status")
+def set_status(issue_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
+    if status not in ("open", "resolved"):
+        raise HTTPException(400, "Status is open or resolved")
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        if issue is None:
+            raise HTTPException(404, "No such issue")
+        if issue.source != "local":
+            raise HTTPException(409, "This one came from Seerr, so Seerr decides when it is closed.")
+        issue.status = status
+        issue.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        title = issue.title
+    audit.record(admin, "issue.status", f"Marked {title} {status}", target=str(issue_id))
+    return {"id": issue_id, "status": status}
 
 
 @router.get("/{issue_id}")

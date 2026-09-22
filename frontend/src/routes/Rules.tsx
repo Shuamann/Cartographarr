@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import CountryList from "../components/CountryList";
+import ModeSwitch from "../components/ModeSwitch";
 import MultiSelect from "../components/MultiSelect";
 import { BAN_LENGTHS as LENGTHS, ban, banEnds, setBanReason, useBans } from "../lib/bans";
 import { useNav } from "../lib/nav";
@@ -183,6 +185,8 @@ export default function RulesRoute({
         )}
 
         <BanListCard onRulesChanged={rules.reload} />
+
+        <CountryList />
 
         {rules.data?.length === 0 && !draft && <p className="muted">No rules yet.</p>}
 
@@ -522,30 +526,6 @@ function consequences(steps: RuleStep[]): string | null {
 
 /* Record only, or act. Two states side by side rather than a checkbox, so
  * which one a rule is in reads at a glance. */
-function ModeSwitch({
-  recordOnly,
-  locked,
-  onChange,
-}: {
-  recordOnly: boolean;
-  locked: boolean;
-  onChange: (recordOnly: boolean) => void;
-}) {
-  return (
-    <div
-      className="segmented mode-switch"
-      title={locked ? "Locked to record only by ENFORCE_DRY_RUN in the container configuration" : undefined}
-    >
-      <button className={recordOnly ? "seg on" : "seg"} onClick={() => !recordOnly && onChange(true)} disabled={locked}>
-        Record only
-      </button>
-      <button className={!recordOnly ? "seg on act" : "seg"} onClick={() => recordOnly && onChange(false)} disabled={locked}>
-        Act
-      </button>
-    </div>
-  );
-}
-
 // ---- editor -----------------------------------------------------------------
 
 function Editor({

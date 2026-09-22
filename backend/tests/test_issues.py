@@ -139,3 +139,59 @@ def test_the_sync_is_skipped_without_seerr(client):
     claim(client)
     asyncio.run(tasks.run("issues"))
     assert tasks.TASKS["issues"].last["status"] == "skipped"
+
+
+def test_an_issue_can_be_raised_here_without_seerr(client):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=880, title="Turf War", full_title="The Office (US) - Turf War",
+                         media_type="episode", grandparent_rating_key=500, parent_media_index=8, media_index=23))
+
+    assert client.post("/api/issues", json={"rating_key": 880, "issue_type": "audio", "message": ""}).status_code == 400
+    assert client.post("/api/issues", json={"rating_key": 880, "issue_type": "smell", "message": "x"}).status_code == 400
+    assert client.post("/api/issues", json={"rating_key": 4, "message": "gone"}).status_code == 404
+
+    made = client.post("/api/issues", json={"rating_key": 880, "issue_type": "audio", "message": "Out of sync"}).json()
+    row = client.get("/api/issues").json()["items"][0]
+    assert row["id"] == made["id"] and row["source"] == "local" and row["seerr_id"] is None
+    assert row["title"] == "The Office (US) - Turf War" and row["season"] == 8 and row["episode"] == 23
+
+    assert client.post(f"/api/issues/{made['id']}/comment", json={"message": "Only on the Roku"}).json()["comments"] == 2
+    assert client.post(f"/api/issues/{made['id']}/status", json={"status": "resolved"}).json()["status"] == "resolved"
+    assert client.get("/api/issues").json()["open"] == 0
+    detail = client.get(f"/api/issues/{made['id']}").json()
+    assert [c["message"] for c in detail["comment_list"]] == ["Out of sync", "Only on the Roku"]
+
+    actions = [e["action"] for e in client.get("/api/log?kind=changes").json()]
+    assert {"issue.create", "issue.comment", "issue.status"} <= set(actions)
+
+
+def test_issues_read_from_seerr_are_not_edited_here(client, monkeypatch):
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+    made = client.get("/api/issues").json()["items"][0]["id"]
+    assert client.post(f"/api/issues/{made}/comment", json={"message": "hi"}).status_code == 409
+    assert client.post(f"/api/issues/{made}/status", json={"status": "resolved"}).status_code == 409
+
+
+def test_a_local_issue_survives_a_seerr_sync(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=41, title="Annabelle", full_title="Annabelle", media_type="movie"))
+    client.post("/api/issues", json={"rating_key": 41, "message": "Stutters"})
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+    sources = sorted(i["source"] for i in client.get("/api/issues").json()["items"])
+    assert sources == ["local", "seerr"]
