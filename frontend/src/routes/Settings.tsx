@@ -1,4 +1,5 @@
 import About from "../components/About";
+import HomeLinks from "../components/HomeLinks";
 import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
@@ -231,6 +232,7 @@ const PAGES: Page[] = [
   })),
   { id: "appearance", title: "Appearance", group: "Cartographarr", blurb: "The name and marks shown around the app.", keys: ["app_name"] },
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
+  { id: "home", title: "Home page", group: "Cartographarr", blurb: "The links everyone lands on, and who sees each one." },
   { id: "tasks", title: "Tasks", group: "Cartographarr", blurb: "Background jobs: how often each runs, how the last run went, and any errors. Open one for its recent runs." },
   {
     id: "about",
@@ -626,6 +628,8 @@ function SettingsForm() {
             <BrandingImages />
           </>
         )}
+
+        {current.id === "home" && <HomeLinks />}
 
         {current.id === "tasks" && <Tasks />}
 

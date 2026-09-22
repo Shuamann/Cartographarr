@@ -738,3 +738,27 @@ class BlockedCountry(Base):
     reason: Mapped[str | None] = mapped_column(Text)
     blocked_by: Mapped[str | None] = mapped_column(String(64))
     blocked_at: Mapped[datetime | None] = mapped_column()
+
+
+class HomeLink(Base):
+    """A link on the home page, and who sees it.
+
+    Links for the services that are set up are worked out from the settings, so
+    a fresh install has a useful home page with nothing to configure. A row
+    here only records what someone changed about one: a different name, a
+    different audience, hidden, moved, or a link of their own. See
+    services/home.py.
+    """
+
+    __tablename__ = "home_links"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """plex, seerr, radarr and so on for the built in ones, custom:N for the rest."""
+    label: Mapped[str | None] = mapped_column(String(64))
+    url: Mapped[str | None] = mapped_column(Text)
+    icon: Mapped[str | None] = mapped_column(String(32))
+    roles: Mapped[str] = mapped_column(String(16), default="all")
+    """all, admin or viewer."""
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    custom: Mapped[bool] = mapped_column(Boolean, default=False)

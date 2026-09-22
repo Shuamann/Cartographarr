@@ -278,6 +278,17 @@ beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
 
+## The home page
+
+Everyone lands on **Home**: how many streams are playing, anything reported and
+still open, and where to go next. A link appears for each service that is set
+up, without anyone adding it: Plex for everyone, the request service when it is
+configured, and Sonarr, Radarr and Tautulli for admins.
+
+Under **Settings, Home page** each link can be renamed, pointed somewhere else,
+given to admins or viewers only, moved or hidden, and links of your own added
+beside them.
+
 ## Blocked countries
 
 Beside the ban list, in **Rules**, sits a list of countries. Each one says what

@@ -17,7 +17,7 @@ from app.db import init_db
 from app.geo.lookup import ensure_databases
 from app.auth.deps import require_admin, require_user
 from app import redact, tasks
-from app.routers import admin, auth, branding, data, issues, library, live, monitoring, reports, sharing
+from app.routers import admin, auth, branding, data, home, issues, library, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
@@ -262,6 +262,7 @@ app.include_router(branding.router)
 # Reading anything means being signed in. Admin covers configuration and the
 # setup wizard, so the screen that accepts API keys is never open to whoever
 # finds the URL first: the admin account is claimed before setup runs.
+app.include_router(home.router, dependencies=[Depends(require_user)])
 app.include_router(data.router, dependencies=[Depends(require_user)])
 app.include_router(live.router, dependencies=[Depends(require_user)])
 app.include_router(reports.router, dependencies=[Depends(require_user)])

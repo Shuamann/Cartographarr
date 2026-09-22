@@ -2,6 +2,7 @@
  * exist fails the build rather than quietly doing nothing, which is how the
  * dashboard kept pointing at Devices after it became People. */
 export const TABS = [
+  "Home",
   "Dashboard",
   "Map",
   "History",

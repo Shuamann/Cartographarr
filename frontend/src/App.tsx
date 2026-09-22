@@ -14,6 +14,7 @@ import Setup from "./routes/Setup";
 const Map = lazy(() => import("./routes/Map"));
 const Reports = lazy(() => import("./routes/Reports"));
 const Library = lazy(() => import("./routes/Library"));
+const Home = lazy(() => import("./routes/Home"));
 const Issues = lazy(() => import("./routes/Issues"));
 import History from "./routes/History";
 import People, { type Selection } from "./routes/People";
@@ -34,7 +35,7 @@ export default function App() {
     let wanted = new URLSearchParams(window.location.search).get("tab");
     // Users and Devices became one tab. Old bookmarks still land somewhere.
     if (wanted === "Users" || wanted === "Devices") wanted = "People";
-    return (TABS as readonly string[]).includes(wanted ?? "") ? (wanted as Tab) : "Dashboard";
+    return (TABS as readonly string[]).includes(wanted ?? "") ? (wanted as Tab) : "Home";
   });
 
   // Kept in the address bar so a link opens where it was sent from. Filters do
@@ -268,6 +269,7 @@ function SignedIn({
               />
             )}
             {active === "Reports" && <Reports />}
+            {active === "Home" && <Home onNavigate={setTab} />}
             {active === "Library" && <Library />}
             {active === "Issues" && <Issues />}
             {active === "Rules" && <Rules />}

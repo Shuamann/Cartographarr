@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.7.0 - 2026-09-21
+
+### Added
+- Home page, where everyone now lands: what is playing, anything open, and where to go next. Links for the services
+  you have set up appear without being added, and each one can be renamed, given to admins or viewers only, moved or
+  hidden under Settings, Home page, where links of your own go too
+
 ## 0.6.0 - 2026-09-21
 
 ### Added
