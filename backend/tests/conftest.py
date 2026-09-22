@@ -12,6 +12,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TAUTULLI_URL", "http://tautulli.invalid:8181")
     monkeypatch.setenv("TAUTULLI_API_KEY", "test")
+
     # .env is picked up by Settings, so without this the suite would download
     # GeoIP databases with real credentials and burn the account's quota.
     monkeypatch.setenv("MAXMIND_ACCOUNT_ID", "")
@@ -24,6 +25,13 @@ def client(monkeypatch, tmp_path):
     import app.config, app.db, app.settings_store
 
     importlib.reload(app.config)
+    # A developer's .env sits next to the code and pydantic reads it, so tests
+    # inherited whatever that machine had: a real Tautulli on the LAN, real
+    # Radarr and Seerr addresses, real keys. Besides the risk of touching
+    # something real, every test then waited out the local Tautulli probe
+    # against a host the test run cannot reach, which was three seconds each.
+    # Tests get the environment this fixture sets and nothing else.
+    app.config.Settings.model_config["env_file"] = None
     importlib.reload(app.db)
     importlib.reload(app.settings_store)
     import app.models
