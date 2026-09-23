@@ -345,6 +345,16 @@ says Seerr was not updated.
 When a replacement for a file finishes importing, whatever was reported about
 that file is closed with a note saying what replaced it.
 
+## Worth a second look
+
+**Library, Worth a second look** lists big files nobody watches, biggest first,
+with why each one stands out: never played, not played in years, or 4K that has
+only ever been sent to a screen scaled down. Each says which storage it is on.
+
+Nothing is deleted from here. Plex, Radarr and Sonarr own the files, so this
+says what is worth deciding about and hands over. A file you decide to keep is
+marked kept, with a reason, and stops being suggested until you put it back.
+
 ## Storage
 
 A Plex library can span more than one place: an array share and a network SSD,

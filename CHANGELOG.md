@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.18.0 - 2026-09-23
+
+### Added
+- Library, Worth a second look: big files nobody watches, biggest first, with why each one stands out and which
+  storage it is on. Nothing is deleted from here; a file you decide to keep is marked kept and stops being suggested
+
 ## 0.17.0 - 2026-09-23
 
 ### Added

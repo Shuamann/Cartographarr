@@ -784,3 +784,19 @@ class LibraryStore(Base):
 
     prefix: Mapped[str] = mapped_column(String(255), primary_key=True)
     label: Mapped[str | None] = mapped_column(String(64))
+
+
+class KeepDecision(Base):
+    """A file somebody looked at and decided to keep.
+
+    The deletion review is meant to be the things nobody has thought about yet,
+    so a decision has to stick. Nothing here deletes anything: Plex, Radarr and
+    Sonarr own the files. See services/cleanup.py.
+    """
+
+    __tablename__ = "keep_decisions"
+
+    rating_key: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    kept_by: Mapped[str | None] = mapped_column(String(64))
+    kept_at: Mapped[datetime | None] = mapped_column()

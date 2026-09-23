@@ -3530,3 +3530,17 @@ label.locked .pill {
   flex: 1;
   min-width: 220px;
 }
+
+/* A file in the deletion review, with the decision next to it. */
+.cleanup-row {
+  margin-bottom: 8px;
+}
+
+.keep-row {
+  padding: 0 12px 8px;
+}
+
+.keep-row input {
+  flex: 1;
+  min-width: 220px;
+}

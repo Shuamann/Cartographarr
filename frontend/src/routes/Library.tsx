@@ -129,6 +129,7 @@ const SECTIONS = [
   { id: "messy", title: "Messy files" },
   { id: "four-k", title: "4K copies" },
   { id: "storage", title: "Storage" },
+  { id: "cleanup", title: "Worth a second look" },
   { id: "requests", title: "Requested, never watched" },
   { id: "replacements", title: "Replacements" },
 ] as const;
@@ -245,6 +246,7 @@ export default function Library() {
         {section === "messy" && <MessyFiles days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
+        {section === "cleanup" && <CleanupSection days={days} />}
         {section === "requests" && <Requests />}
         {section === "replacements" && <Replacements />}
       </div>
@@ -1525,5 +1527,135 @@ function OldStalls() {
         Forget them
       </button>
     </p>
+  );
+}
+
+
+/* What takes up room without earning it.
+ *
+ * Nothing here deletes anything: Plex, Radarr and Sonarr own the files. This
+ * says which ones nobody watches, how much room each takes and why it stands
+ * out, then gets out of the way. Anything you decide to keep is marked kept,
+ * so the list stays the things nobody has thought about yet rather than the
+ * same argument every month. */
+type Candidate = FileInfo & {
+  media_type: string | null;
+  plays: number;
+  last_play: number | null;
+  days_since: number | null;
+  store: string;
+  reason: string;
+  why: string;
+};
+
+type Kept = { rating_key: number; title: string; reason: string | null; kept_by: string | null; kept_at: string | null };
+
+const KEEP_REASONS: Record<string, string> = {
+  never_played: "Never played",
+  not_played_in_years: "Not played in years",
+  never_seen_in_4k: "4K nobody sees in 4K",
+};
+
+function CleanupSection({ days }: { days: number }) {
+  const data = useApi<{ items: Candidate[]; found: number; reclaimable: number; kept: number; days: number }>(
+    `/library/cleanup?days=${days}`,
+    [days],
+  );
+  const keptList = useApi<Kept[]>("/library/cleanup/kept");
+  const [reasons, setReasons] = useState<Record<number, string>>({});
+  const [showKept, setShowKept] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function act(run: () => Promise<unknown>) {
+    setError(null);
+    try {
+      await run();
+      data.reload();
+      keptList.reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (!data.data) return <Loading label="Looking for room" />;
+  const d = data.data;
+
+  return (
+    <>
+      <p className="muted">
+        Big files nobody watches, biggest first, with why each one stands out. Nothing here deletes anything: open it
+        in Radarr or Sonarr to decide, or mark it kept and it stops being suggested.
+      </p>
+      {error && <p className="note bad-note">{error}</p>}
+      {d.items.length > 0 && (
+        <p className="note">
+          {size(d.reclaimable)} across {d.found.toLocaleString()} {d.found === 1 ? "file" : "files"} that nobody is
+          watching{d.found > d.items.length ? `, biggest ${d.items.length} below` : ""}.
+        </p>
+      )}
+      {d.items.length === 0 && (
+        <p className="note">Nothing stands out. Every large file here has been watched, or you have kept it.</p>
+      )}
+
+      <div className="file-list">
+        {d.items.map((f) => (
+          <div key={f.rating_key} className="cleanup-row">
+            <FileRow
+              file={f}
+              days={days}
+              badges={[
+                <span key="reason" className="pill warn">
+                  {KEEP_REASONS[f.reason] ?? f.reason}
+                </span>,
+                <span key="store" className="pill">
+                  {f.store}
+                </span>,
+              ]}
+              stats={[
+                f.why,
+                f.last_play ? `last played ${when(f.last_play)}` : null,
+              ]}
+            />
+            <div className="row wrap keep-row">
+              <input
+                placeholder="Why keep it? (optional)"
+                value={reasons[f.rating_key] ?? ""}
+                onChange={(e) => setReasons({ ...reasons, [f.rating_key]: e.target.value })}
+              />
+              <button
+                className="btn"
+                onClick={() => act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: reasons[f.rating_key] ?? "" }))}
+              >
+                Keep it
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {d.kept > 0 && (
+        <p className="muted small">
+          <button className="tab" onClick={() => setShowKept(!showKept)}>
+            {showKept ? "Hide" : `${d.kept} kept`}
+          </button>
+        </p>
+      )}
+      {showKept && (
+        <div className="mini-list">
+          {(keptList.data ?? []).map((k) => (
+            <div key={k.rating_key} className="mini">
+              <div className="min0">
+                <strong>{k.title}</strong>
+                <p className="muted small">{[k.reason, k.kept_by ? `kept by ${k.kept_by}` : null].filter(Boolean).join(" \u00b7 ")}</p>
+              </div>
+              <button className="tab" onClick={() => act(() => api.del(`/library/cleanup/${k.rating_key}/keep`))}>
+                Put it back
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

@@ -1,0 +1,179 @@
+"""What is taking up room without earning it.
+
+Not a delete button. Plex, Radarr and Sonarr own the files; this says which
+ones nobody has watched, how much room each takes, and why it stands out, and
+hands the decision over. Anything you decide to keep can be marked as kept, so
+the list is the things you have not thought about yet rather than the same
+argument every month.
+
+Three reasons a file lands here, weakest first:
+
+- **big and never played**: nothing has ever played it, and it is large
+- **not played in years**: it was watched once, long ago, and is large
+- **4K nobody sees in 4K**: every play was scaled down, so the extra size
+  bought nothing on the screens people actually use
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import func, select
+
+from app.db import session_scope
+
+GB = 1024**3
+BIG_ENOUGH = 8 * GB
+"""Below this, the room saved is not worth anyone's attention."""
+
+STALE_DAYS = 730
+"""Two years without a play, which is long enough to mean something."""
+
+
+def _kept() -> dict[int, str | None]:
+    from app.models import KeepDecision
+
+    with session_scope() as db:
+        return {row.rating_key: row.reason for row in db.execute(select(KeepDecision)).scalars()}
+
+
+def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
+    """Files worth a second look, biggest saving first."""
+    from app.models import History, MediaItem, StreamSession
+    from app.services.library import describe_file
+    from app.services.library_scan import in_library
+    from app.services.stores import name_for, labels
+
+    now = int(datetime.now(UTC).timestamp())
+    kept = _kept()
+    named = labels()
+
+    with session_scope() as db:
+        items = db.execute(
+            select(MediaItem).where(
+                MediaItem.media_type.in_(("movie", "episode")),
+                MediaItem.file_size.is_not(None),
+                MediaItem.file_size >= BIG_ENOUGH,
+                in_library(),
+            )
+        ).scalars().all()
+        if not items:
+            return {"items": [], "found": 0, "reclaimable": 0, "kept": len(kept), "days": days}
+
+        keys = [item.rating_key for item in items]
+        played: dict[int, tuple[int, int | None]] = {
+            key: (int(count or 0), last)
+            for key, count, last in db.execute(
+                select(History.rating_key, func.count(), func.max(History.started))
+                .where(History.rating_key.in_(keys))
+                .group_by(History.rating_key)
+            ).all()
+        }
+        # What was actually sent to a screen, for the 4K question.
+        scaled: dict[int, tuple[int, int]] = {}
+        for key, resolution, count in db.execute(
+            select(StreamSession.rating_key, StreamSession.stream_video_resolution, func.count())
+            .where(StreamSession.rating_key.in_(keys))
+            .group_by(StreamSession.rating_key, StreamSession.stream_video_resolution)
+        ).all():
+            seen, down = scaled.get(key, (0, 0))
+            is_4k = str(resolution or "").lower() in ("4k", "2160", "2160p")
+            scaled[key] = (seen + int(count or 0), down + (0 if is_4k else int(count or 0)))
+
+        out = []
+        for item in items:
+            if item.rating_key in kept:
+                continue
+            plays, last = played.get(item.rating_key, (0, None))
+            age_days = int((now - last) / 86400) if last else None
+            reason = _reason(item, plays, age_days, scaled.get(item.rating_key))
+            if reason is None:
+                continue
+            out.append({
+                **describe_file(item),
+                "media_type": item.media_type,
+                "plays": plays,
+                "last_play": last,
+                "days_since": age_days,
+                "store": name_for(item.file_path, named),
+                "reason": reason[0],
+                "why": reason[1],
+            })
+
+    out.sort(key=lambda row: -(row.get("file_size") or 0))
+    # The room adds up across everything that stands out, not just the page of
+    # it shown, or the number shrinks as you work through the list.
+    reclaimable = sum(row.get("file_size") or 0 for row in out)
+    return {
+        "items": out[:limit],
+        "found": len(out),
+        "reclaimable": reclaimable,
+        "kept": len(kept),
+        "days": days,
+    }
+
+
+def _reason(item, plays: int, age_days: int | None, streams: tuple[int, int] | None) -> tuple[str, str] | None:
+    """Why this file stands out, said plainly, or None if it does not."""
+    size = int(item.file_size or 0)
+    gigabytes = size / GB
+    if plays == 0:
+        return "never_played", f"Nothing has ever played it, and it takes {gigabytes:.0f} GB."
+    if age_days is not None and age_days >= STALE_DAYS:
+        years = age_days / 365
+        return "not_played_in_years", (
+            f"Played {plays} {'time' if plays == 1 else 'times'}, last about {years:.0f} years ago, "
+            f"and it takes {gigabytes:.0f} GB."
+        )
+    resolution = str(item.video_resolution or "").lower()
+    if resolution in ("4k", "2160", "2160p") and streams and streams[0] >= 3 and streams[1] == streams[0]:
+        return "never_seen_in_4k", (
+            f"All {streams[0]} recorded streams were sent below 4K, so its {gigabytes:.0f} GB "
+            "has never reached a screen as 4K."
+        )
+    return None
+
+
+def keep(rating_key: int, who: str | None, reason: str | None) -> None:
+    """Decided to keep it. It stops being suggested until that is undone."""
+    from app.models import KeepDecision
+
+    with session_scope() as db:
+        db.merge(KeepDecision(
+            rating_key=rating_key, kept_by=who, reason=reason or None,
+            kept_at=datetime.now(UTC).replace(tzinfo=None),
+        ))
+
+
+def unkeep(rating_key: int) -> bool:
+    from app.models import KeepDecision
+
+    with session_scope() as db:
+        row = db.get(KeepDecision, rating_key)
+        if row is None:
+            return False
+        db.delete(row)
+        return True
+
+
+def kept_list() -> list[dict[str, Any]]:
+    """What has been decided already, so it can be changed."""
+    from app.models import KeepDecision, MediaItem
+
+    with session_scope() as db:
+        rows = db.execute(select(KeepDecision).order_by(KeepDecision.kept_at.desc())).scalars().all()
+        titles = {
+            m.rating_key: (m.full_title or m.title)
+            for m in db.execute(select(MediaItem).where(MediaItem.rating_key.in_([r.rating_key for r in rows]))).scalars()
+        }
+        return [
+            {
+                "rating_key": row.rating_key,
+                "title": titles.get(row.rating_key) or f"Item {row.rating_key}",
+                "reason": row.reason,
+                "kept_by": row.kept_by,
+                "kept_at": row.kept_at.isoformat() if row.kept_at else None,
+            }
+            for row in rows
+        ]

@@ -7,6 +7,7 @@ from sqlalchemy import case, func, select
 
 from app import audit
 from app.auth.deps import AdminUser
+from app.db import session_scope
 from app.models import History, MediaItem, StreamEvent, StreamSession
 from app.routers.data import Db
 from app.services import library
@@ -201,6 +202,46 @@ def forget_old_stalls(db: Db, admin: AdminUser) -> dict:
     db.commit()
     audit.record(admin, "library.stalls_forgotten", f"Forgot {count} stalls recorded before skips were excluded")
     return {"forgotten": count}
+
+
+@router.get("/cleanup")
+async def cleanup(_: AdminUser, days: int = Days) -> dict:
+    """Big files nobody watches, and why each one stands out."""
+    import asyncio
+
+    from app.services import cleanup as service
+
+    return await asyncio.to_thread(service.candidates, days)
+
+
+@router.get("/cleanup/kept")
+def kept(_: AdminUser) -> list[dict]:
+    from app.services import cleanup as service
+
+    return service.kept_list()
+
+
+@router.post("/cleanup/{rating_key}/keep")
+def keep_file(rating_key: int, admin: AdminUser, reason: str = Body("", embed=True)) -> dict:
+    from app.services import cleanup as service
+
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        title = (item.full_title or item.title) if item else f"item {rating_key}"
+    service.keep(rating_key, admin.username, reason)
+    audit.record(admin, "library.keep", f"Decided to keep {title}", target=str(rating_key),
+                 detail={"reason": {"after": reason or None}})
+    return {"rating_key": rating_key, "kept": True}
+
+
+@router.delete("/cleanup/{rating_key}/keep")
+def unkeep_file(rating_key: int, admin: AdminUser) -> dict:
+    from app.services import cleanup as service
+
+    if not service.unkeep(rating_key):
+        raise HTTPException(404, "That one was not on the keep list")
+    audit.record(admin, "library.keep_undone", f"Put {rating_key} back in the review", target=str(rating_key))
+    return {"rating_key": rating_key, "kept": False}
 
 
 @router.get("/stores")
