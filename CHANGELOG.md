@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.14.0 - 2026-09-23
+
+### Added
+- Library, Overview offers to forget stalls recorded before skipping and episode endings were told apart from
+  buffering, since those cannot be sorted out now and drag every stall figure down
+
+### Fixed
+- Failed sign-ins are counted per caller behind a reverse proxy, reading the forwarded address past any proxy on the
+  trusted list. Before this everyone behind one proxy shared a single count, so the limit protected nobody and could
+  lock out a whole household
+
 ## 0.13.0 - 2026-09-23
 
 ### Added

@@ -275,6 +275,7 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
           about 3,000 a minute. Messy files grows as this finishes. Bitrate, resolution and 4K lists are already complete.
         </p>
       )}
+      <OldStalls />
       <dl className="stats">
         <div className="stat">
           <dt>Files in the library</dt>
@@ -1482,5 +1483,47 @@ function StorageSection({ days }: { days: number }) {
         </tbody>
       </table>
     </>
+  );
+}
+
+
+/* Stalls recorded before this app could tell a skip from buffering.
+ *
+ * Jumping forward in a film and reaching the end of an episode both looked
+ * like buffering, and the poll by poll positions that would sort them out now
+ * were never kept. So they are offered plainly: they are in the numbers, they
+ * flatter nobody, and one button forgets them. */
+function OldStalls() {
+  const old = useApi<{ count: number; since: string; newest: string | null }>("/library/stalls/unfiltered");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!old.data?.count) return null;
+
+  return (
+    <p className="note warn-note">
+      {old.data.count.toLocaleString()} stalls were recorded before {old.data.since}, when skipping and the end of an
+      episode still counted as buffering. They cannot be sorted out now, so they make every stall figure look worse
+      than it was.{" "}
+      {error && <span className="danger-text">{error} </span>}
+      <button
+        className="btn"
+        disabled={busy}
+        onClick={async () => {
+          if (!window.confirm(`Forget ${old.data!.count} stalls recorded before ${old.data!.since}? This cannot be undone.`)) return;
+          setBusy(true);
+          setError(null);
+          try {
+            await api.del("/library/stalls/unfiltered");
+            old.reload();
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Forget them
+      </button>
+    </p>
   );
 }

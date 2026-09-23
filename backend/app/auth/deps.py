@@ -29,13 +29,10 @@ def has_any_user() -> bool:
         return db.execute(select(AppUser.id).limit(1)).first() is not None
 
 
-def _client_is_trusted(request: Request) -> bool:
+def _is_trusted_proxy(client: str | None) -> bool:
+    """Whether this address is one of the proxies we believe."""
     settings = current()
-    if not settings.auth_proxy_enabled or not settings.trusted_proxy_ips:
-        return False
-
-    client = request.client.host if request.client else None
-    if not client:
+    if not client or not settings.trusted_proxy_ips:
         return False
     try:
         address = ipaddress.ip_address(client)
@@ -49,6 +46,34 @@ def _client_is_trusted(request: Request) -> bool:
         except ValueError:
             log.warning("Ignoring unparseable trusted proxy entry: %s", entry)
     return False
+
+
+def client_address(request: Request) -> str:
+    """Who is actually calling, through any proxy we trust.
+
+    Behind a reverse proxy every request arrives from the proxy, so counting
+    failed sign-ins per address counted the whole internet as one caller and
+    the limit protected nobody. Where the immediate caller is a proxy on the
+    trusted list, the forwarded chain is read from the right, past any other
+    trusted proxy, to the first address we did not put there ourselves. An
+    untrusted caller's header is ignored entirely, because anyone can write
+    one.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if not _is_trusted_proxy(peer):
+        return peer
+    chain = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
+    for candidate in reversed(chain):
+        if not _is_trusted_proxy(candidate):
+            return candidate
+    return peer
+
+
+def _client_is_trusted(request: Request) -> bool:
+    settings = current()
+    if not settings.auth_proxy_enabled:
+        return False
+    return _is_trusted_proxy(request.client.host if request.client else None)
 
 
 def _user_from_proxy(request: Request) -> AppUser | None:

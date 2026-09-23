@@ -159,10 +159,11 @@ def login(
 ) -> dict:
     import time
 
+    from app.auth.deps import client_address
     from app.auth.security import login_throttle
 
     now = time.time()
-    address = request.client.host if request.client else "unknown"
+    address = client_address(request)
     name = username.strip()
     wait = login_throttle.blocked(name, address, now)
     if wait:

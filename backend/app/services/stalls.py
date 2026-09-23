@@ -118,3 +118,44 @@ def reclassify(days: int = 14) -> int:
                 event.cause, event.cause_detail = cause, detail
                 changed += 1
     return changed
+
+
+# ---- stalls from before seeks were excluded --------------------------------
+
+SEEK_FILTERING_SINCE = datetime(2026, 9, 17, tzinfo=UTC)
+"""When this app started telling a stall from a skip.
+
+Before that, jumping forward in a film and reaching the end of an episode both
+looked like buffering, so anything recorded earlier is a mix of real stalls and
+neither of those. The poll by poll positions that would tell them apart were
+never kept, so they cannot be sorted out now: they can only be kept, knowing
+they flatter nobody, or forgotten in one go.
+"""
+
+
+def unfiltered(db) -> tuple[int, datetime | None]:
+    """How many stalls predate the filtering, and the newest of them."""
+    from sqlalchemy import func, select
+
+    from app.models import StreamEvent
+
+    cutoff = SEEK_FILTERING_SINCE.replace(tzinfo=None)
+    count, newest = db.execute(
+        select(func.count(), func.max(StreamEvent.started_at)).where(
+            StreamEvent.kind == "buffering", StreamEvent.started_at < cutoff
+        )
+    ).one()
+    return int(count or 0), newest
+
+
+def forget_unfiltered(db) -> int:
+    """Drop them. Nothing else refers to a stall, so this leaves no gaps."""
+    from sqlalchemy import delete
+
+    from app.models import StreamEvent
+
+    cutoff = SEEK_FILTERING_SINCE.replace(tzinfo=None)
+    result = db.execute(
+        delete(StreamEvent).where(StreamEvent.kind == "buffering", StreamEvent.started_at < cutoff)
+    )
+    return int(result.rowcount or 0)

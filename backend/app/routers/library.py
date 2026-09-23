@@ -179,6 +179,30 @@ async def _causes_from_history(row_ids: list[int]) -> list[dict]:
     return [{"cause": c, "streams": n, "from_history": True} for c, n in counts.items()]
 
 
+@router.get("/stalls/unfiltered")
+def old_stalls(db: Db, _: AdminUser) -> dict:
+    """Stalls recorded before skipping and episode endings were told apart
+    from buffering. They cannot be sorted out now, only kept or forgotten."""
+    from app.services import stalls
+
+    count, newest = stalls.unfiltered(db)
+    return {
+        "count": count,
+        "newest": newest.isoformat() if newest else None,
+        "since": stalls.SEEK_FILTERING_SINCE.date().isoformat(),
+    }
+
+
+@router.delete("/stalls/unfiltered")
+def forget_old_stalls(db: Db, admin: AdminUser) -> dict:
+    from app.services import stalls
+
+    count = stalls.forget_unfiltered(db)
+    db.commit()
+    audit.record(admin, "library.stalls_forgotten", f"Forgot {count} stalls recorded before skips were excluded")
+    return {"forgotten": count}
+
+
 @router.get("/stores")
 async def stores(_: AdminUser, days: int = Query(30, ge=1, le=3650)) -> dict:
     """Each storage mount: what it holds, and what goes wrong watching from it."""
