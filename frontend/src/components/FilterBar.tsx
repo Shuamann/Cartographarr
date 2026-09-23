@@ -18,6 +18,10 @@ type Title = { rating_key: number; title: string; year: number | null };
 type Props = { value: FilterState; onChange: (next: FilterState) => void };
 
 export default function FilterBar({ value, onChange }: Props) {
+  /* On a phone the filters fill most of the screen before anything is shown,
+   * so there they fold behind one button. On anything wider the button is not
+   * rendered and the bar behaves as it always has. */
+  const [open, setOpen] = useState(false);
   const options = useApi<Options>("/filter-options");
   const users = useApi<User[]>("/users");
   const libraries = useApi<Library[]>("/libraries");
@@ -29,7 +33,11 @@ export default function FilterBar({ value, onChange }: Props) {
   const active = activeCount(value);
 
   return (
-    <div className="filters">
+    <div className={open ? "filters open" : "filters"}>
+      <button className="ms-btn filters-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? "Hide filters" : "Filters"}
+        {active > 0 && <span className="ms-count">{active}</span>}
+      </button>
       <input
         type="date"
         aria-label="From"

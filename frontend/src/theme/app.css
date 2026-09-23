@@ -1025,7 +1025,19 @@ label.locked .pill {
 }
 
 .layer-toggles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
   margin-left: 14px;
+}
+
+@media (max-width: 700px) {
+  /* A note about unmappable streams pushed the row wider than the screen. */
+  .layer-toggles {
+    margin-left: 0;
+  }
 }
 .check {
   display: inline-flex;
@@ -3470,4 +3482,40 @@ label.locked .pill {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
+}
+
+/* ---- filters on a phone --------------------------------------------------- */
+
+.filters-toggle {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .filters-toggle {
+    display: inline-flex;
+  }
+
+  /* Everything but the button folds away until it is asked for. */
+  .filters:not(.open) > *:not(.filters-toggle) {
+    display: none;
+  }
+
+  .filters.open {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  /* The key belongs at the bottom of a phone screen, not floating over it. */
+  .legend {
+    right: 8px;
+    left: 8px;
+    bottom: 8px;
+    max-width: none;
+    align-items: stretch;
+  }
+
+  .legend-body {
+    max-height: 55vh;
+    overflow-y: auto;
+  }
 }

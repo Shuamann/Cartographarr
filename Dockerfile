@@ -23,7 +23,9 @@ WORKDIR /srv
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
 COPY backend/scripts ./scripts
-RUN pip install --no-cache-dir .
+# pip itself ships with advisories against it in the base image, and it is
+# the one package here that installs other packages.
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
 
 # main.py looks here for the built UI and serves API-only if it's absent.
 COPY --from=ui /ui/dist /srv/static

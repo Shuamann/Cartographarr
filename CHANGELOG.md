@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.15.0 - 2026-09-23
+
+### Added
+- `scripts/audit.py` checks both halves of the app against known vulnerabilities in one go
+
+### Changed
+- On a phone the filters fold behind one button, so the map gets the screen rather than three rows of controls, and
+  the key opens as a sheet across the bottom
+- The image the container is built from upgrades pip first, since pip is the one package in it that installs others
+
+### Fixed
+- The map's layer row pushed the page wider than a phone screen when a stream could not be placed
+
 ## 0.14.0 - 2026-09-23
 
 ### Added

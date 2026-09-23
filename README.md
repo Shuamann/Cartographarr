@@ -410,3 +410,12 @@ cd frontend && npm install && npm run dev
 ```
 
 Vite proxies the API to the backend on 6277.
+
+Before a release, or whenever a dependency moves:
+
+```bash
+cd backend && .venv/Scripts/python scripts/audit.py
+```
+
+It asks pip-audit about the Python packages and npm about the JavaScript ones,
+and says nothing about this server to either.
