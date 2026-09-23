@@ -225,8 +225,28 @@ def raise_issue(
     return {"id": issue_id}
 
 
+async def _to_seerr(issue_id: int, send) -> str | None:
+    """Do the Seerr half of an action. A failure is reported, not raised: the
+    decision was made here, and the next sync would undo a half written one."""
+    from app.integrations.seerr import seerr
+    from app.services import issues as service
+
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        seerr_id = issue.seerr_id if issue else None
+    if not (seerr_id and seerr.configured()):
+        return None
+    try:
+        await send(service, seerr_id)
+    except Exception as exc:  # noqa: BLE001
+        from app.integrations.base import describe_failure
+
+        return f"Seerr was not updated: {describe_failure(exc)}"
+    return None
+
+
 @router.post("/{issue_id}/comment")
-def comment(issue_id: int, admin: AdminUser, message: str = Body(..., embed=True)) -> dict:
+async def comment(issue_id: int, admin: AdminUser, message: str = Body(..., embed=True)) -> dict:
     if not message.strip():
         raise HTTPException(400, "Nothing to add")
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -234,32 +254,30 @@ def comment(issue_id: int, admin: AdminUser, message: str = Body(..., embed=True
         issue = db.get(Issue, issue_id)
         if issue is None:
             raise HTTPException(404, "No such issue")
-        if issue.source != "local":
-            raise HTTPException(409, "This one came from Seerr. Comment there until writing back is built.")
         notes = _comments(issue)
         notes.append({"message": message.strip(), "author": admin.username, "created_at": now.isoformat()})
         issue.comments = json.dumps(notes)
         issue.updated_at = now
         title = issue.title
+    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.comment(seerr_id, message.strip(), admin.username))
     audit.record(admin, "issue.comment", f"Commented on {title}", target=str(issue_id))
-    return {"id": issue_id, "comments": len(notes)}
+    return {"id": issue_id, "comments": len(notes), "warning": warning}
 
 
 @router.post("/{issue_id}/status")
-def set_status(issue_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
+async def set_status(issue_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
     if status not in ("open", "resolved"):
         raise HTTPException(400, "Status is open or resolved")
     with session_scope() as db:
         issue = db.get(Issue, issue_id)
         if issue is None:
             raise HTTPException(404, "No such issue")
-        if issue.source != "local":
-            raise HTTPException(409, "This one came from Seerr, so Seerr decides when it is closed.")
         issue.status = status
         issue.updated_at = datetime.now(UTC).replace(tzinfo=None)
         title = issue.title
+    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.set_status(seerr_id, status, admin.username))
     audit.record(admin, "issue.status", f"Marked {title} {status}", target=str(issue_id))
-    return {"id": issue_id, "status": status}
+    return {"id": issue_id, "status": status, "warning": warning}
 
 
 @router.get("/{issue_id}")

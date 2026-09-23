@@ -167,12 +167,16 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
-  async function act(run: () => Promise<unknown>) {
+  async function act(run: () => Promise<{ warning?: string | null }>) {
     setBusy(true);
     setError(null);
     try {
-      await run();
+      // The decision is recorded here whatever Seerr does, so a Seerr failure
+      // is a note rather than an error.
+      const answer = await run();
+      setWarning(answer?.warning ?? null);
       detail.reload();
       onChanged();
     } catch (err) {
@@ -186,7 +190,7 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
   if (!detail.data) return <Loading compact label="Reading the report" />;
   const d = detail.data;
   const mine = d.plays.filter((p) => p.mine);
-  const local = d.source === "local";
+  const fromSeerr = d.source === "seerr" && d.seerr_id != null;
 
   return (
     <div className="issue-card">
@@ -209,33 +213,31 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
           )}
         </p>
         {error && <p className="note bad-note">{error}</p>}
-        {local ? (
-          <div className="row wrap">
-            <input
-              placeholder="Add a note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <button
-              className="btn"
-              disabled={busy || !note.trim()}
-              onClick={async () => {
-                await act(() => api.post(`/issues/${id}/comment`, { message: note }));
-                setNote("");
-              }}
-            >
-              Comment
-            </button>
-            <button
-              className="tab"
-              disabled={busy}
-              onClick={() => act(() => api.post(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" }))}
-            >
-              {d.status === "open" ? "Mark resolved" : "Reopen"}
-            </button>
-          </div>
-        ) : (
-          <p className="muted small">This one came from Seerr, so it is commented and closed there.</p>
+        {warning && <p className="note warn-note">{warning}</p>}
+        <div className="row wrap">
+          <input placeholder="Add a note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <button
+            className="btn"
+            disabled={busy || !note.trim()}
+            onClick={async () => {
+              await act(() => api.post(`/issues/${id}/comment`, { message: note }));
+              setNote("");
+            }}
+          >
+            Comment
+          </button>
+          <button
+            className="tab"
+            disabled={busy}
+            onClick={() => act(() => api.post(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" }))}
+          >
+            {d.status === "open" ? "Mark resolved" : "Reopen"}
+          </button>
+        </div>
+        {fromSeerr && (
+          <p className="muted small">
+            This came from Seerr, so comments and resolutions go back there too, signed with your name.
+          </p>
         )}
       </section>
 

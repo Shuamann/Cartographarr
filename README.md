@@ -310,6 +310,15 @@ card. Nothing is written back to Seerr yet.
 
 Reports on an episode land on the episode's own file, not the show.
 
+Comment on an issue, resolve it or reopen it from here. One that came from
+Seerr is updated there as well, signed with the name of whoever acted, since
+Seerr's API key would otherwise make every message read as the admin. If Seerr
+is down or has been turned off, the decision still stands here and the page
+says Seerr was not updated.
+
+When a replacement for a file finishes importing, whatever was reported about
+that file is closed with a note saying what replaced it.
+
 ## Storage
 
 A Plex library can span more than one place: an array share and a network SSD,

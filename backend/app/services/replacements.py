@@ -370,6 +370,7 @@ async def live(r: Any, service: Any, queue: list[dict[str, Any]] | None = None) 
 async def _imported(r: Any, service: Any, file: dict[str, Any] | None = None) -> dict[str, Any]:
     from app.db import session_scope
     from app.models import MediaItem
+    from app.services import issues
 
     if file is None:
         file = await service.current_file(r.arr_id, r.episode_id)
@@ -377,6 +378,17 @@ async def _imported(r: Any, service: Any, file: dict[str, Any] | None = None) ->
         item = db.get(MediaItem, r.rating_key)
         if item is not None:
             item.file_checked_at = None  # read the new file's details on the next sync
+    # What anyone reported about this file was about the old one. Closing it
+    # here, with what replaced it, is the end of the loop the report started.
+    try:
+        closed = await issues.resolve_for_file(
+            r.rating_key,
+            f"Replaced through {service.label}: {_file_summary(file or {}).get('quality') or 'a new file'}.",
+        )
+        if closed:
+            log.info("replacement for %s closed %d reported issue(s)", r.rating_key, len(closed))
+    except Exception:  # noqa: BLE001 - the replacement landing is the important part
+        log.exception("could not close issues for %s", r.rating_key)
     return {
         "status": "imported" if r.status == "importing" else "imported_automatically",
         "candidate": json.dumps({**json.loads(r.candidate or "{}"), "imported": _file_summary(file or {})}),

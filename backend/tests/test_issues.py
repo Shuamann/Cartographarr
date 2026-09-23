@@ -169,7 +169,9 @@ def test_an_issue_can_be_raised_here_without_seerr(client):
     assert {"issue.create", "issue.comment", "issue.status"} <= set(actions)
 
 
-def test_issues_read_from_seerr_are_not_edited_here(client, monkeypatch):
+def test_an_issue_from_seerr_is_acted_on_here_without_seerr_configured(client, monkeypatch):
+    """Seerr may have been turned off since a report came in. The decision
+    still stands here, and nothing is posted to a service that is not there."""
     from app.services import issues as service
 
     claim(client)
@@ -177,8 +179,9 @@ def test_issues_read_from_seerr_are_not_edited_here(client, monkeypatch):
     fake_seerr(monkeypatch, [issue(11)])
     asyncio.run(service.sync())
     made = client.get("/api/issues").json()["items"][0]["id"]
-    assert client.post(f"/api/issues/{made}/comment", json={"message": "hi"}).status_code == 409
-    assert client.post(f"/api/issues/{made}/status", json={"status": "resolved"}).status_code == 409
+
+    assert client.post(f"/api/issues/{made}/comment", json={"message": "hi"}).json()["warning"] is None
+    assert client.post(f"/api/issues/{made}/status", json={"status": "resolved"}).json()["status"] == "resolved"
 
 
 def test_a_local_issue_survives_a_seerr_sync(client, monkeypatch):
@@ -195,3 +198,104 @@ def test_a_local_issue_survives_a_seerr_sync(client, monkeypatch):
     asyncio.run(service.sync())
     sources = sorted(i["source"] for i in client.get("/api/issues").json()["items"])
     assert sources == ["local", "seerr"]
+
+
+def fake_seerr_writes(monkeypatch):
+    """Catch what would be posted to Seerr, without posting anything."""
+    from app.services import issues as service
+
+    posted: list[tuple[str, dict]] = []
+
+    async def post(path, body=None):
+        posted.append((path, body or {}))
+
+    monkeypatch.setattr(service, "_post", post)
+    monkeypatch.setattr("app.integrations.seerr.SeerrIntegration.configured", lambda self: True)
+    return posted
+
+
+def test_a_comment_and_a_resolution_reach_seerr_with_who_said_it(client, monkeypatch):
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+    issue_id = client.get("/api/issues").json()["items"][0]["id"]
+    posted = fake_seerr_writes(monkeypatch)
+
+    assert client.post(f"/api/issues/{issue_id}/comment", json={"message": "Only on the Roku"}).json()["warning"] is None
+    assert posted[0][0] == "/issue/11/comment"
+    # The API key acts as the admin in Seerr, so the message says who it is from.
+    assert posted[0][1]["message"].startswith("Only on the Roku") and "via Cartographarr" in posted[0][1]["message"]
+
+    assert client.post(f"/api/issues/{issue_id}/status", json={"status": "resolved"}).json()["status"] == "resolved"
+    assert posted[-1][0] == "/issue/11/resolved"
+    assert client.get("/api/issues").json()["open"] == 0
+    assert client.post(f"/api/issues/{issue_id}/status", json={"status": "open"}).status_code == 200
+    assert posted[-1][0] == "/issue/11/open"
+
+
+def test_a_local_issue_never_calls_seerr(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie"))
+    made = client.post("/api/issues", json={"rating_key": 5, "message": "Stutters"}).json()["id"]
+    posted = fake_seerr_writes(monkeypatch)
+    client.post(f"/api/issues/{made}/comment", json={"message": "Only at night"})
+    client.post(f"/api/issues/{made}/status", json={"status": "resolved"})
+    assert posted == []
+
+
+def test_a_failing_seerr_still_records_the_decision_here(client, monkeypatch):
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+    issue_id = client.get("/api/issues").json()["items"][0]["id"]
+
+    async def boom(path, body=None):
+        raise RuntimeError("Seerr is down")
+
+    monkeypatch.setattr(service, "_post", boom)
+    monkeypatch.setattr("app.integrations.seerr.SeerrIntegration.configured", lambda self: True)
+    answer = client.post(f"/api/issues/{issue_id}/status", json={"status": "resolved"}).json()
+    assert answer["status"] == "resolved" and "Seerr was not updated" in answer["warning"]
+    assert client.get("/api/issues").json()["open"] == 0
+
+
+def test_a_replacement_landing_closes_what_was_reported(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import issues as service
+    from app.services import replacements
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie", file_checked_at=datetime.now(UTC)))
+    made = client.post("/api/issues", json={"rating_key": 5, "issue_type": "audio", "message": "No English track"}).json()["id"]
+
+    class FakeService:
+        label = "Radarr"
+
+        async def current_file(self, arr_id, episode_id):
+            return {"relativePath": "Film (2020) Bluray-1080p.mkv", "quality": {"quality": {"name": "Bluray-1080p"}}}
+
+    class Row:
+        rating_key, arr_id, episode_id, status, candidate = 5, 1, None, "importing", "{}"
+
+    asyncio.run(replacements._imported(Row(), FakeService()))
+
+    detail = client.get(f"/api/issues/{made}").json()
+    assert detail["status"] == "resolved"
+    assert "Replaced through Radarr" in detail["comment_list"][-1]["message"]
+    assert detail["comment_list"][-1]["author"] == "Cartographarr"
+    # The new file's details are read again, so the findings describe what landed.
+    with session_scope() as db:
+        assert db.get(MediaItem, 5).file_checked_at is None
+    assert service.LABELS["audio"] == "Audio"

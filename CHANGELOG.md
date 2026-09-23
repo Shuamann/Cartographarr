@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.9.0 - 2026-09-22
+
+### Added
+- Comments and resolutions on an issue that came from Seerr go back to Seerr, signed with the name of whoever acted,
+  because its API key would otherwise make everything read as the admin
+- A replacement landing closes what was reported about that file, with a note saying what replaced it
+
+### Changed
+- An issue from Seerr can be commented on and resolved here. A Seerr that is down or turned off is reported as a note
+  on the page rather than losing the decision, which stands here either way
+
 ## 0.8.0 - 2026-09-22
 
 ### Added

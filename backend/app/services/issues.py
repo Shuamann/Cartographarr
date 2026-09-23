@@ -6,7 +6,8 @@ resolution, who played it on what device, whether it transcoded for them, and
 whether it stalled while they watched. Pulling the reports in puts the sentence
 next to the evidence, and next to the replacement workflow that can fix it.
 
-Read only for now: issues are synced from Seerr, never written back.
+Issues live here. Seerr is a second place they come from, and what is
+decided here goes back to it: a comment, a resolution, a reopening.
 """
 
 from __future__ import annotations
@@ -197,3 +198,72 @@ def _store(raws: list[dict[str, Any]]) -> int:
             if seerr_id not in seen:
                 db.delete(issue)
     return kept
+
+
+# ---- writing back ----------------------------------------------------------
+#
+# Seerr's API key acts as the admin account, so anything posted from here would
+# read as the admin having said it. Every message therefore names whoever acted,
+# which is also what makes an auto-resolve honest about being automatic.
+
+async def _post(path: str, body: dict[str, Any] | None = None) -> None:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(f"{seerr.base_url}/api/v1{path}", headers=seerr.headers, json=body or {})
+        response.raise_for_status()
+
+
+def signed(message: str, author: str | None) -> str:
+    return f"{message}\n\n({author} via Cartographarr)" if author else f"{message}\n\n(via Cartographarr)"
+
+
+async def comment(seerr_id: int, message: str, author: str | None = None) -> None:
+    await _post(f"/issue/{seerr_id}/comment", {"message": signed(message, author)})
+
+
+async def set_status(seerr_id: int, status: str, author: str | None = None, note: str | None = None) -> None:
+    """Resolve or reopen in Seerr. A note is posted first, so the person who
+    reported it can see why it closed rather than just that it did."""
+    if note:
+        await comment(seerr_id, note, author)
+    await _post(f"/issue/{seerr_id}/{'resolved' if status == 'resolved' else 'open'}")
+
+
+async def resolve_for_file(rating_key: int, note: str) -> list[int]:
+    """Close what this file's replacement was about.
+
+    A report says the audio is broken; the file it was about has just been
+    replaced. Leaving it open makes the list untrustworthy, so it closes with
+    a note saying what happened, here and in Seerr.
+    """
+    import asyncio
+    import json as json_module
+    from datetime import datetime
+
+    from app.models import Issue
+
+    def take() -> list[tuple[int, int | None]]:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        found = []
+        with session_scope() as db:
+            for issue in db.execute(
+                select(Issue).where(Issue.rating_key == rating_key, Issue.status == "open")
+            ).scalars():
+                notes = json_module.loads(issue.comments or "[]")
+                notes.append({"message": note, "author": "Cartographarr", "created_at": now.isoformat()})
+                issue.comments = json_module.dumps(notes)
+                issue.status = "resolved"
+                issue.updated_at = now
+                found.append((issue.id, issue.seerr_id))
+        return found
+
+    closed = await asyncio.to_thread(take)
+    if seerr.configured():
+        for _, seerr_id in closed:
+            if seerr_id:
+                try:
+                    await set_status(seerr_id, "resolved", "Cartographarr", note)
+                except Exception as exc:  # noqa: BLE001 - the local copy is closed either way
+                    log.warning("could not resolve issue %s in Seerr: %s", seerr_id, exc)
+    return [issue_id for issue_id, _ in closed]
