@@ -162,6 +162,20 @@ FIELDS: list[Field] = [
     Field("bandwidth", "Bandwidth", "Playback", "number", lambda s, c: s.get("bandwidth"), unit="kbps"),
     Field("quality", "Quality profile", "Playback", "text", lambda s, c: s.get("quality_profile")),
     Field("server_streams", "Streams on the server right now", "Playback", "number", lambda s, c: c.get("server_stream_count")),
+    Field(
+        "user_upload_percent", "Share of upload this person is using", "Playback", "number",
+        lambda s, c: c.get("user_upload_percent"), unit="%",
+        hint="Their streams added up, against the server's upload capacity. Needs that capacity set, or read from Plex.",
+    ),
+    Field(
+        "user_upload_mbps", "Upload this person is using", "Playback", "number",
+        lambda s, c: c.get("user_upload_mbps"), unit="Mbps",
+    ),
+    Field(
+        "server_upload_percent", "Share of upload in use altogether", "Playback", "number",
+        lambda s, c: c.get("server_upload_percent"), unit="%",
+        hint="Every remote stream added up. A rule can then act only when the pipe is actually full.",
+    ),
     # ---- network and place ---------------------------------------------------
     Field(
         "location", "Network", "Where", "choice", lambda s, c: s.get("location"),

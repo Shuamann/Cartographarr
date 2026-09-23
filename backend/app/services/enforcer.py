@@ -195,11 +195,33 @@ def _build_context(sessions: list[Session]) -> dict[str, dict[str, Any]]:
             ).all()
         } if machines else set()
 
+    # How much of the server's upload each person is taking right now. A rule
+    # can then act on the one filling the pipe rather than on everybody at
+    # once, which is the difference between a budget and a blunt limit.
+    from app.services.streams import upload_capacity
+
+    capacity, _ = upload_capacity()
+    per_user_kbps: dict[Any, int] = {}
+    for session in sessions:
+        per_user_kbps[session.get("user_id")] = per_user_kbps.get(session.get("user_id"), 0) + (
+            _int(session.get("bandwidth")) or 0
+        )
+    remote_kbps = sum(
+        _int(session.get("bandwidth")) or 0 for session in sessions if session.get("location") == "wan"
+    )
+
     now = datetime.now()
     return {
         str(s.get("session_key")): {
             "user_stream_count": per_user.get(s.get("user_id"), 0),
             "server_stream_count": len(sessions),
+            "user_upload_mbps": round(per_user_kbps.get(s.get("user_id"), 0) / 1000, 2),
+            "user_upload_percent": (
+                round(per_user_kbps.get(s.get("user_id"), 0) / 1000 / capacity * 100)
+                if capacity > 0
+                else None
+            ),
+            "server_upload_percent": round(remote_kbps / 1000 / capacity * 100) if capacity > 0 else None,
             "geo": places.get(s.get("ip_address")),
             "is_hosting": bool((places.get(s.get("ip_address")) or {}).get("is_hosting")),
             "paused_minutes": _paused_minutes(s),

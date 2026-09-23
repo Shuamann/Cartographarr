@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.20.0 - 2026-09-23
+
+### Added
+- Rules can see how much of the server's upload each person is using, in Mbps and as a share of capacity, and how
+  much is in use altogether. A rule can then act on whoever is filling the pipe, and only when it is actually full
+
 ## 0.19.0 - 2026-09-23
 
 ### Added

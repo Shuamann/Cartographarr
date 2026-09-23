@@ -103,3 +103,28 @@ def test_missing_session_field_does_not_match():
     sparse = {"session_key": "1"}
     assert matches(rule(match_machine_id="anything"), sparse, CONTEXT) is False
     assert matches(rule(match_player="anything"), sparse, CONTEXT) is False
+
+
+def test_a_rule_can_act_on_who_is_filling_the_upload(client):
+    """A budget, not a blunt limit: the rule sees each person's share of the
+    server's upload, and the share in use altogether."""
+    from app.services import enforcer, streams
+    from tests.test_auth import claim
+
+    claim(client)
+    client.put("/api/settings", json={"upload_capacity_mbps": 100})
+
+    sessions = [
+        {"session_key": "1", "user_id": 7, "bandwidth": "30000", "location": "wan", "ip_address": "203.0.113.1"},
+        {"session_key": "2", "user_id": 7, "bandwidth": "25000", "location": "wan", "ip_address": "203.0.113.1"},
+        {"session_key": "3", "user_id": 8, "bandwidth": "10000", "location": "wan", "ip_address": "203.0.113.2"},
+        {"session_key": "4", "user_id": 9, "bandwidth": "5000", "location": "lan", "ip_address": "10.0.0.5"},
+    ]
+    context = enforcer._build_context(sessions)
+
+    hog = context["1"]
+    assert hog["user_upload_mbps"] == 55.0 and hog["user_upload_percent"] == 55
+    assert context["3"]["user_upload_percent"] == 10
+    # Everything remote added up, so a rule can wait until the pipe is full.
+    assert hog["server_upload_percent"] == 65
+    assert streams.upload_capacity()[0] == 100
