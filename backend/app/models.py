@@ -715,6 +715,11 @@ class Issue(Base):
     comments: Mapped[str | None] = mapped_column(Text)
     """JSON: [{"message", "author", "created_at"}], oldest first."""
 
+    context: Mapped[str | None] = mapped_column(Text)
+    """JSON: the play this was reported from, recorded as it was at the time.
+    Device, when, whether it transcoded, and any stalls during it. A report
+    that carries its own evidence beats one that says "it looked bad"."""
+
     created_at: Mapped[datetime | None] = mapped_column()
     updated_at: Mapped[datetime | None] = mapped_column()
     synced_at: Mapped[datetime | None] = mapped_column()

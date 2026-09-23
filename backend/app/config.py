@@ -195,6 +195,12 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    viewer_reports_issues: bool = True
+    """Whether people who sign in as viewers can report a problem with
+    something they watched, and see what they reported. They see their own
+    reports and nothing else: not other people's, not the file's path, not who
+    else watched it."""
+
     viewer_privacy: str = "all"
     """What viewer accounts can see: `all` of the server, only their `own`
     data, or everything with other people `anonymised`. Admins see all."""

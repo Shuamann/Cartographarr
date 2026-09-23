@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.16.0 - 2026-09-23
+
+### Added
+- People who sign in as viewers can report a problem with what they watched, and see what they reported. Reporting
+  from a play in History carries that play with it: the device, the time, whether it transcoded and whether it
+  stalled, so nobody has to ask. Switch it off under Settings, Access
+- An issue says what it was reported from, where it came from a play
+
+### Changed
+- Issues is no longer an admin's tab. A viewer sees their own reports and nothing else: not other people's, not who
+  else watched the file, not where it sits on disk. Only an admin closes a report
+
 ## 0.15.0 - 2026-09-23
 
 ### Added

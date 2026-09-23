@@ -46,7 +46,21 @@ type Play = {
   stall_seconds: number;
 };
 
+type Context = {
+  row_id: number;
+  started: number | null;
+  player: string | null;
+  platform: string | null;
+  product: string | null;
+  location: string | null;
+  transcode_decision: string | null;
+  percent_complete: number | null;
+  stalls: number;
+  stall_seconds: number;
+};
+
 type IssueDetail = IssueRow & {
+  context: Context | null;
   comment_list: { message: string | null; author: string | null; created_at: string }[];
   tmdb_id: number | null;
   file: FileDetail | null;
@@ -63,6 +77,7 @@ type Listing = {
   by_type: Record<string, number>;
   seerr_url: string | null;
   seerr_configured: boolean;
+  mine_only: boolean;
 };
 
 const TYPES: Record<string, string> = { video: "Video", audio: "Audio", subtitles: "Subtitles", other: "Other" };
@@ -117,8 +132,9 @@ export default function Issues() {
       </div>
 
       <p className="muted">
-        What people reported, with the file, the plays behind it and what went wrong during them. Issues are kept here,
-        and anything reported in Seerr is read in every five minutes.
+        {d.mine_only
+          ? "What you have reported, and what came of it. Reporting from History carries the details of that play with it, so nobody has to ask what device you were on."
+          : "What people reported, with the file, the plays behind it and what went wrong during them. Issues are kept here, and anything reported in Seerr is read in every five minutes."}
       </p>
 
       {raising && (
@@ -134,9 +150,11 @@ export default function Issues() {
 
       {d.items.length === 0 && (
         <p className="note">
-          {d.seerr_configured
-            ? `Nothing reported${status === "open" ? " and still open" : ""}. Reports made in Seerr appear here within five minutes.`
-            : "Seerr is not set up, so there is nothing to read. Add it under Settings, Media apps and reports will appear here."}
+          {d.mine_only
+            ? "You have not reported anything. If something looks or sounds wrong, report it here, or from a play in your History."
+            : d.seerr_configured
+              ? `Nothing reported${status === "open" ? " and still open" : ""}. Reports made in Seerr appear here within five minutes.`
+              : "Seerr is not set up, so there is nothing to read. Add it under Settings, Media apps and reports will appear here."}
         </p>
       )}
 
@@ -153,7 +171,9 @@ export default function Issues() {
               <span className="muted small">{i.reporter_name ?? "Someone"}</span>
               <span className="muted small">{when(i.created_at)}</span>
             </button>
-            {open === i.id && <IssueCard id={i.id} seerrUrl={d.seerr_url} onChanged={data.reload} />}
+            {open === i.id && (
+              <IssueCard id={i.id} seerrUrl={d.seerr_url} mineOnly={d.mine_only} onChanged={data.reload} />
+            )}
           </div>
         ))}
       </div>
@@ -161,7 +181,17 @@ export default function Issues() {
   );
 }
 
-function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string | null; onChanged: () => void }) {
+function IssueCard({
+  id,
+  seerrUrl,
+  mineOnly,
+  onChanged,
+}: {
+  id: number;
+  seerrUrl: string | null;
+  mineOnly: boolean;
+  onChanged: () => void;
+}) {
   const nav = useNav();
   const detail = useApi<IssueDetail>(`/issues/${id}`);
   const [note, setNote] = useState("");
@@ -204,6 +234,19 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
             {c.message}
           </p>
         ))}
+        {d.context && (
+          <p className="note">
+            Reported while watching on{" "}
+            <strong>{[d.context.player, d.context.platform].filter(Boolean).join(" · ") || "an unknown device"}</strong>
+            {d.context.started ? `, ${new Date(d.context.started * 1000).toLocaleString()}` : ""}
+            {d.context.location === "wan" ? ", remotely" : d.context.location === "lan" ? ", on the local network" : ""}
+            {d.context.transcode_decision ? `, ${d.context.transcode_decision}` : ""}
+            {d.context.percent_complete != null ? `, ${Math.round(d.context.percent_complete)}% through` : ""}
+            {d.context.stalls > 0
+              ? `. It stalled ${d.context.stalls} ${d.context.stalls === 1 ? "time" : "times"} during that play, for ${d.context.stall_seconds}s.`
+              : "."}
+          </p>
+        )}
         <p className="muted small">
           {d.season && d.episode ? `Season ${d.season}, episode ${d.episode}. ` : ""}
           {d.seerr_id && seerrUrl && (
@@ -226,13 +269,16 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
           >
             Comment
           </button>
-          <button
-            className="tab"
-            disabled={busy}
-            onClick={() => act(() => api.post(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" }))}
-          >
-            {d.status === "open" ? "Mark resolved" : "Reopen"}
-          </button>
+          {/* Whoever runs the server decides when something is closed. */}
+          {!mineOnly && (
+            <button
+              className="tab"
+              disabled={busy}
+              onClick={() => act(() => api.post(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" }))}
+            >
+              {d.status === "open" ? "Mark resolved" : "Reopen"}
+            </button>
+          )}
         </div>
         {fromSeerr && (
           <p className="muted small">

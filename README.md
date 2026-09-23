@@ -326,6 +326,12 @@ Raising one starts from what was watched: what is playing now, then what was
 played lately, with posters and a line about each. Searching finds shows and
 films, and picking a show opens its episodes.
 
+People who sign in as viewers can report what they watched, and see what they
+reported. Reporting from a play in their History carries that play with it: the
+device, the time, whether it transcoded and whether it stalled. They see their
+own reports and nothing else, and only an admin closes one. Turn it off under
+**Settings, Access**.
+
 Comment on an issue, resolve it or reopen it from here. One that came from
 Seerr is updated there as well, signed with the name of whoever acted, since
 Seerr's API key would otherwise make every message read as the admin. If Seerr

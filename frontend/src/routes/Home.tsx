@@ -44,18 +44,22 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
           <span className="card-big">{streams}</span>
           <span className="card-sub">{streams === 1 ? "stream playing" : "streams playing"}</span>
         </button>
-        {nav.isAdmin && (
-          <>
-            <button className="home-card" onClick={() => onNavigate("Issues")}>
-              <span className="card-big">{d.open_issues}</span>
-              <span className="card-sub">{d.open_issues === 1 ? "issue open" : "issues open"}</span>
-            </button>
-            <button className="home-card accent" onClick={() => onNavigate("Issues")}>
-              <span className="card-sub">Something wrong with a film or an episode?</span>
-              <span className="card-big small-big">Raise an issue</span>
-            </button>
-          </>
-        )}
+        <button className="home-card" onClick={() => onNavigate("Issues")}>
+          <span className="card-big">{d.open_issues}</span>
+          <span className="card-sub">
+            {nav.isAdmin
+              ? d.open_issues === 1
+                ? "issue open"
+                : "issues open"
+              : d.open_issues === 1
+                ? "issue of yours open"
+                : "issues of yours open"}
+          </span>
+        </button>
+        <button className="home-card accent" onClick={() => onNavigate("Issues")}>
+          <span className="card-sub">Something wrong with a film or an episode?</span>
+          <span className="card-big small-big">Report it</span>
+        </button>
       </div>
 
       <h2 className="section-head">Where to go</h2>

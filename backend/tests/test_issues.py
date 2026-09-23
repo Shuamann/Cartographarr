@@ -5,7 +5,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 from tests.test_auth import claim
-from tests.test_privacy import as_viewer
+from tests.test_privacy import PASSWORD, as_viewer
 
 NOW = int(datetime.now(UTC).timestamp())
 
@@ -127,10 +127,76 @@ def test_a_movie_report_and_one_with_no_match(client, monkeypatch):
     assert unmatched["rating_key"] == 999 and unmatched["file"] is None and unmatched["plays"] == []
 
 
-def test_viewers_cannot_see_issues(client):
+def test_a_viewer_sees_and_reports_only_their_own(client):
+    """Somebody who watches here can say what went wrong, and sees what they
+    said. Not other people's reports, not who else watched it, not the path."""
+    from app.db import session_scope
+    from app.models import History, MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie", file_path="/movies/Film/f.mkv"))
+    theirs = client.post("/api/issues", json={"rating_key": 5, "message": "The admin's own report"}).json()["id"]
+
+    as_viewer(client, "all")  # viewer7, linked to Plex user 7
+    with session_scope() as db:
+        db.add(History(row_id=40, reference_id=40, rating_key=5, user_id=7, started=1000, stopped=2000,
+                       media_type="movie", full_title="Film", player="iPhone", platform="iOS",
+                       location="wan", transcode_decision="transcode", percent_complete=80))
+
+    assert client.get("/api/issues?status=all").json()["items"] == []
+    assert client.get(f"/api/issues/{theirs}").status_code == 404
+
+    made = client.post("/api/issues", json={"rating_key": 5, "issue_type": "video", "message": "Picture stutters", "row_id": 40})
+    assert made.status_code == 200
+    listing = client.get("/api/issues").json()
+    assert [i["id"] for i in listing["items"]] == [made.json()["id"]] and listing["mine_only"] is True
+
+    detail = client.get(f"/api/issues/{made.json()['id']}").json()
+    assert detail["other_reports"] == [] and detail["streams"] == []
+    assert all(p["user_id"] == 7 for p in detail["plays"])
+    assert "file_path" not in (detail["file"] or {})
+    # The play it was reported from is kept with it.
+    assert detail["context"]["player"] == "iPhone" and detail["context"]["transcode_decision"] == "transcode"
+
+    # Only an admin decides when something is closed.
+    assert client.post(f"/api/issues/{made.json()['id']}/status", json={"status": "resolved"}).status_code == 403
+    # A comment on their own is fine; on somebody else's it does not exist.
+    assert client.post(f"/api/issues/{made.json()['id']}/comment", json={"message": "Still bad"}).status_code == 200
+    assert client.post(f"/api/issues/{theirs}/comment", json={"message": "Nosy"}).status_code == 404
+
+
+def test_a_viewer_only_sees_their_own_watching_when_choosing(client):
+    from app.db import session_scope
+    from app.models import History, MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Mine", full_title="Mine", media_type="movie"))
+        db.add(MediaItem(rating_key=6, title="Theirs", full_title="Theirs", media_type="movie"))
+    as_viewer(client, "all")
+    with session_scope() as db:
+        db.add(History(row_id=41, reference_id=41, rating_key=5, user_id=7, started=1000, media_type="movie"))
+        db.add(History(row_id=42, reference_id=42, rating_key=6, user_id=8, started=2000, media_type="movie"))
+
+    assert [c["rating_key"] for c in client.get("/api/issues/recent").json()["items"]] == [5]
+
+
+def test_reporting_can_be_switched_off_for_viewers(client):
+    claim(client)
+    client.put("/api/settings", json={"viewer_reports_issues": False})
     as_viewer(client, "all")
     assert client.get("/api/issues").status_code == 403
-    assert client.get("/api/issues/1").status_code == 403
+    assert client.post("/api/issues", json={"rating_key": 5, "message": "x"}).status_code == 403
+
+
+def test_an_unlinked_viewer_is_told_what_is_missing(client):
+    claim(client)
+    client.post("/api/auth/users", json={"username": "nobody", "password": PASSWORD, "role": "viewer"})
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username": "nobody", "password": PASSWORD})
+    answer = client.get("/api/issues")
+    assert answer.status_code == 409 and "not linked" in answer.json()["detail"]
 
 
 def test_the_sync_is_skipped_without_seerr(client):

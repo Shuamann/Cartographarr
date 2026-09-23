@@ -1,7 +1,7 @@
 import Loading from "./Loading";
 import { displayTitle, episodeLabel } from "../lib/titles";
 import { useState } from "react";
-import { useApi, type MediaDetail } from "../lib/api";
+import { api, useApi, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
 import BrandIcon from "./BrandIcon";
 import { when } from "./DataTable";
@@ -266,7 +266,75 @@ export default function PlayDetail({ rowId }: { rowId: number }) {
           </div>
         )}
         {p.stream_error && <p className="muted small">Stream details unavailable: {p.stream_error}</p>}
+        {p.rating_key != null && <ReportPlay rowId={rowId} ratingKey={p.rating_key} />}
       </div>
+    </div>
+  );
+}
+
+/* Report a problem with this play.
+ *
+ * Reported from here, the play goes with it: the device, the time, whether it
+ * transcoded and whether it stalled. That is the half nobody writes down, and
+ * without it a report is somebody saying it looked bad. */
+function ReportPlay({ rowId, ratingKey }: { rowId: number; ratingKey: number }) {
+  const nav = useNav();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState("other");
+  const [message, setMessage] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | string>("idle");
+
+  if (state === "sent") {
+    return (
+      <p className="note">
+        Reported. It is on the Issues tab{nav.isAdmin ? "" : ", along with anything else you have reported"}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="report-play">
+      {open ? (
+        <div className="row wrap">
+          <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="video">Video</option>
+            <option value="audio">Audio</option>
+            <option value="subtitles">Subtitles</option>
+            <option value="other">Other</option>
+          </select>
+          <input
+            placeholder="What went wrong?"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            autoFocus
+          />
+          <button
+            className="btn"
+            disabled={!message.trim() || state === "sending"}
+            onClick={async () => {
+              setState("sending");
+              try {
+                await api.post("/issues", { rating_key: ratingKey, issue_type: kind, message, row_id: rowId });
+                setState("sent");
+              } catch (err) {
+                setState((err as Error).message);
+              }
+            }}
+          >
+            Report it
+          </button>
+          <button className="tab" onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+          {typeof state === "string" && !["idle", "sending", "sent"].includes(state) && (
+            <span className="danger-text small">{state}</span>
+          )}
+        </div>
+      ) : (
+        <button className="tab" onClick={() => setOpen(true)}>
+          Something wrong with this?
+        </button>
+      )}
     </div>
   );
 }

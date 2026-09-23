@@ -267,7 +267,9 @@ app.include_router(data.router, dependencies=[Depends(require_user)])
 app.include_router(live.router, dependencies=[Depends(require_user)])
 app.include_router(reports.router, dependencies=[Depends(require_user)])
 app.include_router(library.router, dependencies=[Depends(require_admin)])
-app.include_router(issues.router, dependencies=[Depends(require_admin)])
+# Viewers reach this one: they see and report their own issues, and every
+# route in it decides for itself what that means.
+app.include_router(issues.router, dependencies=[Depends(require_user)])
 app.include_router(admin.router, dependencies=[Depends(require_admin)])
 app.include_router(sharing.router)
 # Guarded by its own token rather than a session, since monitoring tools

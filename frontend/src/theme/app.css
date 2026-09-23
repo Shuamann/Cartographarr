@@ -3519,3 +3519,14 @@ label.locked .pill {
     overflow-y: auto;
   }
 }
+
+.report-play {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.report-play input {
+  flex: 1;
+  min-width: 220px;
+}

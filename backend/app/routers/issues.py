@@ -16,7 +16,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from sqlalchemy import func, select
 
 from app import audit
-from app.auth.deps import AdminUser
+from app.auth.deps import AdminUser, CurrentUser
 from app.db import session_scope
 from app.models import History, Issue, MediaItem, StreamEvent, StreamSession, User
 from app.redact import redact
@@ -24,6 +24,28 @@ from app.settings_store import current
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/issues")
+
+
+def _asker(user) -> int | None:
+    """None for an admin, otherwise the Plex user a viewer is limited to.
+
+    A viewer sees what they reported and nothing else: not other people's
+    reports, not who else watched the file, not where it sits on disk.
+    """
+    if user.role == "admin":
+        return None
+    if not current().viewer_reports_issues:
+        raise HTTPException(403, "Reporting is switched off on this server")
+    from app.privacy import linked_plex_user
+
+    linked = linked_plex_user(user)
+    if linked is None:
+        raise HTTPException(
+            409,
+            "Your account is not linked to a Plex user, so this server cannot tell what you have watched. "
+            "Ask an admin to link it.",
+        )
+    return linked
 
 
 def _comments(issue: Issue) -> list[dict[str, Any]]:
@@ -56,33 +78,40 @@ def _brief(issue: Issue, names: dict[int, str]) -> dict[str, Any]:
 
 @router.get("")
 def list_issues(
-    _: AdminUser,
+    user: CurrentUser,
     status: str = Query("open", pattern="^(open|resolved|all)$"),
     issue_type: str | None = Query(None, pattern="^(video|audio|subtitles|other)$"),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
+    mine = _asker(user)
     with session_scope() as db:
         stmt = select(Issue).order_by(Issue.created_at.desc().nulls_last(), Issue.id.desc()).limit(limit)
         if status != "all":
             stmt = stmt.where(Issue.status == status)
         if issue_type:
             stmt = stmt.where(Issue.issue_type == issue_type)
+        if mine is not None:
+            stmt = stmt.where(Issue.reporter_user_id == mine)
         issues = db.execute(stmt).scalars().all()
         names = {
             u.user_id: u.friendly_name or u.username
             for u in db.execute(select(User).where(User.user_id.in_([i.reporter_user_id for i in issues if i.reporter_user_id]))).scalars()
         }
-        counts = dict(db.execute(select(Issue.status, func.count()).group_by(Issue.status)).all())
-        by_type = dict(
-            db.execute(select(Issue.issue_type, func.count()).where(Issue.status == "open").group_by(Issue.issue_type)).all()
-        )
+        totals = select(Issue.status, func.count()).group_by(Issue.status)
+        kinds = select(Issue.issue_type, func.count()).where(Issue.status == "open").group_by(Issue.issue_type)
+        if mine is not None:
+            totals = totals.where(Issue.reporter_user_id == mine)
+            kinds = kinds.where(Issue.reporter_user_id == mine)
+        counts = dict(db.execute(totals).all())
+        by_type = dict(db.execute(kinds).all())
         return {
             "items": [_brief(i, names) for i in issues],
             "open": counts.get("open", 0),
             "resolved": counts.get("resolved", 0),
             "by_type": by_type,
-            "seerr_url": _seerr_link(),
+            "seerr_url": _seerr_link() if mine is None else None,
             "seerr_configured": _seerr_configured(),
+            "mine_only": mine is not None,
         }
 
 
@@ -148,6 +177,7 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
         data = {
             **_brief(issue, names),
             "comment_list": _comments(issue),
+            "context": json.loads(issue.context) if issue.context else None,
             "tmdb_id": issue.tmdb_id,
             "show_rating_key": issue.show_rating_key,
         }
@@ -183,10 +213,11 @@ TYPES = ("video", "audio", "subtitles", "other")
 
 @router.post("")
 def raise_issue(
-    admin: AdminUser,
+    user: CurrentUser,
     rating_key: int = Body(..., embed=True),
     issue_type: str = Body("other", embed=True),
     message: str = Body("", embed=True),
+    row_id: int | None = Body(None, embed=True),
 ) -> dict:
     """Report a problem with a file, here rather than in Seerr.
 
@@ -198,11 +229,15 @@ def raise_issue(
         raise HTTPException(400, f"Kind should be one of {', '.join(TYPES)}")
     if not message.strip():
         raise HTTPException(400, "Say what is wrong, so whoever picks this up knows where to look")
+    mine = _asker(user)
     now = datetime.now(UTC).replace(tzinfo=None)
     with session_scope() as db:
         item = db.get(MediaItem, rating_key)
         if item is None:
             raise HTTPException(404, "No such title")
+        # Reported from a play: keep what that play looked like, since it is
+        # the half nobody remembers to write down.
+        context = _context(db, row_id, mine) if row_id else None
         issue = Issue(
             source="local",
             issue_type=issue_type,
@@ -216,16 +251,17 @@ def raise_issue(
             season=item.parent_media_index,
             episode=item.media_index,
             title=item.full_title or item.title,
-            reporter_name=admin.username,
-            reporter_user_id=admin.plex_user_id,
-            comments=json.dumps([{"message": message.strip(), "author": admin.username, "created_at": now.isoformat()}]),
+            reporter_name=user.username,
+            reporter_user_id=mine if mine is not None else user.plex_user_id,
+            context=json.dumps(context) if context else None,
+            comments=json.dumps([{"message": message.strip(), "author": user.username, "created_at": now.isoformat()}]),
             created_at=now,
             updated_at=now,
         )
         db.add(issue)
         db.flush()
         issue_id, title = issue.id, issue.title
-    audit.record(admin, "issue.create", f"Reported {issue_type} trouble with {title}", target=str(issue_id))
+    audit.record(user, "issue.create", f"Reported {issue_type} trouble with {title}", target=str(issue_id))
     return {"id": issue_id}
 
 
@@ -250,21 +286,22 @@ async def _to_seerr(issue_id: int, send) -> str | None:
 
 
 @router.post("/{issue_id}/comment")
-async def comment(issue_id: int, admin: AdminUser, message: str = Body(..., embed=True)) -> dict:
+async def comment(issue_id: int, user: CurrentUser, message: str = Body(..., embed=True)) -> dict:
     if not message.strip():
         raise HTTPException(400, "Nothing to add")
+    mine = _asker(user)
     now = datetime.now(UTC).replace(tzinfo=None)
     with session_scope() as db:
         issue = db.get(Issue, issue_id)
-        if issue is None:
+        if issue is None or (mine is not None and issue.reporter_user_id != mine):
             raise HTTPException(404, "No such issue")
         notes = _comments(issue)
-        notes.append({"message": message.strip(), "author": admin.username, "created_at": now.isoformat()})
+        notes.append({"message": message.strip(), "author": user.username, "created_at": now.isoformat()})
         issue.comments = json.dumps(notes)
         issue.updated_at = now
         title = issue.title
-    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.comment(seerr_id, message.strip(), admin.username))
-    audit.record(admin, "issue.comment", f"Commented on {title}", target=str(issue_id))
+    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.comment(seerr_id, message.strip(), user.username))
+    audit.record(user, "issue.comment", f"Commented on {title}", target=str(issue_id))
     return {"id": issue_id, "comments": len(notes), "warning": warning}
 
 
@@ -306,18 +343,23 @@ def _card(item: MediaItem, **extra: Any) -> dict[str, Any]:
 
 
 @router.get("/recent")
-async def recent(_: AdminUser, limit: int = Query(12, ge=1, le=50)) -> dict:
+async def recent(user: CurrentUser, limit: int = Query(12, ge=1, le=50)) -> dict:
     """Playing now, then lately watched. What a report is usually about."""
     import asyncio
 
     from app.routers.live import activity
 
+    mine = _asker(user)
+
     def lately() -> list[dict[str, Any]]:
         with session_scope() as db:
+            where = [History.rating_key.is_not(None)]
+            if mine is not None:
+                where.append(History.user_id == mine)
             keys: list[int] = []
             for (key,) in db.execute(
                 select(History.rating_key)
-                .where(History.rating_key.is_not(None))
+                .where(*where)
                 .order_by(History.started.desc())
                 .limit(limit * 4)
             ).all():
@@ -330,7 +372,11 @@ async def recent(_: AdminUser, limit: int = Query(12, ge=1, le=50)) -> dict:
     try:
         with session_scope() as db:
             live = await activity(db)
-            keys = [int(s["rating_key"]) for s in live.get("sessions") or [] if s.get("rating_key")]
+            sessions = [
+                s for s in live.get("sessions") or []
+                if mine is None or (s.get("user_id") and int(s["user_id"]) == mine)
+            ]
+            keys = [int(s["rating_key"]) for s in sessions if s.get("rating_key")]
             items = {i.rating_key: i for i in db.execute(select(MediaItem).where(MediaItem.rating_key.in_(keys))).scalars()}
             playing = [_card(items[key], playing=True) for key in keys if key in items]
     except Exception as exc:  # noqa: BLE001 - the list is still useful without it
@@ -342,8 +388,9 @@ async def recent(_: AdminUser, limit: int = Query(12, ge=1, le=50)) -> dict:
 
 
 @router.get("/search")
-def search(_: AdminUser, q: str = Query(min_length=1), limit: int = Query(12, ge=1, le=50)) -> dict:
+def search(user: CurrentUser, q: str = Query(min_length=1), limit: int = Query(12, ge=1, le=50)) -> dict:
     """Films and shows by name. Episodes are reached through their show."""
+    _asker(user)
     like = f"%{q.strip()}%"
     with session_scope() as db:
         films = [
@@ -386,8 +433,9 @@ def search(_: AdminUser, q: str = Query(min_length=1), limit: int = Query(12, ge
 
 
 @router.get("/shows/{show_key}/episodes")
-def episodes(show_key: int, _: AdminUser) -> dict:
+def episodes(show_key: int, user: CurrentUser) -> dict:
     """Every episode of one show, in order, for picking one."""
+    _asker(user)
     with session_scope() as db:
         items = db.execute(
             select(MediaItem)
@@ -404,14 +452,15 @@ def episodes(show_key: int, _: AdminUser) -> dict:
 
 
 @router.get("/{issue_id}")
-async def issue_detail(issue_id: int, _: AdminUser, days: int = Query(365, ge=1, le=3650)) -> dict:
+async def issue_detail(issue_id: int, user: CurrentUser, days: int = Query(365, ge=1, le=3650)) -> dict:
     import asyncio
 
     from app.integrations import arr as arr_integrations
     from app.services import findings
 
+    mine = _asker(user)
     data = await asyncio.to_thread(_payload, issue_id, days)
-    if data is None:
+    if data is None or (mine is not None and data.get("reporter_user_id") != mine):
         raise HTTPException(404, "No such issue")
     file = data.get("file")
     if file:
@@ -425,4 +474,50 @@ async def issue_detail(issue_id: int, _: AdminUser, days: int = Query(365, ge=1,
             service.label,
         )
         file["arr"] = {"name": service.name, "label": service.label, "configured": service.configured()}
-    return data
+    # Trimmed last: the findings above are read from the causes, and a viewer
+    # should see the findings without seeing everyone else's streams.
+    return _as_reported_by(data, mine) if mine is not None else data
+
+
+def _context(db, row_id: int, mine: int | None) -> dict[str, Any] | None:
+    """What one play looked like, kept with the report it came from."""
+    row = db.get(History, row_id)
+    if row is None or (mine is not None and row.user_id != mine):
+        return None
+    window = [StreamEvent.rating_key == row.rating_key, StreamEvent.user_id == row.user_id]
+    if row.started:
+        window.append(StreamEvent.started_at >= datetime.fromtimestamp(row.started, UTC).replace(tzinfo=None))
+    if row.stopped:
+        window.append(StreamEvent.started_at <= datetime.fromtimestamp(row.stopped + 60, UTC).replace(tzinfo=None))
+    stalls, seconds = db.execute(select(func.count(), func.sum(StreamEvent.seconds)).where(*window)).one()
+    return {
+        "row_id": row.row_id,
+        "started": row.started,
+        "player": row.player,
+        "platform": row.platform,
+        "product": row.product,
+        "location": row.location,
+        "transcode_decision": row.transcode_decision,
+        "percent_complete": row.percent_complete,
+        "stalls": int(stalls or 0),
+        "stall_seconds": int(seconds or 0),
+    }
+
+
+def _as_reported_by(data: dict[str, Any], mine: int) -> dict[str, Any]:
+    """The same report, with everything that is not theirs taken out.
+
+    A viewer asked about their own report, so they get their own plays and
+    nothing about anyone else: no other reports, no other people's streams, and
+    not where the file lives on the server.
+    """
+    file = data.get("file")
+    if file:
+        file = {k: v for k, v in file.items() if k not in ("file_path", "platforms", "stall_causes", "transcode_causes")}
+    return {
+        **data,
+        "file": file,
+        "plays": [p for p in data.get("plays") or [] if p.get("user_id") == mine],
+        "streams": [],
+        "other_reports": [],
+    }

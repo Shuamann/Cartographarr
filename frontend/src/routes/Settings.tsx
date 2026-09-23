@@ -181,6 +181,11 @@ const AREAS: Area[] = [
         keys: ["viewer_privacy"],
       },
       {
+        title: "Reporting problems",
+        note: "Whether people who sign in as viewers can report something wrong with what they watched. They see what they reported and nothing else: not other people's reports, not who else watched the file, not where it sits on disk. Reporting from a play carries that play's details with it, so nobody has to ask what device they were on. Only an admin closes a report.",
+        keys: ["viewer_reports_issues"],
+      },
+      {
         title: "Showing inside other dashboards",
         note: "Turn this on if you open Cartographarr inside Organizr, Homarr or another dashboard that shows apps in a frame; otherwise it shows blank there. Off, no other site can put Cartographarr in a frame, which stops a hidden page tricking a click on Ban or Unshare.",
         keys: ["allow_framing"],
@@ -289,6 +294,7 @@ const LABELS: Record<string, string> = {
   proxy_email_header: "Email header",
   proxy_default_role: "Role for new proxy users",
   viewer_privacy: "Viewers can see",
+  viewer_reports_issues: "Viewers can report problems",
   radarr_url: "Local URL",
   radarr_public_url: "Remote URL, for buttons",
   radarr_api_key: "API key",
