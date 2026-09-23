@@ -596,6 +596,8 @@ def unban_device(machine_id: str, admin: AdminUser) -> dict:
 # ---- blocked countries -----------------------------------------------------
 
 MODES = ("flag", "warn", "stop")
+# What a VPN can be given instead, plus leaving those streams alone entirely.
+VPN_MODES = (*MODES, "ignore")
 
 
 def _country_row(row, counts: dict, acted: dict) -> dict:
@@ -604,6 +606,7 @@ def _country_row(row, counts: dict, acted: dict) -> dict:
         "code": row.code.upper(),
         "name": row.name,
         "mode": row.mode,
+        "vpn_mode": row.vpn_mode,
         "reason": row.reason,
         "blocked_by": row.blocked_by,
         "blocked_at": row.blocked_at.isoformat() if row.blocked_at else None,
@@ -670,6 +673,7 @@ def block_country(
     code: str = Body(..., embed=True),
     mode: str = Body("flag", embed=True),
     reason: str = Body("", embed=True),
+    vpn_mode: str | None = Body(None, embed=True),
 ) -> dict:
     from app.models import BlockedCountry
 
@@ -678,17 +682,21 @@ def block_country(
         raise HTTPException(400, "A country code is two letters, as the map shows it")
     if mode not in MODES:
         raise HTTPException(400, f"Mode should be one of {', '.join(MODES)}")
+    vpn_mode = (vpn_mode or "").strip().lower() or None
+    if vpn_mode is not None and vpn_mode not in VPN_MODES:
+        raise HTTPException(400, f"For a VPN, choose one of {', '.join(VPN_MODES)}, or nothing to treat it the same")
     with session_scope() as db:
         name = db.execute(
             select(func.max(IpLocation.country)).where(func.upper(IpLocation.country_code) == code)
         ).scalar()
         db.merge(BlockedCountry(
-            code=code, name=name, mode=mode, reason=reason or None,
+            code=code, name=name, mode=mode, vpn_mode=vpn_mode, reason=reason or None,
             blocked_by=admin.username, blocked_at=datetime.now(UTC),
         ))
+    over_vpn = f", {vpn_mode} over a VPN" if vpn_mode else ""
     audit.record(
-        admin, "country.block", f"Set {name or code} to {mode}", target=code,
-        detail={"mode": {"after": mode}, "reason": {"after": reason or None}},
+        admin, "country.block", f"Set {name or code} to {mode}{over_vpn}", target=code,
+        detail={"mode": {"after": mode}, "vpn_mode": {"after": vpn_mode}, "reason": {"after": reason or None}},
     )
     with session_scope() as db:
         return list_blocked_countries(db, admin)

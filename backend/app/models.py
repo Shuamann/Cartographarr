@@ -735,6 +735,10 @@ class BlockedCountry(Base):
     name: Mapped[str | None] = mapped_column(String(128))
     mode: Mapped[str] = mapped_column(String(8), default="flag")
     """flag, warn or stop."""
+    vpn_mode: Mapped[str | None] = mapped_column(String(8))
+    """What to do instead when the address is a VPN or hosting provider.
+    Unset means the same as mode. "ignore" means leave those streams alone,
+    which is the answer where a country only ever appears as a VPN exit."""
     reason: Mapped[str | None] = mapped_column(Text)
     blocked_by: Mapped[str | None] = mapped_column(String(64))
     blocked_at: Mapped[datetime | None] = mapped_column()

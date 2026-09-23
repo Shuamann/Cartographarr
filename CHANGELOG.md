@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.12.0 - 2026-09-22
+
+### Added
+- A country can answer a VPN differently: stop streams from there, but only flag the ones arriving through a VPN or
+  hosting address, or warn, or stop, or leave them alone entirely. Set it on the map or in the list under Rules
+
 ## 0.11.3 - 2026-09-22
 
 ### Fixed

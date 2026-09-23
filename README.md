@@ -297,6 +297,12 @@ country layer can be switched off. Cyan is flag, amber is warn, red is stop. Bou
 are part of the app (Natural Earth, public domain), so nothing is fetched from
 anyone else while you use the map, and they load only when the layer is on.
 
+Each country can answer a VPN differently. An address in a country says where
+somebody is; a VPN or hosting address there says where their provider is, which
+is a weaker claim. So a country set to **stop** can be set to **flag only**
+over a VPN, or to warn, stop, or leave those streams alone entirely. Set it in
+the panel on the map, or in the list.
+
 The same list sits beside the ban list in **Rules**. Each one says what
 should happen when a stream comes from there: **flag** records it in the Log,
 **warn** messages the viewer, **stop** ends the stream. Add a country from that

@@ -14,6 +14,7 @@ type Country = {
   code: string;
   name: string | null;
   mode: "flag" | "warn" | "stop";
+  vpn_mode: "flag" | "warn" | "stop" | "ignore" | null;
   reason: string | null;
   blocked_by: string | null;
   blocked_at: string | null;
@@ -106,18 +107,49 @@ export default function CountryList() {
                   </div>
                   <div className="row">
                     {!allowList && (
-                      <div className="segmented">
-                        {MODES.map((m) => (
-                          <button
-                            key={m.id}
-                            className={c.mode === m.id ? "seg on" : "seg"}
-                            title={m.blurb}
-                            onClick={() => act(() => api.post("/geoblocks", { code: c.code, mode: m.id, reason: c.reason ?? "" }))}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
+                      <>
+                        <div className="segmented">
+                          {MODES.map((m) => (
+                            <button
+                              key={m.id}
+                              className={c.mode === m.id ? "seg on" : "seg"}
+                              title={m.blurb}
+                              onClick={() =>
+                                act(() =>
+                                  api.post("/geoblocks", {
+                                    code: c.code,
+                                    mode: m.id,
+                                    reason: c.reason ?? "",
+                                    vpn_mode: c.vpn_mode,
+                                  }),
+                                )
+                              }
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <select
+                          value={c.vpn_mode ?? ""}
+                          title="What to do when the address is a VPN or hosting provider"
+                          onChange={(e) =>
+                            act(() =>
+                              api.post("/geoblocks", {
+                                code: c.code,
+                                mode: c.mode,
+                                reason: c.reason ?? "",
+                                vpn_mode: e.target.value || null,
+                              }),
+                            )
+                          }
+                        >
+                          <option value="">VPN: same</option>
+                          <option value="flag">VPN: flag only</option>
+                          <option value="warn">VPN: warn</option>
+                          <option value="stop">VPN: stop</option>
+                          <option value="ignore">VPN: leave alone</option>
+                        </select>
+                      </>
                     )}
                     <button className="tab" onClick={() => act(() => api.del(`/geoblocks/${c.code}`))}>
                       Remove

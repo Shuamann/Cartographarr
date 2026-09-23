@@ -524,25 +524,45 @@ def country_rules() -> list[Rule]:
     from app.models import BlockedCountry
 
     with session_scope() as db:
-        listed = [(c.code.upper(), c.mode or "flag") for c in db.execute(select(BlockedCountry)).scalars() if c.code]
+        listed = [
+            (c.code.upper(), c.mode or "flag", c.vpn_mode)
+            for c in db.execute(select(BlockedCountry)).scalars() if c.code
+        ]
     if not listed:
         return []
     settings = current()
     message = settings.geo_block_message
-    out = []
+
+    # Grouped by what should happen and whether the address is a VPN, because
+    # an address in a country and a VPN exit in that country are not the same
+    # claim: the first says where somebody is, the second says where their
+    # provider is. None as the VPN side means the rule does not ask.
+    groups: dict[tuple[str, bool | None], list[str]] = {}
     if settings.geo_block_allow_list:
-        # Everywhere else, flagged. One rule, because an allow list has no
-        # per country mode to read.
-        modes = {"flag": [code for code, _ in listed]}
+        # An allow list has no per country answer to read, so everywhere else
+        # is flagged, VPN or not.
+        groups[("flag", None)] = [code for code, _, _ in listed]
         op = "none"
     else:
-        modes = {}
-        for code, mode in listed:
-            modes.setdefault(mode if mode in COUNTRY_ACTIONS else "flag", []).append(code)
         op = "any"
-    for index, (mode, codes) in enumerate(sorted(modes.items())):
+        for code, mode, vpn_mode in listed:
+            mode = mode if mode in COUNTRY_ACTIONS else "flag"
+            if not vpn_mode:
+                groups.setdefault((mode, None), []).append(code)
+                continue
+            # Asked for something different over a VPN: two rules, so each
+            # side can act, be gentler, or do nothing at all.
+            groups.setdefault((mode, False), []).append(code)
+            if vpn_mode in COUNTRY_ACTIONS:
+                groups.setdefault((vpn_mode, True), []).append(code)
+
+    out = []
+    for index, ((mode, vpn), codes) in enumerate(sorted(groups.items(), key=lambda g: (g[0][0], str(g[0][1])))):
         action = COUNTRY_ACTIONS[mode]
         params = {"message": message} if action in ("terminate", "message_viewer") else {}
+        items: list[dict[str, Any]] = [{"type": "condition", "field": "country", "op": op, "value": codes}]
+        if vpn is not None:
+            items.append({"type": "condition", "field": "vpn", "op": "is", "value": vpn})
         out.append(Rule(
             # Negative ids keep these apart from saved rules and from the ban
             # list, and stay stable so cooldowns work.
@@ -551,10 +571,7 @@ def country_rules() -> list[Rule]:
             enabled=True,
             action=action,
             message=message,
-            conditions=json.dumps({
-                "type": "group", "op": "and",
-                "items": [{"type": "condition", "field": "country", "op": op, "value": codes}],
-            }),
+            conditions=json.dumps({"type": "group", "op": "and", "items": items}),
             actions=json.dumps([{"name": action, "params": params}]),
         ))
     return out

@@ -92,7 +92,7 @@ export default function MapRoute({
   const [showBanned, setShowBanned] = useState(() => localStorage.getItem("layer.banned") !== "off");
   // Countries: shaded by what the list says to do about each, and clickable.
   const [showCountries, setShowCountries] = useState(() => localStorage.getItem("layer.countries") !== "off");
-  const blocked = useApi<{ items: { code: string; name: string | null; mode: string }[] }>(
+  const blocked = useApi<{ items: { code: string; name: string | null; mode: string; vpn_mode: string | null }[] }>(
     nav.isAdmin && showCountries ? "/geoblocks" : null,
     [showCountries],
   );
@@ -100,6 +100,11 @@ export default function MapRoute({
   const modes = useMemo(() => {
     const out: Record<string, string> = {};
     for (const row of blocked.data?.items ?? []) out[row.code] = row.mode;
+    return out;
+  }, [blocked.data]);
+  const vpnModes = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const row of blocked.data?.items ?? []) if (row.vpn_mode) out[row.code] = row.vpn_mode;
     return out;
   }, [blocked.data]);
   const bans = useBans();
@@ -328,6 +333,7 @@ export default function MapRoute({
             code={picked.code}
             name={picked.name}
             mode={modes[picked.code] ?? null}
+            vpnMode={vpnModes[picked.code] ?? null}
             onClose={() => setPicked(null)}
             onChanged={() => {
               blocked.reload();
@@ -1557,12 +1563,14 @@ function CountryPicker({
   code,
   name,
   mode,
+  vpnMode,
   onClose,
   onChanged,
 }: {
   code: string;
   name: string;
   mode: string | null;
+  vpnMode: string | null;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -1571,18 +1579,20 @@ function CountryPicker({
   const seen = useApi<{ code: string; name: string; plays: number }[]>("/geoblocks/countries");
   const here = seen.data?.find((c) => c.code === code);
 
-  async function set(next: string | null) {
+  async function save(next: string | null, vpn: string | null | undefined = undefined) {
     setBusy(true);
     setError(null);
     try {
       if (next === null) await api.del(`/geoblocks/${code}`);
-      else await api.post("/geoblocks", { code, mode: next, reason: "" });
+      else await api.post("/geoblocks", { code, mode: next, reason: "", vpn_mode: vpn === undefined ? vpnMode : vpn });
       onChanged();
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
     }
   }
+
+  const set = (next: string | null) => save(next);
 
   return (
     <div className="country-picker">
@@ -1609,11 +1619,30 @@ function CountryPicker({
         ))}
       </div>
       {mode && (
-        <button className="tab" disabled={busy} onClick={() => set(null)}>
-          Take off the list
-        </button>
+        <>
+          <label className="muted small">
+            Over a VPN or hosting address
+            <select
+              value={vpnMode ?? ""}
+              disabled={busy}
+              onChange={(e) => save(mode, e.target.value || null)}
+            >
+              <option value="">Treat the same</option>
+              <option value="flag">Flag only</option>
+              <option value="warn">Warn</option>
+              <option value="stop">Stop</option>
+              <option value="ignore">Leave alone</option>
+            </select>
+          </label>
+          <button className="tab" disabled={busy} onClick={() => set(null)}>
+            Take off the list
+          </button>
+        </>
       )}
-      <p className="muted small">Flag records the stream. Warn messages the viewer. Stop ends it.</p>
+      <p className="muted small">
+        Flag records the stream. Warn messages the viewer. Stop ends it. A VPN exit in a country says where somebody's
+        provider is, not where they are, so it can be answered differently.
+      </p>
     </div>
   );
 }

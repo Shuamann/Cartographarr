@@ -98,3 +98,52 @@ def test_viewers_cannot_see_or_change_the_list(client):
     assert client.get("/api/geoblocks").status_code == 403
     assert client.post("/api/geoblocks", json={"code": "KP"}).status_code == 403
     assert client.delete("/api/geoblocks/KP").status_code == 403
+
+
+def test_a_country_can_act_differently_over_a_vpn(client):
+    """An address in a country says where somebody is. A VPN exit there says
+    where their provider is, which is a weaker claim and can be treated as one."""
+    import json
+
+    from app.services import enforcer
+
+    seed(client)
+    listing = client.post("/api/geoblocks", json={"code": "KP", "mode": "stop", "vpn_mode": "flag"}).json()
+    assert listing["items"][0]["vpn_mode"] == "flag"
+
+    rules = enforcer.country_rules()
+    by_action = {}
+    for rule in rules:
+        items = json.loads(rule.conditions)["items"]
+        vpn = next((i["value"] for i in items if i["field"] == "vpn"), None)
+        by_action[rule.action] = vpn
+    # Stopped when it is not a VPN, recorded when it is.
+    assert by_action == {"terminate": False, "log_only": True}
+    assert len({r.id for r in rules}) == 2
+
+
+def test_a_vpn_can_be_left_alone_entirely(client):
+    import json
+
+    from app.services import enforcer
+
+    seed(client)
+    client.post("/api/geoblocks", json={"code": "KP", "mode": "stop", "vpn_mode": "ignore"})
+    rules = enforcer.country_rules()
+    assert len(rules) == 1 and rules[0].action == "terminate"
+    items = json.loads(rules[0].conditions)["items"]
+    assert {"type": "condition", "field": "vpn", "op": "is", "value": False} in items
+
+
+def test_without_a_vpn_answer_the_rule_does_not_ask(client):
+    import json
+
+    from app.services import enforcer
+
+    seed(client)
+    client.post("/api/geoblocks", json={"code": "KP", "mode": "warn"})
+    rules = enforcer.country_rules()
+    assert len(rules) == 1
+    assert [i["field"] for i in json.loads(rules[0].conditions)["items"]] == ["country"]
+
+    assert client.post("/api/geoblocks", json={"code": "KP", "mode": "warn", "vpn_mode": "sideways"}).status_code == 400
