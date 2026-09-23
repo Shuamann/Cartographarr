@@ -335,3 +335,37 @@ def test_a_title_learned_once_is_not_forgotten(client, monkeypatch):
     asyncio.run(service.sync())
     kept = client.get("/api/issues").json()["items"][0]
     assert kept["title"] == "The Office (US) - Turf War" and kept["rating_key"] == 880
+
+
+def test_choosing_what_to_report_starts_with_what_was_watched(client, monkeypatch):
+    """A text box asks someone to name a file. This offers what they watched."""
+    claim(client)
+    seed_library()
+
+    recent = client.get("/api/issues/recent").json()["items"]
+    assert [i["rating_key"] for i in recent] == [880]
+    assert recent[0]["show"] == "The Office (US)" and recent[0]["season"] == 8 and recent[0]["episode"] == 23
+
+    found = client.get("/api/issues/search?q=office").json()
+    assert [s["title"] for s in found["shows"]] == ["The Office (US)"]
+    assert found["shows"][0]["rating_key"] == 500 and found["shows"][0]["episodes"] == 1
+    assert found["films"] == []
+
+    listing = client.get("/api/issues/shows/500/episodes").json()
+    assert listing["show"] == "The Office (US)"
+    assert [e["rating_key"] for e in listing["episodes"]] == [880]
+    assert client.get("/api/issues/shows/4/episodes").status_code == 404
+
+
+def test_films_are_found_by_name(client):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=40, title="Annabelle", full_title="Annabelle", media_type="movie",
+                         year=2014, summary="A doll."))
+    found = client.get("/api/issues/search?q=annab").json()
+    assert [f["title"] for f in found["films"]] == ["Annabelle"]
+    assert found["films"][0]["year"] == 2014 and found["films"][0]["summary"] == "A doll."
+    assert found["shows"] == []

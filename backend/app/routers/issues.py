@@ -8,6 +8,7 @@ they stalled, it says why. See services/issues.py.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,8 +19,10 @@ from app import audit
 from app.auth.deps import AdminUser
 from app.db import session_scope
 from app.models import History, Issue, MediaItem, StreamEvent, StreamSession, User
+from app.redact import redact
 from app.settings_store import current
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/issues")
 
 
@@ -279,6 +282,125 @@ async def set_status(issue_id: int, admin: AdminUser, status: str = Body(..., em
     warning = await _to_seerr(issue_id, lambda service, seerr_id: service.set_status(seerr_id, status, admin.username))
     audit.record(admin, "issue.status", f"Marked {title} {status}", target=str(issue_id))
     return {"id": issue_id, "status": status, "warning": warning}
+
+
+# ---- choosing what the report is about -------------------------------------
+#
+# A text box asks someone to name a file. What they actually know is "the thing
+# I just watched", or "that show, the third episode". So: what is playing and
+# what was played recently first, then shows and films by name, then episodes
+# under a show, with posters throughout.
+
+def _card(item: MediaItem, **extra: Any) -> dict[str, Any]:
+    return {
+        "rating_key": item.rating_key,
+        "title": item.full_title or item.title,
+        "show": item.grandparent_title,
+        "season": item.parent_media_index,
+        "episode": item.media_index,
+        "media_type": item.media_type,
+        "year": item.year,
+        "summary": item.summary,
+        **extra,
+    }
+
+
+@router.get("/recent")
+async def recent(_: AdminUser, limit: int = Query(12, ge=1, le=50)) -> dict:
+    """Playing now, then lately watched. What a report is usually about."""
+    import asyncio
+
+    from app.routers.live import activity
+
+    def lately() -> list[dict[str, Any]]:
+        with session_scope() as db:
+            keys: list[int] = []
+            for (key,) in db.execute(
+                select(History.rating_key)
+                .where(History.rating_key.is_not(None))
+                .order_by(History.started.desc())
+                .limit(limit * 4)
+            ).all():
+                if key not in keys:
+                    keys.append(key)
+            items = {i.rating_key: i for i in db.execute(select(MediaItem).where(MediaItem.rating_key.in_(keys))).scalars()}
+            return [_card(items[key]) for key in keys if key in items and items[key].title][:limit]
+
+    playing: list[dict[str, Any]] = []
+    try:
+        with session_scope() as db:
+            live = await activity(db)
+            keys = [int(s["rating_key"]) for s in live.get("sessions") or [] if s.get("rating_key")]
+            items = {i.rating_key: i for i in db.execute(select(MediaItem).where(MediaItem.rating_key.in_(keys))).scalars()}
+            playing = [_card(items[key], playing=True) for key in keys if key in items]
+    except Exception as exc:  # noqa: BLE001 - the list is still useful without it
+        log.debug("could not read what is playing: %s", redact(exc))
+
+    watched = await asyncio.to_thread(lately)
+    seen = {card["rating_key"] for card in playing}
+    return {"items": playing + [card for card in watched if card["rating_key"] not in seen]}
+
+
+@router.get("/search")
+def search(_: AdminUser, q: str = Query(min_length=1), limit: int = Query(12, ge=1, le=50)) -> dict:
+    """Films and shows by name. Episodes are reached through their show."""
+    like = f"%{q.strip()}%"
+    with session_scope() as db:
+        films = [
+            _card(item)
+            for item in db.execute(
+                select(MediaItem)
+                .where(MediaItem.media_type == "movie", MediaItem.title.is_not(None), MediaItem.title.ilike(like))
+                .order_by(MediaItem.title)
+                .limit(limit)
+            ).scalars()
+        ]
+        # Shows are read off their episodes, because a library scan stores the
+        # files, and an episode is the file.
+        shows = [
+            {
+                "rating_key": key,
+                "title": title,
+                "media_type": "show",
+                "episodes": int(count or 0),
+                "season_count": int(seasons or 0),
+            }
+            for key, title, count, seasons in db.execute(
+                select(
+                    MediaItem.grandparent_rating_key,
+                    func.max(MediaItem.grandparent_title),
+                    func.count(),
+                    func.count(func.distinct(MediaItem.parent_media_index)),
+                )
+                .where(
+                    MediaItem.media_type == "episode",
+                    MediaItem.grandparent_rating_key.is_not(None),
+                    MediaItem.grandparent_title.ilike(like),
+                )
+                .group_by(MediaItem.grandparent_rating_key)
+                .order_by(func.max(MediaItem.grandparent_title))
+                .limit(limit)
+            ).all()
+        ]
+    return {"shows": shows, "films": films}
+
+
+@router.get("/shows/{show_key}/episodes")
+def episodes(show_key: int, _: AdminUser) -> dict:
+    """Every episode of one show, in order, for picking one."""
+    with session_scope() as db:
+        items = db.execute(
+            select(MediaItem)
+            .where(MediaItem.grandparent_rating_key == show_key, MediaItem.media_type == "episode")
+            .order_by(MediaItem.parent_media_index, MediaItem.media_index)
+        ).scalars().all()
+        if not items:
+            raise HTTPException(404, "No episodes here")
+        return {
+            "show": items[0].grandparent_title,
+            "show_rating_key": show_key,
+            "episodes": [_card(item) for item in items],
+        }
 
 
 @router.get("/{issue_id}")

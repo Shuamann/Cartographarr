@@ -293,82 +293,194 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
 }
 
 
-/* Report a problem from here. Issues live in this app, so they work whether or
- * not Seerr is set up; Seerr is a second place they can come from. */
+/* Report a problem from here, starting from what was watched.
+ *
+ * A text box asks someone to name a file, which is the one thing they are
+ * least likely to know. What they do know is "that thing playing now", or
+ * "that show, the one with the fire". So: what is playing and what was watched
+ * lately first, then shows and films by name, then episodes under a show, with
+ * posters all the way through. */
+type Card = {
+  rating_key: number;
+  title: string;
+  show: string | null;
+  season: number | null;
+  episode: number | null;
+  media_type: string | null;
+  year: number | null;
+  summary: string | null;
+  playing?: boolean;
+};
+
+type Show = { rating_key: number; title: string; episodes: number; season_count: number };
+
+function poster(ratingKey: number, width = 120): string {
+  return `/api/media/${ratingKey}/image?width=${width}&height=${Math.round(width * 1.5)}`;
+}
+
+function Poster({ ratingKey, alt }: { ratingKey: number; alt: string }) {
+  return (
+    <img
+      className="pick-poster"
+      src={poster(ratingKey)}
+      alt={alt}
+      loading="lazy"
+      onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+    />
+  );
+}
+
+function episodeLabel(card: Card): string {
+  if (card.season == null || card.episode == null) return card.title;
+  const code = `S${String(card.season).padStart(2, "0")}E${String(card.episode).padStart(2, "0")}`;
+  return `${code} ${card.title.includes(" - ") ? card.title.split(" - ").slice(-1)[0] : card.title}`;
+}
+
 function RaiseIssue({ onDone }: { onDone: (id: number) => void }) {
   const [term, setTerm] = useState("");
-  const [picked, setPicked] = useState<{ rating_key: number; title: string } | null>(null);
+  const [picked, setPicked] = useState<Card | null>(null);
+  const [show, setShow] = useState<Show | null>(null);
   const [kind, setKind] = useState("other");
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const found = useApi<{ rating_key: number; title: string; year: number | null }[]>(
-    term.trim().length > 1 && !picked ? `/media/search?q=${encodeURIComponent(term.trim())}&limit=8` : null,
-    [term, picked],
+
+  const searching = term.trim().length > 1;
+  const recent = useApi<{ items: Card[] }>(!picked && !show && !searching ? "/issues/recent" : null);
+  const found = useApi<{ shows: Show[]; films: Card[] }>(
+    !picked && !show && searching ? `/issues/search?q=${encodeURIComponent(term.trim())}` : null,
+    [term],
   );
+  const listing = useApi<{ show: string; episodes: Card[] }>(show && !picked ? `/issues/shows/${show.rating_key}/episodes` : null, [show]);
+
+  async function report() {
+    setError(null);
+    try {
+      const made = await api.post<{ id: number }>("/issues", {
+        rating_key: picked!.rating_key,
+        issue_type: kind,
+        message,
+      });
+      onDone(made.id);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   return (
-    <section className="card-section">
+    <section className="card-section raise">
       <h3>Raise an issue</h3>
       {error && <p className="note bad-note">{error}</p>}
+
       {picked ? (
-        <p className="row">
-          <strong>{picked.title}</strong>
-          <button
-            className="tab"
-            onClick={() => {
-              setPicked(null);
-              setTerm("");
-            }}
-          >
-            Change
-          </button>
-        </p>
-      ) : (
         <>
-          <input placeholder="Which title?" value={term} onChange={(e) => setTerm(e.target.value)} />
-          <div className="mini-list">
-            {(found.data ?? []).map((m) => (
-              <button
-                key={m.rating_key}
-                className="mini linkish"
-                onClick={() => setPicked({ rating_key: m.rating_key, title: m.title })}
-              >
-                {m.title}
-                {m.year ? ` (${m.year})` : ""}
+          <div className="pick chosen">
+            <Poster ratingKey={picked.rating_key} alt="" />
+            <div className="min0">
+              <strong>{picked.show ? `${picked.show} ${episodeLabel(picked)}` : picked.title}</strong>
+              {picked.year && <span className="muted small"> {picked.year}</span>}
+              {picked.summary && <p className="muted small clamp">{picked.summary}</p>}
+            </div>
+            <button className="tab" onClick={() => setPicked(null)}>
+              Change
+            </button>
+          </div>
+          <div className="row wrap">
+            <select value={kind} onChange={(e) => setKind(e.target.value)}>
+              {Object.keys(TYPES).map((t) => (
+                <option key={t} value={t}>
+                  {TYPES[t]}
+                </option>
+              ))}
+            </select>
+            <input placeholder="What is wrong?" value={message} onChange={(e) => setMessage(e.target.value)} />
+            <button className="btn" disabled={!message.trim()} onClick={report}>
+              Report it
+            </button>
+          </div>
+        </>
+      ) : show ? (
+        <>
+          <p className="row">
+            <button className="tab" onClick={() => setShow(null)}>
+              Back
+            </button>
+            <strong>{show.title}</strong>
+            <span className="muted small">
+              {show.episodes} episodes across {show.season_count} {show.season_count === 1 ? "season" : "seasons"}
+            </span>
+          </p>
+          {!listing.data && <Loading compact label="Reading episodes" />}
+          <div className="pick-list">
+            {(listing.data?.episodes ?? []).map((e) => (
+              <button key={e.rating_key} className="pick" onClick={() => setPicked(e)}>
+                <Poster ratingKey={e.rating_key} alt="" />
+                <span className="min0">
+                  <strong>{episodeLabel(e)}</strong>
+                  {e.summary && <span className="muted small clamp">{e.summary}</span>}
+                </span>
               </button>
             ))}
           </div>
         </>
+      ) : (
+        <>
+          <input placeholder="Search for a film or a show" value={term} onChange={(e) => setTerm(e.target.value)} />
+          {!searching && (
+            <>
+              <h4 className="pick-head">Playing now, and lately watched</h4>
+              {!recent.data && <Loading compact label="Reading what has been watched" />}
+              <div className="pick-list">
+                {(recent.data?.items ?? []).map((c) => (
+                  <button key={c.rating_key} className="pick" onClick={() => setPicked(c)}>
+                    <Poster ratingKey={c.rating_key} alt="" />
+                    <span className="min0">
+                      <strong>{c.show ? `${c.show} ${episodeLabel(c)}` : c.title}</strong>
+                      {c.playing && <span className="pill ok">playing</span>}
+                      {c.summary && <span className="muted small clamp">{c.summary}</span>}
+                    </span>
+                  </button>
+                ))}
+                {recent.data?.items.length === 0 && <p className="muted small">Nothing has been watched yet.</p>}
+              </div>
+            </>
+          )}
+          {searching && (
+            <>
+              {!found.data && <Loading compact label="Looking" />}
+              {(found.data?.shows ?? []).length > 0 && <h4 className="pick-head">Shows</h4>}
+              <div className="pick-list">
+                {(found.data?.shows ?? []).map((sh) => (
+                  <button key={sh.rating_key} className="pick" onClick={() => setShow(sh)}>
+                    <Poster ratingKey={sh.rating_key} alt="" />
+                    <span className="min0">
+                      <strong>{sh.title}</strong>
+                      <span className="muted small">
+                        {sh.episodes} episodes, pick one
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {(found.data?.films ?? []).length > 0 && <h4 className="pick-head">Films</h4>}
+              <div className="pick-list">
+                {(found.data?.films ?? []).map((f) => (
+                  <button key={f.rating_key} className="pick" onClick={() => setPicked(f)}>
+                    <Poster ratingKey={f.rating_key} alt="" />
+                    <span className="min0">
+                      <strong>{f.title}</strong>
+                      {f.year && <span className="muted small"> {f.year}</span>}
+                      {f.summary && <span className="muted small clamp">{f.summary}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {found.data && found.data.shows.length === 0 && found.data.films.length === 0 && (
+                <p className="muted small">Nothing by that name. It may not have been added, or synced yet.</p>
+              )}
+            </>
+          )}
+        </>
       )}
-      <div className="row wrap">
-        <select value={kind} onChange={(e) => setKind(e.target.value)}>
-          {Object.keys(TYPES).map((t) => (
-            <option key={t} value={t}>
-              {TYPES[t]}
-            </option>
-          ))}
-        </select>
-        <input placeholder="What is wrong?" value={message} onChange={(e) => setMessage(e.target.value)} />
-        <button
-          className="btn"
-          disabled={!picked || !message.trim()}
-          onClick={async () => {
-            setError(null);
-            try {
-              const made = await api.post<{ id: number }>("/issues", {
-                rating_key: picked!.rating_key,
-                issue_type: kind,
-                message,
-              });
-              onDone(made.id);
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }}
-        >
-          Report it
-        </button>
-      </div>
     </section>
   );
 }

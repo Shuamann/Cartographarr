@@ -306,10 +306,12 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
         and item.grandparent_thumb is None
         and item.parent_thumb is None
     ):
-        # Cached before show posters were stored, so poster_thumb is falling
-        # back to the episode still. Fetch the missing field once rather than
-        # making everyone resync years of metadata.
-        art = await _backfill_poster(item)
+        # Cached before show posters were stored, or listed by the library
+        # scan, which reads files rather than artwork. The show's poster is
+        # nearly always already here, on the show itself or on a sibling
+        # episode that was read in full, and one local lookup beats a Tautulli
+        # call per episode in a grid of them.
+        art = _show_poster(db, item) or await _backfill_poster(item)
     if not art:
         raise HTTPException(404, "No artwork for that item")
 
@@ -340,6 +342,24 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
         # keep it rather than re-proxying on every panel open.
         headers={"Cache-Control": "public, max-age=86400"},
     )
+
+
+def _show_poster(db: Session, item: MediaItem) -> str | None:
+    """The show's cover art, from whatever this database already knows."""
+    if not item.grandparent_rating_key:
+        return None
+    show = db.get(MediaItem, item.grandparent_rating_key)
+    if show is not None and show.thumb:
+        return show.thumb
+    return db.execute(
+        select(MediaItem.grandparent_thumb)
+        .where(
+            MediaItem.grandparent_rating_key == item.grandparent_rating_key,
+            MediaItem.grandparent_thumb.is_not(None),
+            MediaItem.grandparent_thumb != "",
+        )
+        .limit(1)
+    ).scalar()
 
 
 async def _backfill_poster(item: MediaItem) -> str | None:

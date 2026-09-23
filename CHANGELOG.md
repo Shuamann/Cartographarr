@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.13.0 - 2026-09-23
+
+### Added
+- Raising an issue starts from what was watched: what is playing now and what was played lately, with posters and
+  what each one is about. Search finds shows and films, and a show opens its episodes to pick one
+
+### Fixed
+- An episode's poster is taken from the show this app already knows about, instead of one Tautulli call per episode,
+  so a grid of episodes fills in at once rather than crawling
+
 ## 0.12.0 - 2026-09-22
 
 ### Added

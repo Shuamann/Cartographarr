@@ -322,6 +322,10 @@ card. Nothing is written back to Seerr yet.
 
 Reports on an episode land on the episode's own file, not the show.
 
+Raising one starts from what was watched: what is playing now, then what was
+played lately, with posters and a line about each. Searching finds shows and
+films, and picking a show opens its episodes.
+
 Comment on an issue, resolve it or reopen it from here. One that came from
 Seerr is updated there as well, signed with the name of whoever acted, since
 Seerr's API key would otherwise make every message read as the admin. If Seerr

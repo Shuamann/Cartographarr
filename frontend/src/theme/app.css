@@ -3396,3 +3396,78 @@ label.locked .pill {
 .btn.create {
   white-space: nowrap;
 }
+
+/* ---- picking what a report is about --------------------------------------- */
+
+.raise input {
+  width: 100%;
+  max-width: 420px;
+}
+
+.pick-head {
+  margin: 14px 0 6px;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pick-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.pick {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pick:hover {
+  border-color: var(--accent);
+}
+
+.pick.chosen {
+  cursor: default;
+  margin-bottom: 10px;
+}
+
+/* A pill sits at its own width, not stretched by the column. */
+.pick .pill {
+  align-self: flex-start;
+}
+
+.pick .min0 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pick-poster {
+  flex: none;
+  width: 46px;
+  height: 69px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--surface-3);
+}
+
+.clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
