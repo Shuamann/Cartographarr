@@ -90,6 +90,18 @@ export default function MapRoute({
   });
 
   const [showBanned, setShowBanned] = useState(() => localStorage.getItem("layer.banned") !== "off");
+  // Countries: shaded by what the list says to do about each, and clickable.
+  const [showCountries, setShowCountries] = useState(() => localStorage.getItem("layer.countries") === "on");
+  const blocked = useApi<{ items: { code: string; name: string | null; mode: string }[] }>(
+    nav.isAdmin && showCountries ? "/geoblocks" : null,
+    [showCountries],
+  );
+  const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
+  const modes = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const row of blocked.data?.items ?? []) out[row.code] = row.mode;
+    return out;
+  }, [blocked.data]);
   const bans = useBans();
   // Refetched when the ban list changes, so a ban made elsewhere appears.
   const bannedPoints = useApi<GeoJSON.FeatureCollection>(bans.ids.size ? "/map/banned" : null, [bans.ids.size]);
@@ -242,6 +254,20 @@ export default function MapRoute({
               Banned
               {bans.ids.size > 0 && <span className="ms-count banned">{bans.ids.size}</span>}
             </label>
+            {nav.isAdmin && (
+              <label className="check" title="Shade countries by what the list says to do, and click one to change it">
+                <input
+                  type="checkbox"
+                  checked={showCountries}
+                  onChange={(e) => {
+                    toggleLayer("countries", e.target.checked, setShowCountries);
+                    if (!e.target.checked) setPicked(null);
+                  }}
+                />
+                Countries
+                {Object.keys(modes).length > 0 && <span className="ms-count">{Object.keys(modes).length}</span>}
+              </label>
+            )}
             <label className="check">
               <input
                 type="checkbox"
@@ -293,9 +319,24 @@ export default function MapRoute({
             showHeat={showHeat}
             heatMetric={heatMetric}
             banned={showBanned ? bannedPoints.data ?? null : null}
+            countryModes={showCountries && nav.isAdmin ? modes : null}
+            onPickCountry={(code, name) => setPicked({ code, name })}
           />
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
+        )}
+
+        {picked && (
+          <CountryPicker
+            code={picked.code}
+            name={picked.name}
+            mode={modes[picked.code] ?? null}
+            onClose={() => setPicked(null)}
+            onChanged={() => {
+              blocked.reload();
+              setPicked(null);
+            }}
+          />
         )}
 
         {!geoipReady && (
@@ -392,6 +433,8 @@ function MapCanvas({
   showHeat,
   heatMetric,
   banned,
+  countryModes,
+  onPickCountry,
 }: {
   features: MapPoint[];
   onSelect: (feature: MapPoint) => void;
@@ -406,6 +449,9 @@ function MapCanvas({
   showHeat: boolean;
   heatMetric: HeatMetric;
   banned: GeoJSON.FeatureCollection | null;
+  /* Country code to flag, warn or stop. Null when the layer is off. */
+  countryModes: Record<string, string> | null;
+  onPickCountry: (code: string, name: string) => void;
 }) {
   const nav = useNav();
   const openDeviceRef = useRef(nav.openDevice);
@@ -783,6 +829,74 @@ function MapCanvas({
       });
     }
   }, [ready, banned]);
+
+  // ---- countries ---------------------------------------------------------
+  //
+  // Boundaries ship with the app (Natural Earth, public domain, trimmed to a
+  // code and a name), so choosing a country is done on the map rather than
+  // from a list of names, and what the list already says is shaded in.
+  const pickCountryRef = useRef(onPickCountry);
+  pickCountryRef.current = onPickCountry;
+
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !countryModes) return;
+    let cancelled = false;
+
+    (async () => {
+      if (!m.getSource("countries")) {
+        const shapes = (await import("../assets/countries.json")).default as unknown as GeoJSON.FeatureCollection;
+        if (cancelled || !map.current) return;
+        m.addSource("countries", { type: "geojson", data: shapes });
+        // Under the pins: places and streams stay the thing you click most.
+        const under = ["heat", "clusters", "points", "accuracy-fill"].find((id) => m.getLayer(id));
+        m.addLayer({ id: "country-fill", type: "fill", source: "countries", paint: { "fill-color": "rgba(0,0,0,0)" } }, under);
+        m.addLayer({ id: "country-line", type: "line", source: "countries", paint: { "line-color": "rgba(0,0,0,0)", "line-width": 1 } }, under);
+        m.on("mouseenter", "country-fill", () => (m.getCanvas().style.cursor = "pointer"));
+        m.on("mouseleave", "country-fill", () => (m.getCanvas().style.cursor = ""));
+        m.on("click", "country-fill", (e) => {
+          const props = e.features?.[0]?.properties;
+          if (props?.code) pickCountryRef.current(String(props.code), String(props.name ?? props.code));
+        });
+      }
+      if (cancelled) return;
+      // One colour per mode, everything else barely there but still clickable.
+      const colour: Record<string, string> = {
+        stop: css("--banned", "#f85149"),
+        warn: css("--warn", "#d29922"),
+        flag: css("--accent", "#22d3ee"),
+      };
+      const fill: (string | unknown[])[] = ["match", ["get", "code"]];
+      const line: (string | unknown[])[] = ["match", ["get", "code"]];
+      for (const [code, mode] of Object.entries(countryModes)) {
+        fill.push(code, colour[mode] ?? colour.flag);
+        line.push(code, colour[mode] ?? colour.flag);
+      }
+      const plainFill = "rgba(127,127,127,0.06)";
+      const plainLine = "rgba(127,127,127,0.25)";
+      fill.push(plainFill);
+      line.push(plainLine);
+      // A match needs at least one case, so with nothing listed the colour is
+      // the plain one rather than an expression MapLibre would refuse.
+      const listed = Object.keys(countryModes).length > 0;
+      m.setPaintProperty("country-fill", "fill-color", listed ? (fill as maplibregl.ExpressionSpecification) : plainFill);
+      m.setPaintProperty("country-fill", "fill-opacity", 0.35);
+      m.setPaintProperty("country-line", "line-color", listed ? (line as maplibregl.ExpressionSpecification) : plainLine);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, countryModes]);
+
+  // Layers stay loaded once added, so turning the layer off hides them.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    for (const id of ["country-fill", "country-line"]) {
+      if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", countryModes ? "visible" : "none");
+    }
+  }, [ready, countryModes]);
 
   // ---- live streams ------------------------------------------------------
   useEffect(() => {
@@ -1409,5 +1523,76 @@ function BlockCountry({ code, name }: { code: string; name: string | null }) {
       </button>
       {typeof state === "string" && !["idle", "saving", "done"].includes(state) && <span className="danger-text"> {state}</span>}
     </p>
+  );
+}
+
+
+/* Clicked a country: what happens when a stream comes from there.
+ *
+ * Flag records it and nothing else, which is where a country should usually
+ * start; warn messages the viewer; stop ends the stream. The same list lives
+ * under Rules, with what it would have caught before it is allowed to act. */
+function CountryPicker({
+  code,
+  name,
+  mode,
+  onClose,
+  onChanged,
+}: {
+  code: string;
+  name: string;
+  mode: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const seen = useApi<{ code: string; name: string; plays: number }[]>("/geoblocks/countries");
+  const here = seen.data?.find((c) => c.code === code);
+
+  async function set(next: string | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      if (next === null) await api.del(`/geoblocks/${code}`);
+      else await api.post("/geoblocks", { code, mode: next, reason: "" });
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="country-picker">
+      <div className="row-between">
+        <strong>{name}</strong>
+        <button className="tab" onClick={onClose} aria-label="Close">
+          ✕
+        </button>
+      </div>
+      <p className="muted small">
+        {here ? `${here.plays.toLocaleString()} ${here.plays === 1 ? "play" : "plays"} from here` : "Nothing has been watched from here"}
+        {mode ? ` \u00b7 currently ${mode}` : ""}
+      </p>
+      {error && <p className="note bad-note">{error}</p>}
+      <div className="segmented">
+        {[
+          { id: "flag", label: "Flag" },
+          { id: "warn", label: "Warn" },
+          { id: "stop", label: "Stop" },
+        ].map((m) => (
+          <button key={m.id} className={mode === m.id ? "seg on" : "seg"} disabled={busy} onClick={() => set(m.id)}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+      {mode && (
+        <button className="tab" disabled={busy} onClick={() => set(null)}>
+          Take off the list
+        </button>
+      )}
+      <p className="muted small">Flag records the stream. Warn messages the viewer. Stop ends it.</p>
+    </div>
   );
 }

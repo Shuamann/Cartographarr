@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.10.0 - 2026-09-22
+
+### Added
+- Countries are picked on the map. Turn on the Countries layer, click a country, and choose flag, warn or stop. The
+  list shades the map: cyan for flag, amber for warn, red for stop. Boundaries ship with the app, so nothing is
+  fetched from anyone while you use it
+
 ## 0.9.0 - 2026-09-22
 
 ### Added

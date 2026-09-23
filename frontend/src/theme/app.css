@@ -3272,3 +3272,20 @@ label.locked .pill {
 .home-link-row.off {
   opacity: 0.55;
 }
+
+/* The country a click landed on: what to do about streams from there. */
+.country-picker {
+  position: absolute;
+  top: 64px;
+  left: 16px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}

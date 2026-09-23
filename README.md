@@ -291,7 +291,12 @@ beside them.
 
 ## Blocked countries
 
-Beside the ban list, in **Rules**, sits a list of countries. Each one says what
+Turn on the **Countries** layer on the map and click a country: flag, warn or
+stop, and it shades in. Cyan is flag, amber is warn, red is stop. Boundaries
+are part of the app (Natural Earth, public domain), so nothing is fetched from
+anyone else while you use the map, and they load only when the layer is on.
+
+The same list sits beside the ban list in **Rules**. Each one says what
 should happen when a stream comes from there: **flag** records it in the Log,
 **warn** messages the viewer, **stop** ends the stream. Add a country from that
 list, or from a place on the map. Like the ban list it starts recording only,
