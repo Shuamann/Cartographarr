@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Cartographarr"
+    accent_color: str = ""
+    """The one colour the app is built around, as #rrggbb. Empty means the
+    colour it ships with. Everything else is worked out from it, light and dark
+    alike, including the map, so this is the whole of theming."""
+
     log_level: str = "INFO"
 
     # ---- Updates -----------------------------------------------------------
@@ -242,6 +247,25 @@ class Settings(BaseSettings):
     maxmind_license_key: str = ""
     geoip_auto_update: bool = True
     geoip_update_interval_days: int = 7
+
+    @field_validator("accent_color", mode="before")
+    @classmethod
+    def _colour(cls, value: object) -> object:
+        """Only a plain hex colour. This ends up inside a style the browser
+        applies, so nothing else is worth allowing."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text:
+            return ""
+        if not text.startswith("#"):
+            text = f"#{text}"
+        body = text[1:]
+        if len(body) == 3:
+            body = "".join(c * 2 for c in body)
+        if len(body) != 6 or any(c not in "0123456789abcdefABCDEF" for c in body):
+            raise ValueError("A colour looks like #22d3ee")
+        return f"#{body.lower()}"
 
     @field_validator("trusted_proxy_ips", mode="before")
     @classmethod

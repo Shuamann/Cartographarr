@@ -75,6 +75,8 @@ def list_branding() -> dict:
     """Which marks are set, and the app name."""
     return {
         "app_name": current().app_name,
+        # Read before anyone signs in: the sign-in page is the app's face too.
+        "accent": current().accent_color or None,
         "images": {kind: stored(kind) is not None for kind in sorted(KINDS)},
     }
 

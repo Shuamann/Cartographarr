@@ -278,6 +278,14 @@ beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
 
+## Making it yours
+
+**Settings, Appearance** takes a name, a logo and a colour. Pick the colour and
+the buttons, links, map pins and charts follow it; the hover colour, the ink on
+top of a button and the wash behind a selection are worked out from it, in
+light and in dark, so it only has to look right once. The sign-in page has it
+before anyone signs in.
+
 ## The home page
 
 Everyone lands on **Home**: how many streams are playing, anything reported and

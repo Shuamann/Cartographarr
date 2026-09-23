@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.19.0 - 2026-09-23
+
+### Added
+- A colour of your own, under Settings, Appearance. Buttons, links, map pins and charts follow it, light and dark are
+  worked out from it, and the sign-in page has it before anyone signs in
+
 ## 0.18.0 - 2026-09-23
 
 ### Added

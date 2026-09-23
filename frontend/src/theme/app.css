@@ -3544,3 +3544,33 @@ label.locked .pill {
   flex: 1;
   min-width: 220px;
 }
+
+/* ---- choosing the accent --------------------------------------------------- */
+
+.accent-row {
+  align-items: center;
+  gap: 8px;
+}
+
+.accent-chip {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.accent-chip.on {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface) inset;
+}
+
+.accent-input {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}

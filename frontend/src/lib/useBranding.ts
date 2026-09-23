@@ -2,6 +2,7 @@ import { useApi } from "./api";
 
 export type Branding = {
   app_name: string;
+  accent: string | null;
   images: { logo: boolean; login_logo: boolean; icon: boolean };
 };
 

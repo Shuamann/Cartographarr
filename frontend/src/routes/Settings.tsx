@@ -1,5 +1,6 @@
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
+import { ACCENTS, applyAccent } from "../theme/accent";
 import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
@@ -240,7 +241,13 @@ const PAGES: Page[] = [
     sections: a.sections,
     keys: a.sections.flatMap((x) => x.keys),
   })),
-  { id: "appearance", title: "Appearance", group: "Cartographarr", blurb: "The name and marks shown around the app.", keys: ["app_name"] },
+  {
+    id: "appearance",
+    title: "Appearance",
+    group: "Cartographarr",
+    blurb: "The name, the colour and the marks shown around the app.",
+    keys: ["app_name", "accent_color"],
+  },
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
   { id: "home", title: "Home page", group: "Cartographarr", blurb: "The links everyone lands on, and who sees each one." },
   { id: "tasks", title: "Tasks", group: "Cartographarr", blurb: "Background jobs: how often each runs, how the last run went, and any errors. Open one for its recent runs." },
@@ -637,6 +644,10 @@ function SettingsForm() {
               <h3>Name</h3>
               <div className="grid2">{field("app_name")}</div>
             </section>
+            <AccentPicker
+              value={String(draft.accent_color ?? settings.data?.find((x) => x.key === "accent_color")?.value ?? "")}
+              onChange={(colour) => setDraft({ ...draft, accent_color: colour })}
+            />
             <BrandingImages />
           </>
         )}
@@ -1160,6 +1171,58 @@ function ChangePassword() {
       <button className="btn" onClick={submit} disabled={!current || !next}>
         Change password
       </button>
+    </section>
+  );
+}
+
+
+/* One colour, and the app is built around it.
+ *
+ * Everything else that a theme usually asks for (the hover colour, the ink on
+ * top of a button, the wash behind a selection) is worked out from this, light
+ * and dark alike, and the map takes it too. Choosing four colours is four
+ * chances to make something unreadable. */
+function AccentPicker({ value, onChange }: { value: string; onChange: (colour: string) => void }) {
+  const current = value || "";
+
+  function choose(colour: string) {
+    onChange(colour);
+    // Shown at once, so the choice is made by looking rather than guessing.
+    // Saving is still the Save button, like every other setting.
+    applyAccent(colour || null);
+  }
+
+  return (
+    <section className="card-section">
+      <h3>Colour</h3>
+      <p className="muted small">
+        Buttons, links, map pins and charts follow this. Light and dark are worked out from it, so it only has to look
+        right once.
+      </p>
+      <div className="row wrap accent-row">
+        {ACCENTS.map((a) => (
+          <button
+            key={a.value}
+            className={current.toLowerCase() === a.value.toLowerCase() ? "accent-chip on" : "accent-chip"}
+            style={{ background: a.value }}
+            title={a.name}
+            aria-label={a.name}
+            onClick={() => choose(a.value)}
+          />
+        ))}
+        <input
+          type="color"
+          className="accent-input"
+          value={current || "#22d3ee"}
+          onChange={(e) => choose(e.target.value)}
+          title="Any colour"
+        />
+        {current && (
+          <button className="tab" onClick={() => choose("")}>
+            Back to the usual
+          </button>
+        )}
+      </div>
     </section>
   );
 }

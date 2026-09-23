@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
 import { brandingUrl, useBranding } from "./lib/useBranding";
+import { applyAccent } from "./theme/accent";
 import { useUrlFilters } from "./lib/useUrlFilters";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
@@ -291,6 +292,15 @@ function Brand() {
 
   useEffect(() => {
     if (!branding.data) return;
+    // Kept where the rest of the branding is applied, and remembered so a
+    // reload paints in the right colour before the first request answers.
+    applyAccent(branding.data.accent);
+    try {
+      if (branding.data.accent) localStorage.setItem("accent", branding.data.accent);
+      else localStorage.removeItem("accent");
+    } catch {
+      /* remembering the colour is a convenience only */
+    }
     document.title = name;
     if (branding.data.images.icon) {
       // Replaced rather than added, so repeated renders do not stack links.
@@ -319,12 +329,23 @@ function SignOut({ username, onSignOut }: { username: string; onSignOut: () => v
   );
 }
 
+function accentNow(): string | null {
+  try {
+    return localStorage.getItem("accent");
+  } catch {
+    return null;
+  }
+}
+
 function ThemeToggle() {
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
   function flip() {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     localStorage.setItem("theme", next);
+    // The accent's hover and wash are worked out against the page behind them,
+    // so they are worked out again when that page changes colour.
+    applyAccent(accentNow());
     setTheme(next);
   }
   return (
