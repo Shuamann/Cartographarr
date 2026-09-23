@@ -408,7 +408,13 @@ input:focus-visible {
   color: var(--accent);
 }
 .ms-btn.clear-all {
-  margin-left: auto;
+  /* Sits with the filters it clears rather than pushed to the far edge, with
+     a rule to mark it as the odd one out among them. */
+  margin-left: 4px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .ms-count {
@@ -3274,6 +3280,19 @@ label.locked .pill {
 }
 
 /* The country a click landed on: what to do about streams from there. */
+.country-picker .segmented {
+  display: flex;
+}
+
+.country-picker .seg {
+  flex: 1;
+}
+
+/* Not a heading: a small action under the three modes. */
+.country-picker > .tab {
+  align-self: flex-start;
+}
+
 .country-picker {
   position: absolute;
   top: 64px;

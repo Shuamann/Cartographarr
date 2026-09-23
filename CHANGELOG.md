@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.11.1 - 2026-09-22
+
+### Fixed
+- Reset sat on its own at the far edge of the filter bar; it now sits with the filters it clears
+- Flag, warn and stop fill the width of the country panel, instead of leaving a gap beside Stop
+- A country lights up as the pointer crosses it, so countries show they can be clicked even when none are listed yet
+
 ## 0.11.0 - 2026-09-22
 
 ### Added

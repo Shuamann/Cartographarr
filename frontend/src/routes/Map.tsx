@@ -849,8 +849,27 @@ function MapCanvas({
         const under = ["heat", "clusters", "points", "accuracy-fill"].find((id) => m.getLayer(id));
         m.addLayer({ id: "country-fill", type: "fill", source: "countries", paint: { "fill-color": "rgba(0,0,0,0)" } }, under);
         m.addLayer({ id: "country-line", type: "line", source: "countries", paint: { "line-color": "rgba(0,0,0,0)", "line-width": 1 } }, under);
-        m.on("mouseenter", "country-fill", () => (m.getCanvas().style.cursor = "pointer"));
-        m.on("mouseleave", "country-fill", () => (m.getCanvas().style.cursor = ""));
+        // Feature state needs numeric ids and these are country codes, so the
+        // one under the pointer is drawn by filtering a layer of its own.
+        m.addLayer(
+          {
+            id: "country-hover",
+            type: "fill",
+            source: "countries",
+            filter: ["==", ["get", "code"], ""],
+            paint: { "fill-color": css("--accent", "#22d3ee"), "fill-opacity": 0.22 },
+          },
+          under,
+        );
+        m.on("mousemove", "country-fill", (e) => {
+          m.getCanvas().style.cursor = "pointer";
+          const code = e.features?.[0]?.properties?.code;
+          m.setFilter("country-hover", ["==", ["get", "code"], code ? String(code) : ""]);
+        });
+        m.on("mouseleave", "country-fill", () => {
+          m.getCanvas().style.cursor = "";
+          m.setFilter("country-hover", ["==", ["get", "code"], ""]);
+        });
         m.on("click", "country-fill", (e) => {
           // A country sits under everything, so a click meant for a pin would
           // otherwise open the country picker as well as the place.
@@ -883,6 +902,7 @@ function MapCanvas({
       m.setPaintProperty("country-fill", "fill-color", listed ? (fill as maplibregl.ExpressionSpecification) : plainFill);
       m.setPaintProperty("country-fill", "fill-opacity", 0.35);
       m.setPaintProperty("country-line", "line-color", listed ? (line as maplibregl.ExpressionSpecification) : plainLine);
+      m.setPaintProperty("country-line", "line-width", listed ? 1.5 : 0.6);
     })();
 
     return () => {
@@ -894,7 +914,7 @@ function MapCanvas({
   useEffect(() => {
     const m = map.current;
     if (!m || !ready) return;
-    for (const id of ["country-fill", "country-line"]) {
+    for (const id of ["country-fill", "country-line", "country-hover"]) {
       if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", countryModes ? "visible" : "none");
     }
   }, [ready, countryModes]);
@@ -1677,7 +1697,9 @@ function Legend({
                 Stopped: the stream is ended.
               </p>
               <p className="muted small">
-                Click any country to set or change it{listed > 0 ? `. ${listed} on the list.` : "."}
+                {listed > 0
+                  ? `${listed} on the list. Click any country to set or change it.`
+                  : "Nothing on the list yet, so nothing is shaded. Hover a country to pick it out, click it to add it."}
               </p>
               <label className="check">
                 <input type="checkbox" checked={countries} onChange={(e) => onCountries(e.target.checked)} />
