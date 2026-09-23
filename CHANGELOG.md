@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.11.2 - 2026-09-22
+
+### Fixed
+- Opening a report whose title has left the library took the Issues page down. It opens with nothing attached instead
+- A report keeps the title it was given, rather than reading "Unknown title" once Plex no longer has the file
+- The Raise an issue button wrapped into three lines; it is a "+ Report" button now
+
 ## 0.11.1 - 2026-09-22
 
 ### Fixed

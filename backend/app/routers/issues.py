@@ -150,7 +150,8 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
         }
         key = issue.rating_key
         if key is None:
-            return {**data, "file": None, "plays": [], "streams": []}
+            # Nothing to attach: the page still expects every list to exist.
+            return {**data, "file": None, "plays": [], "streams": [], "other_reports": []}
         data["plays"] = [{**p, "user_name": names.get(p["user_id"] or -1)} for p in _plays(db, key, issue.reporter_user_id)]
         item = db.get(MediaItem, key)
         data["file_title"] = (item.full_title or item.title) if item else None

@@ -191,6 +191,11 @@ def _store(raws: list[dict[str, Any]]) -> int:
                 db.add(Issue(**row))
             else:
                 for key, value in row.items():
+                    # A title, or the file it was about, can leave Plex while
+                    # the report stands. Forgetting what it was called would
+                    # leave "Unknown title" where the answer is already known.
+                    if value is None and key in ("title", "rating_key", "show_rating_key") and getattr(issue, key) is not None:
+                        continue
                     setattr(issue, key, value)
             kept += 1
         # Deleted in Seerr, gone from here too, but local reports stay.

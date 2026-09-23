@@ -3391,3 +3391,8 @@ label.locked .pill {
   border-radius: 3px;
   background: linear-gradient(90deg, var(--map-heat-2), var(--map-heat-3), var(--map-heat-4), var(--map-heat-5));
 }
+
+/* A create button keeps its words on one line, whatever is beside it. */
+.btn.create {
+  white-space: nowrap;
+}

@@ -53,7 +53,7 @@ type IssueDetail = IssueRow & {
   file_title: string | null;
   plays: Play[];
   streams: { platform: string | null; cause: string | null; buffers: number | null; started_at: string | null; user_name: string | null }[];
-  other_reports: IssueRow[];
+  other_reports?: IssueRow[];
 };
 
 type Listing = {
@@ -94,8 +94,8 @@ export default function Issues() {
       <div className="row-between">
         <h1>Issues</h1>
         <div className="row">
-          <button className="btn" onClick={() => setRaising(!raising)}>
-            {raising ? "Cancel" : "Raise an issue"}
+          <button className="btn create" onClick={() => setRaising(!raising)}>
+            {raising ? "Cancel" : "+ Report"}
           </button>
           <div className="segmented">
             {(["open", "resolved", "all"] as const).map((s) => (
@@ -147,7 +147,7 @@ export default function Issues() {
               <span className={i.status === "open" ? "pill warn" : "pill ok"}>{i.status}</span>
               <span className="pill">{TYPES[i.issue_type]}</span>
               <span className="issue-title clip">
-                <strong>{i.title ?? (i.rating_key ? `Item ${i.rating_key}` : "Unknown title")}</strong>
+                <strong>{i.title ?? (i.rating_key ? `Item ${i.rating_key}` : "No longer in the library")}</strong>
                 <span className="muted small clip">{i.message}</span>
               </span>
               <span className="muted small">{i.reporter_name ?? "Someone"}</span>
@@ -265,10 +265,10 @@ function IssueCard({ id, seerrUrl, onChanged }: { id: number; seerrUrl: string |
         )}
       </section>
 
-      {d.other_reports.length > 0 && (
+      {(d.other_reports ?? []).length > 0 && (
         <section className="card-section">
           <h3>Reported before</h3>
-          {d.other_reports.map((o) => (
+          {(d.other_reports ?? []).map((o) => (
             <p key={o.id} className="small">
               <span className={o.status === "open" ? "pill warn" : "pill ok"}>{o.status}</span> {TYPES[o.issue_type]}:{" "}
               {o.message} <span className="muted">{o.reporter_name}, {when(o.created_at)}</span>

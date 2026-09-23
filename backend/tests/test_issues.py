@@ -299,3 +299,39 @@ def test_a_replacement_landing_closes_what_was_reported(client, monkeypatch):
     with session_scope() as db:
         assert db.get(MediaItem, 5).file_checked_at is None
     assert service.LABELS["audio"] == "Audio"
+
+
+def test_a_report_on_something_no_longer_in_plex_still_opens(client, monkeypatch):
+    """Plex loses the item, Seerr stops naming a rating key, and the report
+    stands. The page has to open anyway, with nothing attached."""
+    from app.services import issues as service
+
+    claim(client)
+    raw = issue(30, kind=4, message="Is cam. Just fyi.")
+    raw["media"] = {"mediaType": "tv", "tmdbId": 2316}
+    fake_seerr(monkeypatch, [raw])
+    asyncio.run(service.sync())
+
+    row = client.get("/api/issues").json()["items"][0]
+    assert row["rating_key"] is None and row["title"] is None
+    detail = client.get(f"/api/issues/{row['id']}").json()
+    assert detail["file"] is None and detail["plays"] == [] and detail["other_reports"] == []
+    assert detail["comment_list"][0]["message"] == "Is cam. Just fyi."
+
+
+def test_a_title_learned_once_is_not_forgotten(client, monkeypatch):
+    """The file leaves the library; the report keeps the name it had."""
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+    assert client.get("/api/issues").json()["items"][0]["title"] == "The Office (US) - Turf War"
+
+    gone = issue(11)
+    gone["media"] = {"mediaType": "tv", "tmdbId": 2316}
+    fake_seerr(monkeypatch, [gone])
+    asyncio.run(service.sync())
+    kept = client.get("/api/issues").json()["items"][0]
+    assert kept["title"] == "The Office (US) - Turf War" and kept["rating_key"] == 880
