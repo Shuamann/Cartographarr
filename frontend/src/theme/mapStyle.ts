@@ -13,6 +13,19 @@ import type { StyleSpecification } from "maplibre-gl";
 
 const TILES = "https://basemaps.cartocdn.com/vector/carto.streets/v1/tiles.json";
 
+/* Labels in the reader's language.
+ *
+ * The tiles carry a local name and a translation per language, and asking for
+ * the local one gave Kalaallit Nunaat for Greenland and Ελλάδα for Greece.
+ * Whoever is reading the map gets their own language where the tiles have it,
+ * then English, then whatever is written in the Latin alphabet, then the
+ * local name, which is better than nothing for a place nobody translated. */
+function labelField(): ["coalesce", ...unknown[]] {
+  const language = (navigator.language || "en").split("-")[0];
+  const fields = [`name:${language}`, "name:en", "name_en", "name:latin", "name"];
+  return ["coalesce", ...fields.map((field) => ["get", field])] as ["coalesce", ...unknown[]];
+}
+
 function token(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
@@ -67,7 +80,7 @@ export function buildMapStyle(): StyleSpecification {
         "source-layer": "place",
         filter: ["in", ["get", "class"], ["literal", ["country", "state", "city"]]],
         layout: {
-          "text-field": ["get", "name"],
+          "text-field": labelField() as never,
           "text-font": ["Open Sans Regular"],
           "text-size": ["interpolate", ["linear"], ["zoom"], 3, 10, 10, 14],
         },

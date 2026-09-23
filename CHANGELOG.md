@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.11.3 - 2026-09-22
+
+### Fixed
+- Map labels read in the language of whoever is looking, then English, rather than each country's own name:
+  Greenland instead of Kalaallit Nunaat, Greece instead of Ελλάδα
+
 ## 0.11.2 - 2026-09-22
 
 ### Fixed
