@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.17.0 - 2026-09-23
+
+### Added
+- Word goes out through Apprise when somebody reports a problem, carrying what this app already knew about that file,
+  so the message says "no audio most devices can play" rather than only "the sound is wrong". Switch it off under
+  Settings, Alerts and monitoring
+- Reported problems are a source in Reports: by kind, by title, by who reported them, open against resolved, over
+  time. Two ready-made ones come with it
+
 ## 0.16.0 - 2026-09-23
 
 ### Added

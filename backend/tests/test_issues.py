@@ -435,3 +435,73 @@ def test_films_are_found_by_name(client):
     assert [f["title"] for f in found["films"]] == ["Annabelle"]
     assert found["films"][0]["year"] == 2014 and found["films"][0]["summary"] == "A doll."
     assert found["shows"] == []
+
+
+def fake_notifier(monkeypatch):
+    """Catch what would be sent, without sending it.
+
+    Patched on the class, not the instance: undoing an instance patch leaves
+    the class's own function sitting on the object, and the next test to send
+    anything calls it without its self.
+    """
+    from app.integrations.notify import apprise_notifier
+
+    sent: list[tuple[str, str]] = []
+
+    async def send(self, title, body):
+        sent.append((title, body))
+        return True
+
+    monkeypatch.setattr(type(apprise_notifier), "send", send)
+    monkeypatch.setattr(type(apprise_notifier), "configured", lambda self: True)
+    return sent
+
+
+def test_a_new_report_says_what_this_app_already_knew(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie", file_bitrate=9000,
+                         file_checked_at=datetime.now(UTC),
+                         audio_tracks='[{"codec": "truehd", "channels": 8, "language": "eng"}]'))
+    sent = fake_notifier(monkeypatch)
+    client.post("/api/issues", json={"rating_key": 5, "issue_type": "audio", "message": "No sound on the TV"})
+
+    assert len(sent) == 1
+    title, body = sent[0]
+    assert title == "Film: something is wrong"
+    assert "No sound on the TV" in body and "audio" in body
+    # The point of sending it from here rather than Seerr: the file's own faults.
+    assert "Already known about this file" in body and "TrueHD" in body
+
+
+def test_reports_from_seerr_are_announced_once_they_are_known(client, monkeypatch):
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    sent = fake_notifier(monkeypatch)
+
+    # The first sync is everything Seerr already had, which is not news.
+    fake_seerr(monkeypatch, [issue(11)])
+    assert asyncio.run(service.sync())["issues"] == 1
+    assert sent == []
+
+    fake_seerr(monkeypatch, [issue(11), issue(12, kind=3, message="No subtitles")])
+    assert asyncio.run(service.sync())["told"] == 1
+    assert len(sent) == 1 and "No subtitles" in sent[0][1]
+
+
+def test_alerts_can_be_switched_off(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    client.put("/api/settings", json={"issue_alerts": False})
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie"))
+    sent = fake_notifier(monkeypatch)
+    client.post("/api/issues", json={"rating_key": 5, "message": "Quiet please"})
+    assert sent == []

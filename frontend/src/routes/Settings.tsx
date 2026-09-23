@@ -160,6 +160,11 @@ const AREAS: Area[] = [
         keys: ["upload_capacity_mbps", "upload_alert_percent"],
       },
       {
+        title: "Reported problems",
+        note: "Send word through Apprise when somebody reports something wrong, with what this app already knows about that file. Quiet unless notifications are set up.",
+        keys: ["issue_alerts"],
+      },
+      {
         title: "Rules and live activity",
         note: "Whether rules run at all, and how often live activity is checked. Each rule, and the ban list, has its own record only switch on the Rules page.",
         keys: [
@@ -285,6 +290,7 @@ const LABELS: Record<string, string> = {
   access_inactive_days: "Not watching after (days)",
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes (%)",
+  issue_alerts: "Tell me when something is reported",
   auth_proxy_enabled: "Trust a reverse proxy",
   allow_framing: "Allow showing inside other dashboards",
   plex_signin_enabled: "Offer Sign in with Plex",

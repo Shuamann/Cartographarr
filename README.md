@@ -326,6 +326,10 @@ Raising one starts from what was watched: what is playing now, then what was
 played lately, with posters and a line about each. Searching finds shows and
 films, and picking a show opens its episodes.
 
+A new report goes out through Apprise if notifications are set up, with what
+this app already knows about that file attached. **Reports** can chart reported
+problems by kind, by title, by who reported them, and open against resolved.
+
 People who sign in as viewers can report what they watched, and see what they
 reported. Reporting from a play in their History carries that play with it: the
 device, the time, whether it transcoded and whether it stalled. They see their

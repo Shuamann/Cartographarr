@@ -170,8 +170,28 @@ async def sync(limit: int = 500) -> dict[str, int]:
         except Exception as exc:  # noqa: BLE001 - one unreadable issue must not stop the sync
             log.debug("issue %s unreadable: %s", seerr_id, exc)
     rows = [full.get(_int(r.get("id")), r) for r in listed]
+    before = await asyncio.to_thread(_open_ids)
     stored = await asyncio.to_thread(_store, rows)
-    return {"issues": stored, "read": len(full)}
+    # Word goes out for reports this app had not seen before, not for every
+    # report in Seerr the first time it looks.
+    told = 0
+    if before is not None:
+        for issue_id in sorted(set(await asyncio.to_thread(_open_ids)) - set(before)):
+            told += 1 if await announce(issue_id) else 0
+    return {"issues": stored, "read": len(full), "told": told}
+
+
+def _open_ids() -> list[int] | None:
+    """Every report from Seerr this app knows, or None the first time."""
+    from app.models import Issue, SyncState
+
+    with session_scope() as db:
+        first = db.get(SyncState, "issues_seen") is None
+        ids = [i.id for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()]
+        if first:
+            db.merge(SyncState(key="issues_seen", value="1"))
+            return None
+        return ids
 
 
 def _store(raws: list[dict[str, Any]]) -> int:
@@ -272,3 +292,63 @@ async def resolve_for_file(rating_key: int, note: str) -> list[int]:
                 except Exception as exc:  # noqa: BLE001 - the local copy is closed either way
                     log.warning("could not resolve issue %s in Seerr: %s", seerr_id, exc)
     return [issue_id for issue_id, _ in closed]
+
+
+# ---- telling somebody -------------------------------------------------------
+
+async def announce(issue_id: int) -> bool:
+    """Send word of a new report, if notifications are set up.
+
+    One message per report, when it arrives, with enough in it to decide
+    whether to get up: what, who, what kind, and what this app already knows is
+    wrong with the file.
+    """
+    from app.integrations.notify import apprise_notifier
+    from app.models import Issue, MediaItem
+    from app.settings_store import current
+
+    if not current().issue_alerts or not apprise_notifier.configured():
+        return False
+
+    def describe() -> tuple[str, str] | None:
+        with session_scope() as db:
+            issue = db.get(Issue, issue_id)
+            if issue is None:
+                return None
+            lines = [issue.message or "No message."]
+            who = issue.reporter_name or "Someone"
+            what = issue.title or (f"item {issue.rating_key}" if issue.rating_key else "something")
+            lines.append(f"Reported by {who}, {LABELS.get(issue.issue_type, 'Other').lower()}.")
+            item = db.get(MediaItem, issue.rating_key) if issue.rating_key else None
+            if item is not None:
+                from app.services.library import describe_file, file_issues
+
+                known = file_issues(item)
+                if known:
+                    from app.services.library import ISSUES
+
+                    named = [ISSUES.get(key, key.replace("_", " ")) for key in known]
+                    lines.append("Already known about this file: " + "; ".join(named) + ".")
+                elif describe_file(item).get("file_bitrate"):
+                    lines.append("Nothing about the file itself stands out.")
+            if issue.context:
+                try:
+                    context = json.loads(issue.context)
+                    where = " on ".join(x for x in [context.get("player"), context.get("platform")] if x)
+                    if where:
+                        lines.append(f"Watching on {where}.")
+                except ValueError:
+                    pass
+            return f"{what}: something is wrong", "\n".join(lines)
+
+    import asyncio
+
+    told = await asyncio.to_thread(describe)
+    if told is None:
+        return False
+    try:
+        await apprise_notifier.send(*told)
+    except Exception as exc:  # noqa: BLE001 - a missed message must not lose the report
+        log.warning("could not send word of issue %s: %s", issue_id, exc)
+        return False
+    return True

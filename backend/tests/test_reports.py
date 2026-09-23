@@ -189,3 +189,30 @@ def test_file_details_streams_and_server_load(client):
     catalog = client.get("/api/reports/catalog").json()
     server = next(s for s in catalog["sources"] if s["key"] == "server")
     assert {d["group"] for d in server["dimensions"]} == {"When"}
+
+
+def test_reports_can_be_charted(client):
+    """A pile of reports should answer what went wrong, about what, and
+    whether anyone dealt with it."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import Issue, MediaItem
+
+    claim(client)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=5, title="Film", full_title="Film", media_type="movie"))
+        for n, (kind, status) in enumerate([("audio", "open"), ("audio", "resolved"), ("subtitles", "open")]):
+            db.add(Issue(source="local", issue_type=kind, status=status, message=f"m{n}", rating_key=5,
+                         media_type="movie", title="Film", reporter_user_id=7, created_at=now - timedelta(days=n)))
+
+    answer = client.get("/api/reports/run?source=issues&measure=reports&group=issue_type&range=30").json()
+    counts = {row["label"]: row["value"] for row in answer["rows"]}
+    assert counts == {"audio": 2, "subtitles": 1}
+
+    still_open = client.get("/api/reports/run?source=issues&measure=open&group=issue_type&range=30").json()
+    assert {row["label"]: row["value"] for row in still_open["rows"]} == {"audio": 1, "subtitles": 1}
+
+    by_title = client.get("/api/reports/run?source=issues&measure=reports&group=title&range=30").json()
+    assert [row["label"] for row in by_title["rows"]] == ["Film"]

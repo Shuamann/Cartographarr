@@ -195,6 +195,10 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    issue_alerts: bool = True
+    """Send word through Apprise when somebody reports a problem. Quiet unless
+    notifications are set up."""
+
     viewer_reports_issues: bool = True
     """Whether people who sign in as viewers can report a problem with
     something they watched, and see what they reported. They see their own

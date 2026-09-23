@@ -212,7 +212,7 @@ TYPES = ("video", "audio", "subtitles", "other")
 
 
 @router.post("")
-def raise_issue(
+async def raise_issue(
     user: CurrentUser,
     rating_key: int = Body(..., embed=True),
     issue_type: str = Body("other", embed=True),
@@ -262,6 +262,9 @@ def raise_issue(
         db.flush()
         issue_id, title = issue.id, issue.title
     audit.record(user, "issue.create", f"Reported {issue_type} trouble with {title}", target=str(issue_id))
+    from app.services import issues as issue_service
+
+    await issue_service.announce(issue_id)
     return {"id": issue_id}
 
 

@@ -29,6 +29,7 @@ from app.models import (
     Device,
     EnforcementLog,
     History,
+    Issue,
     IpLocation,
     Library,
     MediaItem,
@@ -121,6 +122,10 @@ DIMENSIONS: list[Dimension] = [
     Dimension("video_resolution", "Resolution", "Quality"),
     Dimension("quality_profile", "Quality profile", "Quality"),
     Dimension("rule", "Rule", "Rules"),
+    Dimension("issue_type", "Kind of problem", "Reports", hint="Video, audio, subtitles or other."),
+    Dimension("status", "Open or resolved", "Reports"),
+    Dimension("reporter", "Who reported it", "Reports", kind="user", identifying=True),
+    Dimension("source", "Reported through", "Reports", hint="Here, or Seerr."),
     Dimension("outcome", "Outcome", "Rules"),
     Dimension("day", "Day", "When"),
     Dimension("week", "Week", "When"),
@@ -425,8 +430,47 @@ SOURCES["server"] = Source(
     columns={},
 )
 
+SOURCES["issues"] = Source(
+    key="issues",
+    label="Reported problems",
+    blurb="What people reported was wrong, raised here or in Seerr. Counts the report, not the file.",
+    table=Issue,
+    admin_only=True,
+    time_column=lambda: Issue.created_at,
+    measures=[
+        Measure("reports", "Reports", "count", _count),
+        Measure("open", "Still open", "count",
+                lambda: func.sum(case((Issue.status == "open", 1), else_=0))),
+        Measure("resolved", "Resolved", "count",
+                lambda: func.sum(case((Issue.status == "resolved", 1), else_=0))),
+        Measure("titles", "Different titles", "count", lambda: func.count(func.distinct(Issue.rating_key))),
+        Measure("people", "Different people", "count", lambda: func.count(func.distinct(Issue.reporter_user_id))),
+    ],
+    columns={
+        # What went wrong, who said so, and what it was about: the three
+        # questions a pile of reports should answer.
+        "issue_type": lambda: Issue.issue_type,
+        "status": lambda: Issue.status,
+        "reporter": lambda: Issue.reporter_user_id,
+        "source": lambda: Issue.source,
+        "media_type": lambda: Issue.media_type,
+        "title": lambda: Issue.rating_key,
+        "show": lambda: func.coalesce(Issue.show_rating_key, Issue.rating_key),
+    },
+    filter_columns={
+        "user_id": lambda: Issue.reporter_user_id,
+        "media_type": lambda: Issue.media_type,
+        "rating_key": lambda: Issue.rating_key,
+        "search": lambda: Issue.title,
+    },
+)
+
 # Starting points. Ordinary specs: open one, change it, save it as your own.
 PRESETS: list[dict[str, Any]] = [
+    {"id": "issues-kind", "name": "Reports by kind", "source": "issues", "measure": "reports",
+     "group": "issue_type", "then": "status", "range": "90"},
+    {"id": "issues-title", "name": "Most reported titles", "source": "issues", "measure": "reports",
+     "group": "title", "then": "issue_type", "range": "365"},
     {"id": "buffering-device", "name": "Buffering by device", "source": "buffering", "measure": "episodes",
      "group": "device", "then": "transcode_decision", "range": "30"},
     {"id": "buffering-network", "name": "Buffering by network", "source": "buffering", "measure": "minutes",
