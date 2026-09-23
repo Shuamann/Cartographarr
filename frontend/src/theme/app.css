@@ -3289,3 +3289,86 @@ label.locked .pill {
   background: var(--surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
 }
+
+/* ---- map key -------------------------------------------------------------- */
+
+.legend {
+  position: absolute;
+  right: 12px;
+  bottom: 44px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(340px, calc(100% - 24px));
+}
+
+.legend-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.legend-tab:hover {
+  border-color: var(--accent);
+}
+
+.legend-body {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  font-size: 0.82rem;
+}
+
+.legend-body h3 {
+  margin: 10px 0 6px;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.legend-body h3:first-child {
+  margin-top: 0;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.legend-row .dot,
+.legend-row .ring,
+.legend-row .swatch,
+.legend-row .ramp {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.legend-row .ring {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+.legend-row .swatch {
+  border-radius: 3px;
+  opacity: 0.55;
+}
+
+.legend-row .ramp {
+  width: 40px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--map-heat-2), var(--map-heat-3), var(--map-heat-4), var(--map-heat-5));
+}

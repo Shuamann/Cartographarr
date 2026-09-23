@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.11.0 - 2026-09-22
+
+### Added
+- A key on the map, folded away until you want it: what the colours and sizes mean, and what a shaded country means
+
+### Changed
+- Countries are clickable straight away for an admin, with nothing to switch on first. The switch moved into the key
+  for anyone who would rather not have them
+- A click meant for a pin no longer opens the country picker as well
+
 ## 0.10.0 - 2026-09-22
 
 ### Added

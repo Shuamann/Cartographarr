@@ -291,8 +291,9 @@ beside them.
 
 ## Blocked countries
 
-Turn on the **Countries** layer on the map and click a country: flag, warn or
-stop, and it shades in. Cyan is flag, amber is warn, red is stop. Boundaries
+Click a country on the map: flag, warn or stop, and it shades in. **Key**, at
+the bottom of the map, says what every colour and size means, and is where the
+country layer can be switched off. Cyan is flag, amber is warn, red is stop. Boundaries
 are part of the app (Natural Earth, public domain), so nothing is fetched from
 anyone else while you use the map, and they load only when the layer is on.
 

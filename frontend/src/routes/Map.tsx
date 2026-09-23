@@ -91,7 +91,7 @@ export default function MapRoute({
 
   const [showBanned, setShowBanned] = useState(() => localStorage.getItem("layer.banned") !== "off");
   // Countries: shaded by what the list says to do about each, and clickable.
-  const [showCountries, setShowCountries] = useState(() => localStorage.getItem("layer.countries") === "on");
+  const [showCountries, setShowCountries] = useState(() => localStorage.getItem("layer.countries") !== "off");
   const blocked = useApi<{ items: { code: string; name: string | null; mode: string }[] }>(
     nav.isAdmin && showCountries ? "/geoblocks" : null,
     [showCountries],
@@ -254,20 +254,6 @@ export default function MapRoute({
               Banned
               {bans.ids.size > 0 && <span className="ms-count banned">{bans.ids.size}</span>}
             </label>
-            {nav.isAdmin && (
-              <label className="check" title="Shade countries by what the list says to do, and click one to change it">
-                <input
-                  type="checkbox"
-                  checked={showCountries}
-                  onChange={(e) => {
-                    toggleLayer("countries", e.target.checked, setShowCountries);
-                    if (!e.target.checked) setPicked(null);
-                  }}
-                />
-                Countries
-                {Object.keys(modes).length > 0 && <span className="ms-count">{Object.keys(modes).length}</span>}
-              </label>
-            )}
             <label className="check">
               <input
                 type="checkbox"
@@ -325,6 +311,17 @@ export default function MapRoute({
         ) : (
           <LocationList features={features} selected={selected} onSelect={setSelected} />
         )}
+
+        <Legend
+          isAdmin={nav.isAdmin}
+          heat={showHeat}
+          countries={showCountries}
+          listed={Object.keys(modes).length}
+          onCountries={(on) => {
+            toggleLayer("countries", on, setShowCountries);
+            if (!on) setPicked(null);
+          }}
+        />
 
         {picked && (
           <CountryPicker
@@ -855,6 +852,10 @@ function MapCanvas({
         m.on("mouseenter", "country-fill", () => (m.getCanvas().style.cursor = "pointer"));
         m.on("mouseleave", "country-fill", () => (m.getCanvas().style.cursor = ""));
         m.on("click", "country-fill", (e) => {
+          // A country sits under everything, so a click meant for a pin would
+          // otherwise open the country picker as well as the place.
+          const pins = ["points", "clusters", "live-dot", "live-ring", "banned-seen", "banned-attempt"].filter((id) => m.getLayer(id));
+          if (m.queryRenderedFeatures(e.point, { layers: pins }).length) return;
           const props = e.features?.[0]?.properties;
           if (props?.code) pickCountryRef.current(String(props.code), String(props.name ?? props.code));
         });
@@ -1593,6 +1594,99 @@ function CountryPicker({
         </button>
       )}
       <p className="muted small">Flag records the stream. Warn messages the viewer. Stop ends it.</p>
+    </div>
+  );
+}
+
+
+/* What the colours mean, folded away until someone wants it.
+ *
+ * The map says a lot at a glance: size is how much was watched, purple is a
+ * VPN, red is banned, and a shaded country is one the list has something to
+ * say about. None of that is guessable, so it is written down here rather than
+ * learned by accident. */
+function Legend({
+  isAdmin,
+  heat,
+  countries,
+  listed,
+  onCountries,
+}: {
+  isAdmin: boolean;
+  heat: boolean;
+  countries: boolean;
+  listed: number;
+  onCountries: (on: boolean) => void;
+}) {
+  const [open, setOpen] = useState(() => localStorage.getItem("map.legend") === "on");
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    localStorage.setItem("map.legend", next ? "on" : "off");
+  }
+
+  return (
+    <div className={open ? "legend open" : "legend"}>
+      <button className="legend-tab" onClick={toggle} aria-expanded={open}>
+        {open ? "Hide key" : "Key"}
+      </button>
+      {open && (
+        <div className="legend-body">
+          <h3>Places</h3>
+          <p className="legend-row">
+            <span className="dot" style={{ background: "var(--map-point)" }} />
+            Somewhere watched from. Bigger means more plays.
+          </p>
+          <p className="legend-row">
+            <span className="dot" style={{ background: "var(--vpn)" }} />
+            A VPN or hosting address, so the pin is the server, not the viewer.
+          </p>
+          <p className="legend-row">
+            <span className="ring" style={{ borderColor: "var(--banned)" }} />
+            A banned device: a ring where it played, a solid dot where it tried since.
+          </p>
+          <p className="legend-row">
+            <span className="dot live" style={{ background: "var(--live)" }} />
+            Playing right now.
+          </p>
+          <p className="legend-row">
+            <span className="ring" style={{ borderColor: "var(--map-accuracy)" }} />
+            How vague the location is. A city centroid, never an address.
+          </p>
+          {heat && (
+            <p className="legend-row">
+              <span className="ramp" />
+              Busier places run from blue through pink to yellow.
+            </p>
+          )}
+
+          {isAdmin && (
+            <>
+              <h3>Countries</h3>
+              <p className="legend-row">
+                <span className="swatch" style={{ background: "var(--accent)" }} />
+                Flagged: streams from there are recorded.
+              </p>
+              <p className="legend-row">
+                <span className="swatch" style={{ background: "var(--warn)" }} />
+                Warned: the viewer is messaged.
+              </p>
+              <p className="legend-row">
+                <span className="swatch" style={{ background: "var(--banned)" }} />
+                Stopped: the stream is ended.
+              </p>
+              <p className="muted small">
+                Click any country to set or change it{listed > 0 ? `. ${listed} on the list.` : "."}
+              </p>
+              <label className="check">
+                <input type="checkbox" checked={countries} onChange={(e) => onCountries(e.target.checked)} />
+                Shade and click countries
+              </label>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
