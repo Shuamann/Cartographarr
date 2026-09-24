@@ -45,19 +45,6 @@ type FileInfo = {
   issues: string[];
 };
 
-type Problem = FileInfo & {
-  plays: number;
-  remote_plays: number;
-  remote_transcodes: number;
-  users: number;
-  last_play: number | null;
-  stalls: number;
-  stall_users: number;
-  causes: string[];
-  reasons: string[];
-  score: number;
-};
-
 type Overview = {
   titles: number;
   checked: number;
@@ -76,13 +63,6 @@ type CauseRow = {
   hardware: number;
   platforms: { name: string; streams: number }[];
   titles: { rating_key: number; title: string | null; streams: number }[];
-};
-
-type Messy = {
-  checked: number;
-  counts: { issue: string; label: string; files: number }[];
-  files: (FileInfo & { plays: number })[];
-  total: number;
 };
 
 type FourK = FileInfo & {
@@ -124,31 +104,14 @@ export type FileDetail = FileInfo & {
 
 const SECTIONS = [
   { id: "overview", title: "Overview" },
-  { id: "problems", title: "Problem files" },
+  { id: "attention", title: "Files worth attention" },
   { id: "transcodes", title: "Why streams transcode" },
-  { id: "messy", title: "Messy files" },
   { id: "four-k", title: "4K copies" },
   { id: "storage", title: "Storage" },
-  { id: "cleanup", title: "Worth a second look" },
   { id: "requests", title: "Requested, never watched" },
   { id: "replacements", title: "Replacements" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
-
-const REASONS: Record<string, string> = {
-  over_threshold: "Over the bitrate limit, watched remotely",
-  stalls: "Stalls",
-  mostly_transcoded: "Transcoded for most remote viewers",
-};
-
-const ISSUE_LABELS: Record<string, string> = {
-  no_compatible_audio: "No widely playable audio",
-  image_subtitles_only: "Image subtitles only",
-  styled_subtitles: "Styled subtitles",
-  subtitle_clutter: "Subtitle clutter",
-  untagged_audio: "Untagged audio",
-  legacy_container: "Old container",
-};
 
 const TRANSCODE_CAUSES: Record<string, string> = {
   subtitle_burn: "Subtitles burned in",
@@ -241,12 +204,10 @@ export default function Library() {
           )}
         </header>
         {section === "overview" && <OverviewSection onOpen={setSection} />}
-        {section === "problems" && <Problems days={days} />}
+        {section === "attention" && <Attention days={days} />}
         {section === "transcodes" && <Transcodes days={days} />}
-        {section === "messy" && <MessyFiles days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
-        {section === "cleanup" && <CleanupSection days={days} />}
         {section === "requests" && <Requests />}
         {section === "replacements" && <Replacements />}
       </div>
@@ -318,58 +279,6 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
     </>
   );
 }
-
-function Problems({ days }: { days: number }) {
-  const overview = useApi<Overview>("/library/overview");
-  const [threshold, setThreshold] = useState<number | null>(null);
-  const limit = threshold ?? overview.data?.threshold_mbps ?? null;
-  const rows = useApi<Problem[]>(limit === null ? null : `/library/problems?days=${days}&threshold_mbps=${limit}`);
-  return (
-    <>
-      <p className="muted">
-        Files that are over the bitrate limit and watched remotely, that stall, or that most remote viewers get
-        transcoded. Stalls count most, since those are what people notice.
-      </p>
-      <label className="inline-select">
-        <span className="muted small">Bitrate limit (Mbps)</span>
-        <input
-          type="number"
-          min={1}
-          max={500}
-          step={1}
-          value={limit ?? ""}
-          onChange={(e) => setThreshold(Number(e.target.value) || null)}
-        />
-        <span className="muted small">Default is set in Settings, Behaviour.</span>
-      </label>
-      {rows.error && <p className="note bad-note">{rows.error}</p>}
-      {!rows.data && !rows.error && <Loading label="Weighing files against how they were watched" />}
-      {rows.data?.length === 0 && <p className="muted">Nothing is causing trouble in this period.</p>}
-      <div className="mini-list">
-        {rows.data?.map((r) => (
-          <FileRow
-            key={r.rating_key}
-            file={r}
-            days={days}
-            badges={r.reasons.map((x) => (
-              <span key={x} className={x === "stalls" ? "pill bad" : "pill warn"}>
-                {REASONS[x] ?? x}
-              </span>
-            ))}
-            stats={[
-              mbps(r.file_bitrate),
-              `${r.remote_plays} remote of ${r.plays} plays`,
-              r.remote_transcodes ? `${r.remote_transcodes} remote transcodes` : null,
-              r.stalls ? `${r.stalls} stall${r.stalls === 1 ? "" : "s"} for ${r.stall_users} ${r.stall_users === 1 ? "person" : "people"}` : null,
-              r.causes.length ? `mostly ${TRANSCODE_CAUSES[r.causes[0]]?.toLowerCase() ?? r.causes[0]}` : null,
-            ]}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
 function Transcodes({ days }: { days: number }) {
   const nav = useNav();
   const data = useApi<{ total_streams: number; causes: CauseRow[] }>(`/library/transcodes?days=${days}`);
@@ -436,52 +345,6 @@ const FIXES: Record<string, string> = {
   audio_channels: "Fix: add a stereo AAC track for devices limited to two channels.",
   container: "Usually harmless: the server repackages the file without re-encoding it.",
 };
-
-function MessyFiles({ days }: { days: number }) {
-  const [issue, setIssue] = useState<string | null>(null);
-  const data = useApi<Messy>(`/library/messy?days=${days}${issue ? `&issue=${issue}` : ""}`);
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
-  if (!data.data) return <Loading label="Checking every file's tracks" />;
-  const m = data.data;
-  return (
-    <>
-      <p className="muted">
-        Files with something that makes them harder to play, most watched first. Of {m.checked.toLocaleString()} files
-        checked so far.
-      </p>
-      <div className="row wrap chips">
-        <button className={issue === null ? "chip on" : "chip"} onClick={() => setIssue(null)}>
-          All
-        </button>
-        {m.counts
-          .filter((c) => c.files > 0 || issue === c.issue)
-          .map((c) => (
-            <button key={c.issue} className={issue === c.issue ? "chip on" : "chip"} title={c.label} onClick={() => setIssue(c.issue)}>
-              {ISSUE_LABELS[c.issue]} {c.files}
-            </button>
-          ))}
-      </div>
-      {m.files.length === 0 && <p className="muted">Nothing found.</p>}
-      <div className="mini-list">
-        {m.files.map((f) => (
-          <FileRow
-            key={f.rating_key}
-            file={f}
-            days={days}
-            badges={f.issues.map((i) => (
-              <span key={i} className="pill warn">
-                {ISSUE_LABELS[i] ?? i}
-              </span>
-            ))}
-            stats={[format(f), `${f.plays} plays`]}
-          />
-        ))}
-      </div>
-      {m.total > m.files.length && <p className="muted small">Showing the first {m.files.length} of {m.total}.</p>}
-    </>
-  );
-}
-
 function FourKSection({ days }: { days: number }) {
   const rows = useApi<FourK[]>(`/library/four-k?days=${days}`);
   if (rows.error) return <p className="note bad-note">{rows.error}</p>;
@@ -636,11 +499,13 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
               {x.arr && <p className="muted small">{x.arr}</p>}
             </div>
           ))}
-          <ArrActions ratingKey={f.rating_key} arr={f.arr} title={f.title} />
         </section>
       ) : (
         <p className="muted small">Nothing about this file itself stands out.</p>
       )}
+      {/* Outside the findings: a file can be worth replacing for taking up
+          room, not only for being broken. */}
+      <ArrActions ratingKey={f.rating_key} arr={f.arr} title={f.title} />
       <dl className="kv">
         <div>
           <dt>Format</dt>
@@ -1531,40 +1396,55 @@ function OldStalls() {
 }
 
 
-/* What takes up room without earning it.
- *
- * Nothing here deletes anything: Plex, Radarr and Sonarr own the files. This
- * says which ones nobody watches, how much room each takes and why it stands
- * out, then gets out of the way. Anything you decide to keep is marked kept,
- * so the list stays the things nobody has thought about yet rather than the
- * same argument every month. */
-type Candidate = FileInfo & {
-  media_type: string | null;
-  plays: number;
-  last_play: number | null;
-  days_since: number | null;
-  store: string;
-  reason: string;
-  why: string;
-};
-
 type Kept = { rating_key: number; title: string; reason: string | null; kept_by: string | null; kept_at: string | null };
+type Lens = "trouble" | "messy" | "room";
 
-const KEEP_REASONS: Record<string, string> = {
-  never_played: "Never played",
-  not_played_in_years: "Not played in years",
-  never_seen_in_4k: "4K nobody sees in 4K",
+type AttentionRow = FileInfo & {
+  kind: Lens;
+  why: string | null;
+  store: string;
+  plays?: number;
+  remote_plays?: number;
+  last_play?: number | null;
+  findings?: Finding[];
 };
 
-function CleanupSection({ days }: { days: number }) {
-  const data = useApi<{ items: Candidate[]; found: number; reclaimable: number; kept: number; days: number }>(
-    `/library/cleanup?days=${days}`,
-    [days],
-  );
-  const keptList = useApi<Kept[]>("/library/cleanup/kept");
-  const [reasons, setReasons] = useState<Record<number, string>>({});
-  const [showKept, setShowKept] = useState(false);
+const LENSES: { id: Lens; label: string; blurb: string }[] = [
+  {
+    id: "trouble",
+    label: "Trouble for viewers",
+    blurb: "Stalls, transcodes for most remote viewers, or a bitrate too high for the way it is watched.",
+  },
+  {
+    id: "messy",
+    label: "Awkward to play",
+    blurb: "Audio no common device can play, subtitles only as pictures, a container from another decade.",
+  },
+  {
+    id: "room",
+    label: "Taking up room",
+    blurb: "Big, and either never played, not played in years, or 4K nobody has ever been sent in 4K.",
+  },
+];
+
+function Attention({ days }: { days: number }) {
+  const [lens, setLens] = useState<Lens>(() => (localStorage.getItem("library.lens") as Lens) || "trouble");
   const [error, setError] = useState<string | null>(null);
+  const [showKept, setShowKept] = useState(false);
+  const data = useApi<{
+    items: AttentionRow[];
+    total: number;
+    kept: number;
+    reclaimable?: number;
+    found?: number;
+    checked?: number;
+  }>(`/library/attention?kind=${lens}&days=${days}`, [lens, days]);
+  const keptList = useApi<Kept[]>("/library/cleanup/kept");
+
+  function choose(next: Lens) {
+    setLens(next);
+    localStorage.setItem("library.lens", next);
+  }
 
   async function act(run: () => Promise<unknown>) {
     setError(null);
@@ -1577,67 +1457,78 @@ function CleanupSection({ days }: { days: number }) {
     }
   }
 
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
-  if (!data.data) return <Loading label="Looking for room" />;
-  const d = data.data;
+  const here = LENSES.find((l) => l.id === lens)!;
 
   return (
     <>
-      <p className="muted">
-        Big files nobody watches, biggest first, with why each one stands out. Nothing here deletes anything: open it
-        in Radarr or Sonarr to decide, or mark it kept and it stops being suggested.
-      </p>
+      <div className="segmented">
+        {LENSES.map((l) => (
+          <button key={l.id} className={lens === l.id ? "seg on" : "seg"} onClick={() => choose(l.id)}>
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <p className="muted">{here.blurb}</p>
       {error && <p className="note bad-note">{error}</p>}
-      {d.items.length > 0 && (
-        <p className="note">
-          {size(d.reclaimable)} across {d.found.toLocaleString()} {d.found === 1 ? "file" : "files"} that nobody is
-          watching{d.found > d.items.length ? `, biggest ${d.items.length} below` : ""}.
-        </p>
+
+      {data.error && <p className="note bad-note">{data.error}</p>}
+      {!data.data && <Loading label="Reading the library" />}
+      {data.data && data.data.items.length === 0 && (
+        <p className="note">Nothing here. Either nothing qualifies, or you have kept everything that did.</p>
       )}
-      {d.items.length === 0 && (
-        <p className="note">Nothing stands out. Every large file here has been watched, or you have kept it.</p>
+      {data.data && data.data.items.length > 0 && (
+        <p className="note">
+          {lens === "room" && data.data.reclaimable
+            ? `${size(data.data.reclaimable)} across ${(data.data.found ?? data.data.total).toLocaleString()} files nobody is watching.`
+            : `${data.data.total.toLocaleString()} ${data.data.total === 1 ? "file" : "files"}, worst first.`}
+        </p>
       )}
 
       <div className="file-list">
-        {d.items.map((f) => (
+        {(data.data?.items ?? []).map((f) => (
           <div key={f.rating_key} className="cleanup-row">
             <FileRow
               file={f}
               days={days}
               badges={[
-                <span key="reason" className="pill warn">
-                  {KEEP_REASONS[f.reason] ?? f.reason}
-                </span>,
                 <span key="store" className="pill">
                   {f.store}
                 </span>,
+                ...(f.plays !== undefined
+                  ? [
+                      <span key="plays" className="pill">
+                        {/* Only the room lens looks at all time, so only it can
+                            honestly say never. The others count the window. */}
+                        {f.plays === 0 && lens === "room"
+                          ? "never played"
+                          : `${f.plays} ${f.plays === 1 ? "play" : "plays"}${lens === "room" ? "" : ` in ${days} days`}`}
+                      </span>,
+                    ]
+                  : []),
               ]}
-              stats={[
-                f.why,
-                f.last_play ? `last played ${when(f.last_play)}` : null,
-              ]}
+              stats={[f.why, mbps(f.file_bitrate), size(f.file_size)]}
             />
-            <div className="row wrap keep-row">
-              <input
-                placeholder="Why keep it? (optional)"
-                value={reasons[f.rating_key] ?? ""}
-                onChange={(e) => setReasons({ ...reasons, [f.rating_key]: e.target.value })}
-              />
+            <div className="keep-row">
               <button
-                className="btn"
-                onClick={() => act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: reasons[f.rating_key] ?? "" }))}
+                className="linkish small"
+                title="Stop this file being suggested, whichever question is asked"
+                onClick={() => {
+                  const why = window.prompt(`Keep ${f.title} and stop suggesting it? A reason, for the Log:`, "");
+                  if (why === null) return;
+                  act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: why }));
+                }}
               >
-                Keep it
+                Keep it, stop asking
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      {d.kept > 0 && (
+      {(data.data?.kept ?? 0) > 0 && (
         <p className="muted small">
           <button className="tab" onClick={() => setShowKept(!showKept)}>
-            {showKept ? "Hide" : `${d.kept} kept`}
+            {showKept ? "Hide" : `${data.data!.kept} kept`}
           </button>
         </p>
       )}
@@ -1647,7 +1538,9 @@ function CleanupSection({ days }: { days: number }) {
             <div key={k.rating_key} className="mini">
               <div className="min0">
                 <strong>{k.title}</strong>
-                <p className="muted small">{[k.reason, k.kept_by ? `kept by ${k.kept_by}` : null].filter(Boolean).join(" \u00b7 ")}</p>
+                <p className="muted small">
+                  {[k.reason, k.kept_by ? `kept by ${k.kept_by}` : null].filter(Boolean).join(" \u00b7 ")}
+                </p>
               </div>
               <button className="tab" onClick={() => act(() => api.del(`/library/cleanup/${k.rating_key}/keep`))}>
                 Put it back

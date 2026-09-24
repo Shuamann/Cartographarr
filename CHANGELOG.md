@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.22.0 - 2026-09-23
+
+### Changed
+- Problem files, Messy files and Worth a second look are one page: Files worth attention, asked three ways. Trouble
+  for viewers, awkward to play, or taking up room. Every row reads the same and offers the same things, so a file
+  found for taking up room can be replaced, and one found for its audio can be kept and stop being suggested
+- Find a replacement is offered on any file, not only one with something wrong, because taking up room is reason
+  enough
+
 ## 0.21.0 - 2026-09-23
 
 ### Added

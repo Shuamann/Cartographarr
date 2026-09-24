@@ -204,6 +204,22 @@ def forget_old_stalls(db: Db, admin: AdminUser) -> dict:
     return {"forgotten": count}
 
 
+@router.get("/attention")
+async def attention(_: AdminUser, kind: str = Query("trouble", pattern="^(trouble|messy|room)$"), days: int = Days) -> dict:
+    """Files worth doing something about, asked three ways.
+
+    Trouble for the people watching, awkward to play, or taking up room. One
+    list, because the answer to all three is the same: look at the file, ask
+    for a better copy, or decide to keep it.
+    """
+    import asyncio
+
+    from app.services import cleanup
+
+    threshold = int(current().library_bitrate_threshold_mbps * 1000)
+    return await asyncio.to_thread(cleanup.attention, kind, days, threshold)
+
+
 @router.get("/cleanup")
 async def cleanup(_: AdminUser, days: int = Days) -> dict:
     """Big files nobody watches, and why each one stands out."""

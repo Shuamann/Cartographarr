@@ -3537,12 +3537,7 @@ label.locked .pill {
 }
 
 .keep-row {
-  padding: 0 12px 8px;
-}
-
-.keep-row input {
-  flex: 1;
-  min-width: 220px;
+  padding: 2px 12px 8px;
 }
 
 /* ---- choosing the accent --------------------------------------------------- */

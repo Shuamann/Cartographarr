@@ -177,3 +177,87 @@ def kept_list() -> list[dict[str, Any]]:
             }
             for row in rows
         ]
+
+
+# ---- one list, three ways of looking at it ---------------------------------
+#
+# Problem files, messy files and files taking up room were three pages asking
+# three questions about the same library, with different actions on each. They
+# are one page now: the question changes, the rows and what you can do about
+# them do not.
+
+LENSES = {
+    "trouble": "Trouble for the people watching",
+    "messy": "Awkward to play",
+    "room": "Taking up room",
+}
+
+
+def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> dict[str, Any]:
+    from app.db import session_scope
+    from app.services import library
+
+    kept = _kept()
+    with session_scope() as db:
+        if kind == "messy":
+            found = library.messy_files(db, days, limit=limit * 2)
+            rows = [_row(f, "messy", _messy_why(f), threshold_kbps) for f in found["files"]]
+            extra = {"checked": found["checked"], "counts": found["counts"]}
+        elif kind == "room":
+            found = candidates(days=days, limit=limit * 2)
+            rows = [_row(f, "room", f.get("why"), threshold_kbps) for f in found["items"]]
+            extra = {"reclaimable": found["reclaimable"], "found": found["found"]}
+        else:
+            found = library.problem_files(db, threshold_kbps, days, limit=limit * 2)
+            rows = [_row(f, "trouble", _trouble_why(f), threshold_kbps) for f in found]
+            extra = {}
+
+    rows = [row for row in rows if row["rating_key"] not in kept]
+    return {"kind": kind, "items": rows[:limit], "total": len(rows), "kept": len(kept), "days": days, **extra}
+
+
+def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int) -> dict[str, Any]:
+    """Every row the same shape, whichever question found it.
+
+    Including the findings: a file listed for taking up room still gets the
+    same "what is wrong and how to fix it" as one listed for stalling, because
+    the answer to both might be the same better copy.
+    """
+    from app.services.findings import explain
+    from app.services.stores import name_for
+
+    findings = file.get("findings")
+    if findings is None:
+        findings = explain(file, threshold_kbps, None, None,
+                           "Sonarr" if file.get("media_type") == "episode" else "Radarr")
+    return {
+        **file,
+        "kind": kind,
+        "why": why,
+        "findings": findings,
+        "store": file.get("store") or name_for(file.get("file_path")),
+    }
+
+
+def _trouble_why(file: dict[str, Any]) -> str:
+    stalls, remote = int(file.get("stalls") or 0), int(file.get("remote_plays") or 0)
+    transcodes = int(file.get("remote_transcodes") or 0)
+    said = []
+    if stalls:
+        people = int(file.get("stall_users") or 0)
+        said.append(f"stalled {stalls} {'time' if stalls == 1 else 'times'} for {people or 1} {'person' if people <= 1 else 'people'}")
+    if remote and transcodes:
+        said.append(f"transcoded for {transcodes} of {remote} remote plays")
+    elif remote:
+        said.append(f"watched remotely {remote} {'time' if remote == 1 else 'times'}")
+    return "; ".join(said).capitalize() + "." if said else ""
+
+
+def _messy_why(file: dict[str, Any]) -> str:
+    from app.services.library import ISSUES
+
+    named = [ISSUES.get(key, key.replace("_", " ")) for key in file.get("issues") or []]
+    if not named:
+        findings = [f.get("title") for f in file.get("findings") or []]
+        named = [f for f in findings if f]
+    return "; ".join(named[:3]) + ("." if named else "")

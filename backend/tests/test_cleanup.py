@@ -11,8 +11,9 @@ GB = 1024**3
 def item(key, title, size_gb, **over):
     from app.models import MediaItem
 
+    fields = {"file_bitrate": 9000, "file_path": f"/movies/{title}/f.mkv", **over}
     return MediaItem(rating_key=key, title=title, full_title=title, media_type="movie",
-                     file_size=int(size_gb * GB), file_bitrate=9000, file_path=f"/movies/{title}/f.mkv", **over)
+                     file_size=int(size_gb * GB), **fields)
 
 
 def seed():
@@ -77,3 +78,58 @@ def test_viewers_cannot_see_the_review(client):
     as_viewer(client, "all")
     assert client.get("/api/library/cleanup").status_code == 403
     assert client.post("/api/library/cleanup/1/keep", json={"reason": "x"}).status_code == 403
+
+
+def seed_attention():
+    """One file that stalls, one that is awkward to play, one that is unused."""
+    from datetime import timedelta
+
+    from app.db import session_scope
+    from app.models import History, MediaItem, StreamEvent
+
+    with session_scope() as db:
+        db.add(item(10, "Stalls for people", 12, file_bitrate=30000, file_checked_at=datetime.now(UTC),
+                    video_resolution="1080p"))
+        db.add(item(11, "Only TrueHD", 12, file_bitrate=9000, file_checked_at=datetime.now(UTC),
+                    audio_tracks='[{"codec": "truehd", "channels": 8, "language": "eng"}]'))
+        db.add(item(12, "Nobody watches", 45))
+        for n, key in enumerate([10, 10, 11]):
+            db.add(History(row_id=50 + n, reference_id=50 + n, rating_key=key, user_id=7 + n, started=NOW - 3600,
+                           media_type="movie", location="wan", transcode_decision="transcode"))
+        for n in range(2):
+            db.add(StreamEvent(kind="buffering", user_id=7 + n, rating_key=10, seconds=10, cause="file",
+                               started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=n + 1),
+                               ended_at=datetime.now(UTC).replace(tzinfo=None)))
+
+
+def test_one_list_asked_three_ways(client):
+    claim(client)
+    seed_attention()
+
+    trouble = client.get("/api/library/attention?kind=trouble").json()
+    assert [i["title"] for i in trouble["items"]] == ["Stalls for people"]
+    assert "stalled 2 times for 2 people" in trouble["items"][0]["why"].lower()
+
+    messy = client.get("/api/library/attention?kind=messy").json()
+    assert "Only TrueHD" in [i["title"] for i in messy["items"]]
+    assert "audio" in messy["items"][0]["why"].lower()
+
+    room = client.get("/api/library/attention?kind=room").json()
+    assert [i["title"] for i in room["items"]] == ["Nobody watches"]
+    assert room["reclaimable"] > 0
+
+    # Every row carries the same things, whichever question found it.
+    for view in (trouble, messy, room):
+        row = view["items"][0]
+        assert {"rating_key", "title", "kind", "why", "store", "findings"} <= set(row)
+
+    assert client.get("/api/library/attention?kind=sideways").status_code == 422
+
+
+def test_keeping_a_file_takes_it_out_of_every_list(client):
+    claim(client)
+    seed_attention()
+    assert client.post("/api/library/cleanup/10/keep", json={"reason": "It is fine"}).status_code == 200
+
+    assert client.get("/api/library/attention?kind=trouble").json()["items"] == []
+    assert client.get("/api/library/attention?kind=trouble").json()["kept"] == 1
