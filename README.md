@@ -288,6 +288,11 @@ before anyone signs in.
 
 ## The home page
 
+Behind it, a globe turns: the same basemap as the Map tab, in your colours,
+carrying the same layers on small toggles, so where people watch from is the
+first thing the app says. It stops when the tab is hidden or the machine asks
+for less motion, and is left out where there is no WebGL.
+
 Everyone lands on **Home**: how many streams are playing, anything reported and
 still open, and where to go next. A link appears for each service that is set
 up, without anyone adding it: Plex for everyone, the request service when it is

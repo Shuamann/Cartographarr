@@ -3569,3 +3569,62 @@ label.locked .pill {
   border-radius: 8px;
   background: var(--surface);
 }
+
+/* ---- the globe behind the home page ---------------------------------------- */
+
+.globe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.globe-canvas {
+  position: absolute;
+  inset: 0;
+  /* Faded where the page has words on it, full strength where it does not, so
+     nothing has to be read over a coastline. */
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 35%) 0%, rgb(0 0 0 / 45%) 38%, rgb(0 0 0 / 95%) 62%, rgb(0 0 0 / 95%) 100%);
+}
+
+.globe-layers {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.globe-layer {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.globe-layer.on {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+/* The page sits above the globe, and gives it room: without a height of its
+   own the container is as tall as the words, and the globe a marble. */
+.home {
+  position: relative;
+  min-height: calc(100vh - 140px);
+}
+
+.home > h1,
+.home > .home-cards,
+.home > .section-head,
+.home > .home-links,
+.home > p {
+  position: relative;
+  z-index: 1;
+}

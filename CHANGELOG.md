@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.23.0 - 2026-09-23
+
+### Added
+- A slowly turning globe behind the home page, painted from the same colours as everything else, so it follows the
+  theme and the accent. It carries the layers from the map: where people watch from, heat, what is playing right now,
+  and the country list, each on its own small toggle
+- The globe stops turning when the tab is hidden or the machine asks for less motion, and is left out entirely where
+  there is no WebGL
+
 ## 0.22.0 - 2026-09-23
 
 ### Changed

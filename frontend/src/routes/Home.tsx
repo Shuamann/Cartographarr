@@ -1,4 +1,5 @@
 import BrandIcon from "../components/BrandIcon";
+import Globe from "../components/Globe";
 import Loading from "../components/Loading";
 import { useApi, type Activity } from "../lib/api";
 import { useNav } from "../lib/nav";
@@ -34,6 +35,7 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
 
   return (
     <div className="pad home">
+      <Globe isAdmin={nav.isAdmin} />
       <h1>
         {d.app_name}
         <span className="muted"> for {d.username}</span>
