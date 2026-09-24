@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.25.0 - 2026-09-24
+
+### Added
+- The globe on the home page can be taken hold of and turned. It stays where it is put for a few seconds, then
+  carries on turning from there. Scrolling over it scrolls the page, and on a touch screen a finger on the
+  background scrolls rather than drags, because that is what a finger on a background is for
+- A moon, in orbit, with a stream playing on it. It is a joke, and it says so when you press it
+- A faint glow around the planet, sitting on the edge of the sphere itself: the component measures where the
+  projection actually put the sphere rather than working it out from the size of the box, which is why it lands on
+  the rim at any window size
+- Stars and a grid behind it all, in the theme's own ink, fading out towards the foot of the page
+
 ## 0.24.0 - 2026-09-24
 
 ### Changed

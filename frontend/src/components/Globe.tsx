@@ -14,14 +14,23 @@ import { buildGlobeStyle } from "../theme/globeStyle";
  * It is still a real map underneath, which means the layers people already
  * know (places, heat, playing now, countries) work on it.
  *
- * It keeps out of the way: no dragging or zooming, a gentle spin that stops
- * when the tab is hidden or the machine asks for less motion, and nothing at
- * all where there is no WebGL.
+ * It keeps out of the way: a gentle spin that stops when the tab is hidden or
+ * the machine asks for less motion, and nothing at all where there is no
+ * WebGL. It can be taken hold of and turned, which is the one thing everybody
+ * tries on a globe; it carries on from wherever it was let go of, once it has
+ * been left alone for a few seconds.
+ *
+ * There is also a moon. It is a joke, and it says so when you press it.
  */
 
 type Layer = "history" | "heat" | "live" | "countries";
 
 const DEGREES_PER_SECOND = 3;
+
+/* How long the globe stays where it was put before it starts turning again.
+ * Long enough to look at what you dragged into view, short enough that the
+ * page does not feel broken. */
+const HOLD_MS = 4000;
 
 function webgl(): boolean {
   try {
@@ -38,10 +47,16 @@ function css(name: string, fallback: string): string {
 
 export default function Globe({ isAdmin }: { isAdmin: boolean }) {
   const canDraw = useMemo(webgl, []);
+  const frame = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const shapes = useRef<GeoJSON.FeatureCollection | null>(null);
+  /* When the spin may start again: pushed forward while a drag is going on,
+   * and once more when it ends. Read by the animation frame rather than held
+   * in state, because it changes far more often than anything is drawn. */
+  const spinAfter = useRef(0);
   const [ready, setReady] = useState(false);
+  const [moon, setMoon] = useState(false);
   const [layers, setLayers] = useState<Set<Layer>>(() => {
     try {
       const saved = localStorage.getItem("globe.layers");
@@ -87,7 +102,16 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
         style: buildGlobeStyle(outlines),
         center: [-30, 18],
         zoom: fitZoom(container.current),
-        interactive: false,
+        // Turning it is welcome. Zooming is not: the size is worked out from
+        // the space it has, and a scroll over a background is the page
+        // scrolling, not the globe coming closer.
+        interactive: true,
+        scrollZoom: false,
+        boxZoom: false,
+        doubleClickZoom: false,
+        dragRotate: false,
+        touchPitch: false,
+        keyboard: false,
         // Nothing is fetched from anyone, so there is nobody to credit.
         attributionControl: false,
       });
@@ -95,13 +119,26 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
       m.on("load", () => {
         m.setProjection({ type: "globe" });
         m.setZoom(fitZoom(container.current!));
+        measure(m, frame.current, container.current);
         setReady(true);
       });
+      // Pinch turns into a two finger drag rather than a zoom.
+      m.touchZoomRotate.disableRotation();
+      // A hand on the globe stops it, and it stays stopped for a moment after
+      // the hand comes off, so it does not lurch out from under the pointer.
+      const hold = () => {
+        spinAfter.current = performance.now() + HOLD_MS;
+      };
+      m.on("mousedown", hold);
+      m.on("touchstart", hold);
+      m.on("drag", hold);
+      m.on("dragend", hold);
       // The page it sits behind changes height as its cards load, and a globe
       // that was sized for the old height is a marble in the corner.
       watcher = new ResizeObserver(() => {
         m.resize();
         m.setZoom(fitZoom(container.current!));
+        measure(m, frame.current, container.current);
       });
       watcher.observe(container.current);
     })();
@@ -140,7 +177,7 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
     let last = performance.now();
     const step = (now: number) => {
       const m = map.current;
-      if (m && !document.hidden) {
+      if (m && !document.hidden && now >= spinAfter.current) {
         const seconds = (now - last) / 1000;
         const centre = m.getCenter();
         m.setCenter([centre.lng - DEGREES_PER_SECOND * seconds, centre.lat]);
@@ -274,8 +311,43 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
   if (!canDraw) return null;
 
   return (
-    <div className="globe">
+    <div className="globe" ref={frame}>
+      <div className="globe-glow" aria-hidden="true" />
       <div className="globe-canvas" ref={container} aria-hidden="true" />
+
+      {/* The moon, which is a joke, and the one stream on it, which is also a
+          joke. It orbits rather than sits there, dimming as it goes round the
+          back, and says what it is when anybody presses it. */}
+      <div className="globe-orbit">
+        <div className="globe-orbit-centre">
+          <div className="globe-arm">
+            <button
+              className="globe-moon"
+              onClick={() => setMoon(!moon)}
+              title="Something appears to be playing on the Moon"
+              aria-label="Something appears to be playing on the Moon"
+            >
+              <span className="globe-moon-live" />
+            </button>
+          </div>
+        </div>
+      </div>
+      {moon && (
+        <div className="globe-moon-card" role="status">
+          <p className="globe-moon-title">Sea of Tranquility</p>
+          <p className="muted small">
+            Apollo 11, One Small Step. Direct play, 4K, 2.6 seconds of round trip. Buffering, understandably.
+          </p>
+          <p className="muted small">
+            Nobody is watching from the Moon. If this ever shows up on the Map tab, something has gone wrong with
+            geolocation, or something has gone very right with the space programme.
+          </p>
+          <button className="tab" onClick={() => setMoon(false)}>
+            Fair enough
+          </button>
+        </div>
+      )}
+
       <div className="globe-layers">
         {([
           ["history", "Places"],
@@ -300,15 +372,42 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
 /* A globe that fills the space it is given rather than a fixed zoom.
  *
  * MapLibre draws the world 512 pixels across at zoom 0 and doubles it each
- * zoom, and the globe comes out about a third of that width across, so the
- * zoom that makes it slightly wider than its box is worked out rather than
- * guessed at three screen sizes. Slightly wider on purpose: the edge running
- * off the box is what makes it read as close rather than as a marble. */
+ * zoom, and under the globe projection the sphere comes out a little over a
+ * quarter of that width across, so the zoom that makes it most of the shorter
+ * side is worked out rather than guessed at three screen sizes. */
+const WORLD_TO_GLOBE = 3.78;
+
 function fitZoom(element: HTMLElement): number {
   const shortest = Math.min(element.clientWidth || 900, element.clientHeight || 600);
-  const wanted = shortest * 0.96;
-  const zoom = Math.log2((wanted * 3.1) / 512);
+  const wanted = shortest * 0.8;
+  const zoom = Math.log2((wanted * WORLD_TO_GLOBE) / 512);
   return Math.max(0, Math.min(3, zoom));
+}
+
+/* Where the sphere actually landed, published as custom properties.
+ *
+ * The glow around the planet has to sit on its edge, and the edge is wherever
+ * the projection put it rather than wherever the zoom sum said it should be.
+ * The silhouette is found by walking east from the middle and keeping the
+ * furthest the screen ever gets: past the limb the points fold back, so the
+ * furthest is the limb. */
+function measure(m: maplibregl.Map, frame: HTMLElement | null, canvas: HTMLElement | null): void {
+  if (!frame || !canvas) return;
+  const middle = m.getCenter();
+  const origin = m.project(middle);
+  let radius = 0;
+  for (let east = 10; east <= 90; east += 2) {
+    const point = m.project([middle.lng + east, middle.lat]);
+    radius = Math.max(radius, Math.abs(point.x - origin.x));
+  }
+  if (!radius) return;
+  // Through the rectangles rather than offsetLeft: the canvas is shifted with
+  // a transform, and offsetLeft does not know about transforms.
+  const box = canvas.getBoundingClientRect();
+  const outer = frame.getBoundingClientRect();
+  frame.style.setProperty("--globe-x", `${Math.round(box.left - outer.left + origin.x)}px`);
+  frame.style.setProperty("--globe-y", `${Math.round(box.top - outer.top + origin.y)}px`);
+  frame.style.setProperty("--globe-r", `${Math.round(radius)}px`);
 }
 
 
