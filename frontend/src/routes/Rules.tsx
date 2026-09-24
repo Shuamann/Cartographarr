@@ -24,6 +24,11 @@ type Draft = {
   name: string;
   enabled: boolean;
   recordOnly: boolean;
+  /* What sets it off. Stream rules are checked against live activity; the
+   * rest are swept every ten minutes, because a file that transcodes for
+   * everybody is still doing it in ten minutes' time. */
+  trigger: string;
+  dailyCap: number | null;
   conditions: CondGroup;
   actions: RuleStep[];
 };
@@ -84,6 +89,8 @@ function toDraft(rule: Partial<Rule> & { name: string }): Draft {
     name: rule.name,
     enabled: rule.enabled ?? true,
     recordOnly: rule.record_only_effective ?? rule.record_only ?? true,
+    trigger: rule.trigger ?? "stream",
+    dailyCap: rule.daily_cap ?? null,
     conditions,
     actions: rule.actions?.length ? rule.actions : [{ name: rule.action ?? "terminate", params: {} }],
   };
@@ -145,6 +152,8 @@ export default function RulesRoute({
                 name: "",
                 enabled: true,
                 recordOnly: true,
+                trigger: "stream",
+                dailyCap: null,
                 conditions: emptyGroup(),
                 actions: [{ name: "terminate", params: {} }],
               })
@@ -546,6 +555,15 @@ function Editor({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
+  // A rule about a file cannot ask what device is playing it, and cannot stop
+  // a stream, because nothing is playing. Both lists are narrowed here rather
+  // than in every part of the builder below.
+  const forTrigger: RuleFields = {
+    ...catalogue,
+    fields: catalogue.fields.filter((f) => f.triggers.includes(draft.trigger)),
+  };
+  const usableActions = actions.filter((a) => a.triggers.includes(draft.trigger));
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -554,6 +572,8 @@ function Editor({
         name: draft.name,
         enabled: draft.enabled,
         record_only: draft.recordOnly,
+        trigger: draft.trigger,
+        daily_cap: draft.dailyCap,
         conditions: draft.conditions,
         actions: draft.actions,
       };
@@ -613,6 +633,42 @@ function Editor({
               </select>
             </label>
             <label>
+              What sets it off
+              <select
+                value={draft.trigger}
+                onChange={(e) =>
+                  // The conditions and actions belong to the old trigger, so
+                  // they start again rather than sitting there unmatchable.
+                  onChange({
+                    ...draft,
+                    trigger: e.target.value,
+                    conditions: { type: "group", op: "and", items: [] },
+                    actions: [],
+                  })
+                }
+              >
+                {catalogue.triggers.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <small>{catalogue.triggers.find((t) => t.key === draft.trigger)?.blurb}</small>
+            </label>
+            {draft.trigger !== "stream" && (
+              <label>
+                Most it may do in a day
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Follow the server setting"
+                  value={draft.dailyCap ?? ""}
+                  onChange={(e) => onChange({ ...draft, dailyCap: e.target.value ? Number(e.target.value) : null })}
+                />
+                <small>A rule that acts while nobody is watching needs a ceiling. Blank follows Settings.</small>
+              </label>
+            )}
+            <label>
               When it matches
               <select
                 value={draft.recordOnly || !consequences(draft.actions) ? "record" : "act"}
@@ -636,12 +692,12 @@ function Editor({
           <GroupEditor
             group={draft.conditions}
             depth={0}
-            catalogue={catalogue}
+            catalogue={forTrigger}
             onChange={(conditions) => onChange({ ...draft, conditions })}
           />
           <p className="muted small rule-sentence">
             <span className="muted">Reads as: </span>
-            {describe(draft.conditions, catalogue, true)}
+            {describe(draft.conditions, forTrigger, true)}
           </p>
         </section>
 
@@ -649,11 +705,22 @@ function Editor({
           <h3>Then</h3>
           <ActionsEditor
             steps={draft.actions}
-            specs={actions}
+            specs={usableActions}
             onChange={(steps) => onChange({ ...draft, actions: steps })}
           />
         </section>
 
+        {draft.trigger !== "stream" && (
+          <section className="card-section">
+            <h3>Try it</h3>
+            <p className="muted small">
+              This one is swept every ten minutes rather than checked against live streams, so leave it recording only
+              for a day and read the Log before letting it act.
+            </p>
+          </section>
+        )}
+
+        {draft.trigger === "stream" && (
         <section className="card-section">
           <div className="row-between">
             <h3>Try it</h3>
@@ -690,6 +757,7 @@ function Editor({
             </div>
           )}
         </section>
+        )}
 
         {error && <p className="note bad-note">{error}</p>}
 

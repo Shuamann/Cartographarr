@@ -34,6 +34,9 @@ class Action:
     execute: Callable[[Session, Params], Awaitable[str]]
     requires: tuple[str, ...] = ()
     param_schema: dict[str, Any] = field(default_factory=dict)
+    # What this can be the answer to. Stopping a stream needs a stream;
+    # tagging a file does not care whether anyone is watching.
+    triggers: tuple[str, ...] = ("stream",)
 
 
 _REGISTRY: dict[str, Action] = {}
@@ -158,6 +161,7 @@ register(
                 "label": "Message (defaults to a description of the stream)",
             }
         },
+        triggers=("stream", "file", "issue", "replacement", "person")
     )
 )
 
@@ -196,6 +200,7 @@ register(
         execute=_webhook,
         requires=("integration:webhook",),
         param_schema={"message": {"type": "string", "label": "Message"}},
+        triggers=("stream", "file", "issue", "replacement", "person")
     )
 )
 
@@ -208,6 +213,7 @@ register(
         execute=_log_only,
         requires=(),
         param_schema={},
+        triggers=("stream", "file", "issue", "replacement", "person")
     )
 )
 
@@ -288,5 +294,76 @@ register(
                 "default": DEFAULT_VIEWER_MESSAGE,
             },
         },
+    )
+)
+
+
+# ---- handing a file back to Radarr or Sonarr -------------------------------
+#
+# These act on a file rather than a stream, so they are what a rule about a
+# file, a report or a replacement can do. Neither deletes anything: a search
+# asks for a better release, which Radarr or Sonarr only takes if their own
+# quality profile rates it higher, and a tag marks it for you to look at.
+
+async def _arr_target(subject: Session) -> tuple[Any, Any, int | None, int | None, str]:
+    """Which service, which id, and which episode this subject is about."""
+    from app.db import session_scope
+    from app.integrations import arr
+    from app.models import MediaItem
+
+    rating_key = subject.get("rating_key")
+    if not rating_key:
+        raise LookupError("Nothing to hand over: this is not about a file")
+    with session_scope() as db:
+        item = db.get(MediaItem, int(rating_key))
+        if item is None or item.title is None:
+            raise LookupError("That file is not in the library any more")
+        service = arr.for_media_type(item.media_type)
+        episodic = item.media_type == "episode"
+        show = db.get(MediaItem, item.grandparent_rating_key) if episodic and item.grandparent_rating_key else None
+        external = (show.tvdb_id if show else None) if episodic else (
+            item.tmdb_id if service.name == "radarr" else item.tvdb_id
+        )
+        title = item.full_title or item.title
+        season, episode = item.parent_media_index, item.media_index
+    if not service.configured():
+        raise LookupError(f"{service.label} is not set up")
+    if not external:
+        raise LookupError(f"No id for {title}, so {service.label} cannot find it")
+    return service, external, season, episode, title
+
+
+async def _arr_search(session: Session, _params: Params) -> str:
+    service, external, season, episode, title = await _arr_target(session)
+    await service.search(external, season, episode)
+    return f"asked {service.label} to look for a better {title}"
+
+
+async def _arr_tag(session: Session, _params: Params) -> str:
+    service, external, _season, _episode, title = await _arr_target(session)
+    await service.tag(external)
+    return f"tagged {title} in {service.label}"
+
+
+register(
+    Action(
+        name="arr_search",
+        label="Ask Radarr or Sonarr to look again",
+        description=(
+            "Asks for a search. Whichever one owns the title only takes a release its own quality profile "
+            "rates higher, so nothing is replaced by something worse."
+        ),
+        execute=_arr_search,
+        triggers=("file", "issue", "replacement"),
+    )
+)
+
+register(
+    Action(
+        name="arr_tag",
+        label="Tag it in Radarr or Sonarr",
+        description="Adds the cartographarr-replace tag, so it can be found later and dealt with by hand.",
+        execute=_arr_tag,
+        triggers=("file", "issue", "replacement"),
     )
 )

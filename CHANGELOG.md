@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.21.0 - 2026-09-23
+
+### Added
+- Rules can be about something other than a live stream: a file behaving badly, a report somebody raised, a
+  replacement finishing or stalling, or a person going quiet. Those are swept every ten minutes, through the same
+  matcher, record only switch and Log as any rule
+- Two actions that work on a file rather than a stream: ask Radarr or Sonarr to look for a better release, or tag it
+- A daily cap per rule, and a tighter one across every rule for anything that spends bandwidth. Hitting a cap is
+  recorded, because a rule that wanted to act fifty times is worth knowing about
+
 ## 0.20.0 - 2026-09-23
 
 ### Added

@@ -272,6 +272,16 @@ class Rule(Base):
     match_concurrent_streams_gt: Mapped[int | None] = mapped_column(Integer)
     match_paused_minutes_gt: Mapped[int | None] = mapped_column(Integer)
 
+    trigger: Mapped[str] = mapped_column(String(16), default="stream")
+    """What sets it off: a stream playing, a file crossing a threshold, an
+    issue raised, a replacement finishing, or a person going quiet. Rules
+    written before this existed are about streams, which is why that is the
+    default."""
+
+    daily_cap: Mapped[int | None] = mapped_column(Integer)
+    """How many times a day this rule may act. Unset follows the global cap.
+    A rule that can act while nobody is watching needs a ceiling."""
+
     action: Mapped[str] = mapped_column(String(32), default="terminate")
     message: Mapped[str | None] = mapped_column(Text)
 
@@ -452,6 +462,14 @@ class EnforcementLog(Base):
     dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
     result: Mapped[str | None] = mapped_column(Text)
     acted_at: Mapped[datetime | None] = mapped_column()
+
+    trigger: Mapped[str | None] = mapped_column(String(16))
+    """What set the rule off: a stream, a file, a report, a replacement, a
+    person. Null on entries from before rules could be about anything else."""
+
+    subject: Mapped[str | None] = mapped_column(String(64))
+    """Which one of those it was, for the cooldown that stops the same file
+    setting the same rule off every ten minutes."""
 
     # A snapshot of the stream as it was when acted on. Copied rather than
     # joined, because the session is gone a moment later and history may not

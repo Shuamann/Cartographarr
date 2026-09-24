@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     for rules saved before that switch existed. And set as an environment
     variable to true, it is a safety lock forcing every rule to record only."""
 
+    automation_daily_cap: int = 20
+    """How many times a rule that runs on its own may act in a day, unless the
+    rule sets its own. A rule that fires while nobody is watching needs a
+    ceiling, or one bad afternoon becomes a thousand."""
+
+    automation_download_cap: int = 3
+    """How many replacements every rule together may queue in a day. Spending
+    bandwidth is the one thing worth a second, tighter limit."""
+
     enforce_cooldown_seconds: int = 60
     """Per rule, per session, to stop a stubborn client from filling the log."""
 

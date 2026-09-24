@@ -95,6 +95,7 @@ def list_actions(_: AdminUser) -> list[dict]:
             "requires": list(a.requires),
             "unmet": registry.unmet(a),
             "param_schema": a.param_schema,
+            "triggers": list(a.triggers),
         }
         for a in registry.all_actions()
     ]
@@ -340,6 +341,13 @@ def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, A
     if unknown:
         raise HTTPException(400, f"Unknown fields: {', '.join(sorted(unknown))}")
 
+    trigger = str(values.get("trigger") or "stream")
+    if trigger not in cond.TRIGGER_KEYS:
+        raise HTTPException(400, f"A rule is set off by one of: {', '.join(cond.TRIGGER_KEYS)}")
+    cap = values.get("daily_cap")
+    if cap is not None and (not isinstance(cap, int) or cap < 1):
+        raise HTTPException(400, "The most it may do in a day is a whole number, or nothing to follow the server")
+
     payload = {k: v for k, v in values.items() if k in EDITABLE and k not in ("conditions", "actions")}
 
     if not partial and not str(values.get("name") or "").strip():
@@ -361,7 +369,15 @@ def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, A
         except ValueError as exc:
             raise HTTPException(400, redact(exc)) from exc
         if not cond.count(tree):
-            raise HTTPException(400, "Add at least one condition. An empty rule would match every stream.")
+            raise HTTPException(400, "Add at least one condition. An empty rule would match everything.")
+        # A question the subject cannot answer is a rule that never matches,
+        # which looks like a bug in the app rather than a mistake in the rule.
+        allowed = {f.key for f in cond.fields_for(trigger)}
+        asked = cond.fields_used(tree)
+        wrong = sorted(asked - allowed)
+        if wrong:
+            label = next((t["label"].lower() for t in cond.TRIGGERS if t["key"] == trigger), trigger)
+            raise HTTPException(400, f"{', '.join(wrong)} cannot be asked about when {label}")
         payload["conditions"] = json.dumps(tree)
         # The tree replaces the flat columns, so none are left to disagree with it.
         for column in [c for c in EDITABLE if c.startswith("match_")]:
@@ -381,8 +397,12 @@ def _validate_rule(values: dict[str, Any], partial: bool = False) -> dict[str, A
         clean = []
         for step in steps:
             name = str((step or {}).get("name") or "")
-            if registry.get(name) is None:
+            action = registry.get(name)
+            if action is None:
                 raise HTTPException(400, f"Unknown action {name!r}")
+            if trigger not in action.triggers:
+                label = next((t["label"].lower() for t in cond.TRIGGERS if t["key"] == trigger), trigger)
+                raise HTTPException(400, f"{action.label} is not something that can be done when {label}")
             params = (step or {}).get("params") or {}
             if not isinstance(params, dict):
                 raise HTTPException(400, f"{name}: settings are not readable")
@@ -932,6 +952,7 @@ def rule_fields(_: AdminUser, db: Db) -> dict:
     the options list every device and user."""
     from app.models import Library
     from app.services import conditions as cond
+    from app.services.library import ISSUES as FILE_ISSUES
 
     unmet_by_requirement = {
         "geoip": enforcer.unmet_requirements(
@@ -971,6 +992,7 @@ def rule_fields(_: AdminUser, db: Db) -> dict:
 
     return {
         "fields": fields,
+        "triggers": cond.TRIGGERS,
         "options": {
             "users": [{"value": u.user_id, "label": u.friendly_name or u.username or str(u.user_id)} for u in users],
             "devices": device_options,
@@ -982,6 +1004,9 @@ def rule_fields(_: AdminUser, db: Db) -> dict:
             ],
             "countries": [{"value": code, "label": name or code} for code, name in countries],
             "content_ratings": [{"value": v, "label": v} for v in distinct(MediaItem.content_rating)],
+            # The faults Library lists, so a rule can name one without anyone
+            # remembering its key.
+            "findings": [{"value": key, "label": label} for key, label in FILE_ISSUES.items()],
         },
     }
 

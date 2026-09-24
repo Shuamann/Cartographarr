@@ -135,6 +135,20 @@ tasks.register(tasks.Task(
     "issues", "Read reported issues", "Problems people reported in Seerr, kept beside what this app knows about the file.",
     _issue_sync, lambda: 300,
 ))
+async def _automations() -> dict | str:
+    from app.services import automations
+
+    if not current().enforce_enabled:
+        raise tasks.Skipped("Rules are switched off")
+    result = await automations.run_once()
+    return result if result.get("rules") else "no rules that run on their own"
+
+
+tasks.register(tasks.Task(
+    "automations", "Run rules about files and reports",
+    "Rules that are not about a live stream: files behaving badly, reports raised, replacements, people going quiet.",
+    _automations, lambda: 600, store_every_run=False,
+))
 tasks.register(tasks.Task(
     "capabilities", "Check Plex Pass and server", "Whether stopping streams is possible, and the server's name and version.",
     _capability_cycle, lambda: 3600,

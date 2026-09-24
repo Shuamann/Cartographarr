@@ -152,6 +152,8 @@ export type ActionSpec = {
   description: string;
   requires: string[];
   unmet: string[];
+  /** What this can be the answer to: stopping a stream needs a stream. */
+  triggers: string[];
   param_schema: Record<string, { type: string; label: string; default?: string }>;
 };
 
@@ -238,6 +240,8 @@ export type Rule = {
   match_is_hosting: boolean | null;
   match_concurrent_streams_gt: number | null;
   match_paused_minutes_gt: number | null;
+  trigger?: string;
+  daily_cap?: number | null;
   conditions?: CondGroup;
   actions?: RuleStep[];
   unmet?: string[];
@@ -261,10 +265,16 @@ export type RuleField = {
   options: string | null;
   fixed: { value: string; label: string }[];
   unit: string | null;
+  /** Which kinds of rule can ask this. A field offered against the wrong one
+   *  is a rule that can never match. */
+  triggers: string[];
 };
+
+export type RuleTrigger = { key: string; label: string; blurb: string };
 
 export type RuleFields = {
   fields: RuleField[];
+  triggers: RuleTrigger[];
   options: Record<string, { value: string | number; label: string }[]>;
 };
 

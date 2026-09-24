@@ -64,6 +64,9 @@ class Field:
     options: str | None = None
     fixed: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     unit: str | None = None
+    # A field is about a stream unless it says otherwise. A rule about a file
+    # cannot ask what device is playing it, because nothing is.
+    triggers: tuple[str, ...] = ("stream",)
 
 
 def _geo(ctx: Context, key: str) -> Any:
@@ -245,6 +248,72 @@ FIELDS: list[Field] = [
         "weekday", "Day of the week", "When", "weekday", lambda s, c: c.get("now"),
         fixed=(("0", "Mon"), ("1", "Tue"), ("2", "Wed"), ("3", "Thu"), ("4", "Fri"), ("5", "Sat"), ("6", "Sun")),
     ),
+    # ---- a file, an issue, a replacement, a person ---------------------------
+    #
+    # These read subjects built by services/subjects.py rather than a live
+    # stream, which is why they name their triggers. A field offered against
+    # the wrong trigger is a rule that can never match.
+    Field("file_title", "Title", "File", "text", lambda s, c: s.get("full_title"), triggers=("file", "issue", "replacement")),
+    Field("file_media_type", "Movie or episode", "File", "choice", lambda s, c: s.get("media_type"),
+          fixed=(("movie", "Movie"), ("episode", "Episode")), triggers=("file", "issue")),
+    Field("file_library", "Library", "File", "choice", lambda s, c: s.get("section_id"), options="libraries",
+          triggers=("file",)),
+    Field("file_store", "Storage", "File", "text", lambda s, c: s.get("store"), triggers=("file",),
+          hint="What the mount is called under Library, Storage."),
+    Field("file_bitrate_mbps", "File bitrate", "File", "number",
+          lambda s, c: (_num(s.get("file_bitrate")) or 0) / 1000, unit="Mbps", triggers=("file", "issue")),
+    Field("file_size_gb", "File size", "File", "number",
+          lambda s, c: (_num(s.get("file_size")) or 0) / (1024 ** 3), unit="GB", triggers=("file",)),
+    Field("file_resolution_is", "File resolution", "File", "text", lambda s, c: s.get("video_resolution"),
+          triggers=("file", "issue")),
+    Field("file_video_codec_is", "File video format", "File", "text", lambda s, c: s.get("video_codec"),
+          triggers=("file", "issue")),
+    Field("file_audio_codec_is", "File audio format", "File", "text", lambda s, c: s.get("audio_codec"),
+          triggers=("file", "issue")),
+    Field("file_finding", "What is wrong with the file", "File", "choice", lambda s, c: s.get("findings") or [],
+          options="findings", triggers=("file", "issue"),
+          hint="The same faults Library, Messy files lists: no compatible audio, image only subtitles, a legacy container."),
+    Field("file_plays", "Plays in the last 30 days", "File", "number", lambda s, c: s.get("plays"), triggers=("file",)),
+    Field("file_remote_plays", "Remote plays in the last 30 days", "File", "number",
+          lambda s, c: s.get("remote_plays"), triggers=("file",)),
+    Field("file_transcode_percent", "Share of plays transcoded", "File", "number",
+          lambda s, c: s.get("transcode_percent"), unit="%", triggers=("file",),
+          hint="Over the last 30 days. A file transcoded for nearly everyone is the file's fault, not the viewers'."),
+    Field("file_stalls", "Stalls in the last 30 days", "File", "number", lambda s, c: s.get("stalls"), triggers=("file",)),
+    Field("file_stall_people", "People who stalled on it", "File", "number", lambda s, c: s.get("stall_people"),
+          triggers=("file",), hint="Different people. Three is a pattern; one is a bad evening."),
+    Field("file_stall_cause", "Likely cause of its stalls", "File", "choice", lambda s, c: s.get("stall_cause"),
+          fixed=(("upload", "The server's upload"), ("server", "The server"), ("file", "The file"),
+                 ("viewer", "The viewer"), ("one_off", "One off")), triggers=("file",)),
+
+    Field("issue_kind", "Kind of problem", "Report", "choice", lambda s, c: s.get("issue_type"),
+          fixed=(("video", "Video"), ("audio", "Audio"), ("subtitles", "Subtitles"), ("other", "Other")),
+          triggers=("issue",)),
+    Field("issue_status", "Open or resolved", "Report", "choice", lambda s, c: s.get("issue_status"),
+          fixed=(("open", "Open"), ("resolved", "Resolved")), triggers=("issue",)),
+    Field("issue_source", "Reported through", "Report", "choice", lambda s, c: s.get("issue_source"),
+          fixed=(("local", "Here"), ("seerr", "Seerr")), triggers=("issue",)),
+    Field("issue_message", "What they said", "Report", "text", lambda s, c: s.get("message"), triggers=("issue",)),
+
+    Field("replacement_status", "How it ended", "Replacement", "choice", lambda s, c: s.get("replacement_status"),
+          fixed=(("imported", "Imported"), ("imported_automatically", "Imported on its own"),
+                 ("ready", "Waiting for confirmation"), ("failed", "Failed"), ("denied", "Denied")),
+          triggers=("replacement",)),
+    Field("replacement_service", "Radarr or Sonarr", "Replacement", "choice", lambda s, c: s.get("service"),
+          fixed=(("radarr", "Radarr"), ("sonarr", "Sonarr")), triggers=("replacement",)),
+    Field("replacement_waiting_hours", "Hours since it last moved", "Replacement", "number",
+          lambda s, c: s.get("waiting_hours"), unit="hours", triggers=("replacement",)),
+
+    Field("person", "Who", "Person", "choice", lambda s, c: s.get("user_id"), options="users", triggers=("person", "issue")),
+    Field("person_plays", "Plays, all time", "Person", "number", lambda s, c: s.get("plays"), triggers=("person",)),
+    Field("person_days_since_play", "Days since they watched anything", "Person", "number",
+          lambda s, c: s.get("days_since_play"), unit="days", triggers=("person",)),
+    Field("person_quiet", "Not watching any more", "Person", "bool", lambda s, c: s.get("quiet"), triggers=("person",),
+          hint="Nothing in 90 days, or nothing ever."),
+    Field("person_unreviewed_device", "Has a device nobody has reviewed", "Person", "bool",
+          lambda s, c: s.get("device_unreviewed"), triggers=("person",)),
+    Field("person_deleted", "Removed from Plex", "Person", "bool", lambda s, c: s.get("deleted_in_tautulli"),
+          triggers=("person",)),
 ]
 
 BY_KEY = {f.key: f for f in FIELDS}
@@ -528,6 +597,43 @@ def catalogue() -> list[dict[str, Any]]:
             "options": f.options,
             "fixed": [{"value": v, "label": label} for v, label in f.fixed],
             "unit": f.unit,
+            "triggers": list(f.triggers),
         }
         for f in FIELDS
     ]
+
+
+# What can set a rule off, and what each one is about. The order is the order
+# the builder offers them in.
+TRIGGERS: list[dict[str, str]] = [
+    {
+        "key": "stream",
+        "label": "A stream is playing",
+        "blurb": "Checked against live activity every few seconds, the way rules have always worked.",
+    },
+    {
+        "key": "file",
+        "label": "A file behaves badly",
+        "blurb": "Stalls, transcodes, bitrate and what is wrong with the file itself, over the last 30 days. Checked every 10 minutes.",
+    },
+    {
+        "key": "issue",
+        "label": "Somebody reports a problem",
+        "blurb": "A report raised here or in Seerr, with what this app knows about the file it is about.",
+    },
+    {
+        "key": "replacement",
+        "label": "A replacement finishes or stalls",
+        "blurb": "Imported, failed, denied, or sat waiting for your confirmation.",
+    },
+    {
+        "key": "person",
+        "label": "A person goes quiet or turns up",
+        "blurb": "Nobody watching for months, an unreviewed device, an account removed from Plex.",
+    },
+]
+TRIGGER_KEYS = tuple(t["key"] for t in TRIGGERS)
+
+
+def fields_for(trigger: str) -> list["Field"]:
+    return [f for f in FIELDS if trigger in f.triggers]
