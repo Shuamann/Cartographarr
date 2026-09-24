@@ -521,7 +521,9 @@ function MapCanvas({
     };
   }, []);
 
-  // Restyle on theme change.
+  // Restyle on theme change, and on a change of accent: the basemap is built
+  // from the same tokens as everything else, and the accent lands on the root
+  // as inline custom properties.
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (!map.current) return;
@@ -531,7 +533,7 @@ function MapCanvas({
     });
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme"],
+      attributeFilter: ["data-theme", "style"],
     });
     return () => observer.disconnect();
   }, []);

@@ -3234,57 +3234,247 @@ label.locked .pill {
 
 /* ---- home ----------------------------------------------------------------- */
 
-.home-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  margin: 16px 0 24px;
+/* The menu, the two numbers, and the links, all set against the globe.
+   Nothing here has a colour of its own: the accent is the type, the keylines
+   and the numbers, so choosing one in Settings changes the whole screen and
+   not just whatever is under the pointer. */
+
+.home-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 32px;
+  min-height: calc(100vh - 190px);
+  /* It is as tall as the screen so the two columns sit top and bottom, which
+     would otherwise put a sheet of nothing over the globe's own controls. */
+  pointer-events: none;
 }
 
-.home-card {
+.home-menu,
+.home-side {
+  pointer-events: auto;
+}
+
+.home-menu {
+  position: relative;
+  max-width: 440px;
+  padding-top: 8px;
+}
+
+/* A wash of the page colour under the menu. The globe is meant to be behind
+   the words, not through them, and a coastline running under a line of small
+   type is the one thing that made this unreadable. */
+.home-menu::before {
+  position: absolute;
+  z-index: -1;
+  background: linear-gradient(90deg, var(--bg) 40%, transparent 100%);
+  content: "";
+  inset: -24px -120px -24px -40px;
+  opacity: 0.8;
+}
+
+.home-eyebrow {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.home-eyebrow span {
+  padding-left: 12px;
+  border-left: 1px solid var(--accent-line);
+  color: var(--ink-2);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.home-nav {
+  display: grid;
+  gap: 2px;
+}
+
+/* A line of the menu: a keyline on the left that fills in with the accent,
+   rather than a box that appears from nowhere on hover. */
+.home-nav-item {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 10px 46px 10px 16px;
+  border: 0;
+  border-left: 2px solid var(--border);
+  background: transparent;
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
-.home-card:hover,
-.home-card.accent {
-  border-color: var(--accent);
+.home-nav-item:hover,
+.home-nav-item:focus-visible {
+  border-left-color: var(--accent);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 78%);
 }
 
-.home-card .small-big {
-  font-size: 1.3rem;
+.home-nav-label {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-nav-item:hover .home-nav-label,
+.home-nav-item:focus-visible .home-nav-label {
+  color: var(--accent);
+}
+
+.home-nav-note {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+}
+
+.home-nav-count {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.home-side {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-self: stretch;
+  align-items: flex-end;
+  gap: 18px;
+  margin-left: auto;
+  padding-top: 8px;
+}
+
+/* The links sit at the foot of the page, level with the globe's own controls
+   on the other side, rather than crowding the numbers at the top. */
+.home-launch {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-bottom: 8px;
+}
+
+.home-readout {
+  display: flex;
+  gap: 32px;
+}
+
+.home-stat {
+  display: grid;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: right;
+  cursor: pointer;
+}
+
+.home-stat-value {
+  color: var(--accent);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.home-stat:hover .home-stat-value {
+  color: var(--accent-hover);
+}
+
+.home-stat-label {
+  color: var(--ink-2);
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .home-links {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-  margin: 8px 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 460px;
 }
 
 .home-link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 9px 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink);
-  text-decoration: none;
+  font-size: 0.85rem;
   font-weight: 600;
+  text-decoration: none;
 }
 
 .home-link:hover {
   border-color: var(--accent);
+  color: var(--accent);
+}
+
+.home-hint {
+  max-width: 340px;
+  text-align: right;
+}
+
+/* Narrow enough that the globe is behind everything: the menu goes first and
+   the numbers follow it, rather than two columns squeezed to nothing. */
+@media (max-width: 860px) {
+  /* Room at the foot for the globe's own controls, which float over the page
+     rather than sitting in the flow with everything else. */
+  .home {
+    padding-bottom: 64px;
+  }
+
+  .home-stage {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* The wash bleeds well past the menu on a wide page. On a narrow one that
+     bleed is the page getting wider than the phone. */
+  .home-menu::before {
+    inset: -16px -12px;
+  }
+
+  .home-side,
+  .home-launch {
+    align-items: flex-start;
+    margin-top: 16px;
+    margin-left: 0;
+  }
+
+  .home-stat,
+  .home-hint,
+  .home-links {
+    justify-content: flex-start;
+    text-align: left;
+  }
 }
 
 .home-link-row.off {
@@ -3579,38 +3769,55 @@ label.locked .pill {
   pointer-events: none;
 }
 
+/* Off the left edge and close enough to be cropped by it. As tall as the page
+   so the globe is never cut off along the bottom, and dragged left so the edge
+   of the screen takes a third of it. Faded at the rim so it ends rather than
+   stops. */
 .globe-canvas {
   position: absolute;
-  inset: 0;
-  /* Faded where the page has words on it, full strength where it does not, so
-     nothing has to be read over a coastline. */
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 35%) 0%, rgb(0 0 0 / 45%) 38%, rgb(0 0 0 / 95%) 62%, rgb(0 0 0 / 95%) 100%);
+  top: 0;
+  left: 0;
+  width: min(125vh, 1100px);
+  height: 100%;
+  opacity: 0.92;
+  mask-image: radial-gradient(circle closest-side at 50% 50%, rgb(0 0 0 / 100%) 90%, rgb(0 0 0 / 55%) 97%, rgb(0 0 0 / 0%) 100%);
+  transform: translateX(-36%);
 }
 
 .globe-layers {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  bottom: 14px;
+  left: 16px;
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: calc(100% - 32px);
   pointer-events: auto;
 }
 
+/* The same idea as the menu, at a whisper: a keyline that fills in rather
+   than a pill that changes colour. */
 .globe-layer {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 99px;
-  background: var(--surface);
-  color: var(--ink-2);
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid var(--border);
+  background: transparent;
+  color: var(--ink-3);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   cursor: pointer;
-  opacity: 0.85;
+}
+
+.globe-layer:hover {
+  color: var(--ink);
 }
 
 .globe-layer.on {
-  border-color: var(--accent);
-  color: var(--ink);
+  border-bottom-color: var(--accent);
+  color: var(--accent);
 }
 
 /* The page sits above the globe, and gives it room: without a height of its
@@ -3618,13 +3825,4 @@ label.locked .pill {
 .home {
   position: relative;
   min-height: calc(100vh - 140px);
-}
-
-.home > h1,
-.home > .home-cards,
-.home > .section-head,
-.home > .home-links,
-.home > p {
-  position: relative;
-  z-index: 1;
 }

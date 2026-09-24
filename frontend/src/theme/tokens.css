@@ -23,6 +23,9 @@
   --accent-hover: #0c5f77;
   --accent-ink: #ffffff;
   --accent-soft: #e0f2f7;
+  /* A keyline in the accent, for edges that should belong to the theme
+     without being the loudest thing on the page. */
+  --accent-line: #9ed3e2;
 
   --ok: #15803d;
   --warn: #b45309;
@@ -101,6 +104,7 @@
   --accent-hover: #67e8f9;
   --accent-ink: #062028;
   --accent-soft: #0e2b33;
+  --accent-line: #17646f;
 
   --ok: #3fb950;
   --warn: #d29922;

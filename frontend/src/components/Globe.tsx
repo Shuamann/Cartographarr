@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import { useApi, type Activity, type MapPoints } from "../lib/api";
-import { buildMapStyle } from "../theme/mapStyle";
+import { buildGlobeStyle } from "../theme/globeStyle";
 
 /* The globe behind the home page.
  *
  * The app is a map of who watches from where, so the first thing it shows is
- * that, turning: the same basemap as the Map tab, painted from the same
- * colour tokens, so it changes with the theme and with the accent. It is the
- * real thing rather than a picture, which means the layers people already know
- * work on it, and it costs one more map rather than a video.
+ * that, turning. Not the Map tab's basemap: no roads, no cities, no labels.
+ * Coastlines and a grid of meridians, drawn from the country outlines already
+ * bundled for picking countries, in the accent, slightly see through, sat off
+ * the left edge so the menu has the right of the page to itself.
+ *
+ * It is still a real map underneath, which means the layers people already
+ * know (places, heat, playing now, countries) work on it.
  *
  * It keeps out of the way: no dragging or zooming, a gentle spin that stops
  * when the tab is hidden or the machine asks for less motion, and nothing at
@@ -37,6 +40,7 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
   const canDraw = useMemo(webgl, []);
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const shapes = useRef<GeoJSON.FeatureCollection | null>(null);
   const [ready, setReady] = useState(false);
   const [layers, setLayers] = useState<Set<Layer>>(() => {
     try {
@@ -69,39 +73,63 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
   // ---- the map itself ------------------------------------------------------
   useEffect(() => {
     if (!canDraw || !container.current || map.current) return;
-    const m = new maplibregl.Map({
-      container: container.current,
-      style: buildMapStyle(),
-      center: [-30, 18],
-      zoom: fitZoom(container.current),
-      interactive: false,
-      attributionControl: { compact: true },
-    });
-    map.current = m;
-    m.on("load", () => {
-      m.setProjection({ type: "globe" });
-      m.setZoom(fitZoom(container.current!));
-      // Country names only: a backdrop listing every state and province is
-      // something to read rather than something to glance at.
-      if (m.getLayer("place-labels")) {
-        m.setFilter("place-labels", ["==", ["get", "class"], "country"]);
-      }
-      setReady(true);
-    });
-    // The page it sits behind changes height as its cards load, and a globe
-    // that was sized for the old height is a marble in the corner.
-    const watcher = new ResizeObserver(() => {
-      m.resize();
-      m.setZoom(fitZoom(container.current!));
-    });
-    watcher.observe(container.current);
+    let cancelled = false;
+    let watcher: ResizeObserver | null = null;
+
+    // The outlines are needed before the style can be built, so the map is
+    // made once they arrive rather than swapped over afterwards.
+    (async () => {
+      const outlines = (await import("../assets/countries.json")).default as unknown as GeoJSON.FeatureCollection;
+      if (cancelled || !container.current || map.current) return;
+      shapes.current = outlines;
+      const m = new maplibregl.Map({
+        container: container.current,
+        style: buildGlobeStyle(outlines),
+        center: [-30, 18],
+        zoom: fitZoom(container.current),
+        interactive: false,
+        // Nothing is fetched from anyone, so there is nobody to credit.
+        attributionControl: false,
+      });
+      map.current = m;
+      m.on("load", () => {
+        m.setProjection({ type: "globe" });
+        m.setZoom(fitZoom(container.current!));
+        setReady(true);
+      });
+      // The page it sits behind changes height as its cards load, and a globe
+      // that was sized for the old height is a marble in the corner.
+      watcher = new ResizeObserver(() => {
+        m.resize();
+        m.setZoom(fitZoom(container.current!));
+      });
+      watcher.observe(container.current);
+    })();
+
     return () => {
-      watcher.disconnect();
-      m.remove();
+      cancelled = true;
+      watcher?.disconnect();
+      map.current?.remove();
       map.current = null;
       setReady(false);
     };
   }, [canDraw]);
+
+  // Light and dark want different weights of line, and the globe is drawn in
+  // the accent, so it is redrawn whenever either changes. The accent arrives
+  // as inline custom properties on the root, which is why style is watched
+  // alongside the theme: picking a colour in Settings repaints it as you go.
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const m = map.current;
+      if (!m || !shapes.current) return;
+      setReady(false);
+      m.setStyle(buildGlobeStyle(shapes.current));
+      m.once("styledata", () => setReady(true));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style"] });
+    return () => observer.disconnect();
+  }, []);
 
   // ---- the spin ------------------------------------------------------------
   useEffect(() => {
@@ -189,9 +217,9 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
         type: "circle",
         source: "globe-live",
         paint: {
-          "circle-color": css("--live", "#f59e0b"),
+          "circle-color": css("--accent-hover", "#67e8f9"),
           "circle-radius": 6,
-          "circle-stroke-color": css("--live", "#f59e0b"),
+          "circle-stroke-color": css("--accent-hover", "#67e8f9"),
           "circle-stroke-opacity": 0.35,
           "circle-stroke-width": 8,
         },
@@ -212,12 +240,12 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
         return;
       }
       if (!m.getSource("globe-countries-source")) {
-        const shapes = (await import("../assets/countries.json")).default as unknown as GeoJSON.FeatureCollection;
+        const outlines = shapes.current ?? ((await import("../assets/countries.json")).default as unknown as GeoJSON.FeatureCollection);
         if (cancelled || !map.current) return;
-        m.addSource("globe-countries-source", { type: "geojson", data: shapes });
+        m.addSource("globe-countries-source", { type: "geojson", data: outlines });
         m.addLayer(
           { id: "globe-countries", type: "fill", source: "globe-countries-source", paint: { "fill-color": "rgba(0,0,0,0)" } },
-          m.getLayer("globe-heat-layer") ? "globe-heat-layer" : undefined,
+          m.getLayer("globe-coast") ? "globe-coast" : undefined,
         );
       }
       if (cancelled) return;
@@ -273,13 +301,14 @@ export default function Globe({ isAdmin }: { isAdmin: boolean }) {
  *
  * MapLibre draws the world 512 pixels across at zoom 0 and doubles it each
  * zoom, and the globe comes out about a third of that width across, so the
- * zoom that makes it most of the shorter side is worked out rather than
- * guessed at three screen sizes. */
+ * zoom that makes it slightly wider than its box is worked out rather than
+ * guessed at three screen sizes. Slightly wider on purpose: the edge running
+ * off the box is what makes it read as close rather than as a marble. */
 function fitZoom(element: HTMLElement): number {
   const shortest = Math.min(element.clientWidth || 900, element.clientHeight || 600);
-  const wanted = shortest * 0.92;
+  const wanted = shortest * 0.96;
   const zoom = Math.log2((wanted * 3.1) / 512);
-  return Math.max(0, Math.min(2.6, zoom));
+  return Math.max(0, Math.min(3, zoom));
 }
 
 

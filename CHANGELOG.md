@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.24.0 - 2026-09-24
+
+### Changed
+- The home page is a menu against the globe rather than a page of cards. The globe is drawn rather than fetched:
+  coastlines and a grid of meridians in the accent, no labels, no roads, no cities, set off the left edge and close
+  enough to be cropped by it. Where to go is a list beside it, with the two numbers worth knowing (what is playing,
+  what is still open) in the corner
+- The accent chosen in Settings now reaches the whole interface, not only the parts that light up. Borders, raised
+  surfaces, the land on the map, the first chart series and the cool end of the heat ramp are all pulled a little way
+  towards it, so a green install looks green throughout rather than grey with green buttons
+- The map and the globe repaint when the accent changes, instead of waiting for a reload
+
 ## 0.23.0 - 2026-09-23
 
 ### Added
