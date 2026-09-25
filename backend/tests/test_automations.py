@@ -7,7 +7,7 @@ subject, do they stop repeating themselves, and do they stop when told.
 
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from tests.test_auth import claim
 

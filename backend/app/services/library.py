@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import History, MediaItem, StreamEvent, StreamSession, User
@@ -342,7 +342,7 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     seen = observed_trouble(db, days)
     counts: Counter = Counter()
     flagged = []
-    for key, checked_at, audio_tracks, subtitle_tracks, container, media_type, full_title, short in scanned:
+    for key, checked_at, audio_tracks, subtitle_tracks, container, _media_type, full_title, short in scanned:
         issues = issues_cached(key, checked_at, audio_tracks, subtitle_tracks, container)
         happened = seen.get(key) or Counter()
         # Proof beats prediction. A file whose audio was converted for real

@@ -84,7 +84,7 @@ def _recently_acted(rule_id: int, subject_id: str) -> bool:
 async def run_once() -> dict[str, Any]:
     """One sweep of every rule that is not about a live stream."""
     from app.models import Rule
-    from app.services import conditions, enforcer, subjects
+    from app.services import enforcer, subjects
 
     with session_scope() as db:
         rules = [

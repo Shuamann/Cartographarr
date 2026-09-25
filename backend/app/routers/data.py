@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import Select, case, desc, func, select, update
+from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
@@ -20,7 +20,6 @@ from app.models import Device, History, IpLocation, Library, MediaItem, User
 from app.plays import plays, plays_in, plays_when, sessions
 from app.integrations import arr, seerr
 from app.services import capabilities
-from app.services.sync import geocode_ips
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
 

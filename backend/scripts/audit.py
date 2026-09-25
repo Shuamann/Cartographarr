@@ -1,4 +1,4 @@
-"""Check both halves of the app for known vulnerabilities.
+"""Check the app for known vulnerabilities and for the mistakes a reader misses.
 
 Run before a release, or whenever a dependency moves:
 
@@ -7,6 +7,11 @@ Run before a release, or whenever a dependency moves:
 It asks pip-audit about the Python packages and npm about the JavaScript ones,
 and exits non-zero if either finds something, so it can be wired into anything
 that cares. Both need the internet; neither sends anything about this server.
+
+It also runs ruff over the backend for the rules that catch bugs rather than
+opinions: undefined names, unused imports, shadowed names, mutable defaults.
+That is here because a name used but never imported sat inside a try/except
+for weeks, quietly costing every stall its cause until the next sync.
 """
 
 from __future__ import annotations
@@ -35,6 +40,11 @@ def main() -> int:
     failures = 0
     failures += run("Python packages", [sys.executable, "-m", "pip_audit", "--progress-spinner", "off"], ROOT / "backend")
     failures += run("JavaScript packages", ["npm", "audit", "--omit=dev"], ROOT / "frontend")
+    failures += run(
+        "Python mistakes",
+        [sys.executable, "-m", "ruff", "check", ".", "--select", "F,B", "--quiet"],
+        ROOT / "backend",
+    )
     if failures:
         print("\nSomething needs attention above.")
     else:

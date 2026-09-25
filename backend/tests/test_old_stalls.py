@@ -1,6 +1,6 @@
 """Stalls recorded before skipping was told apart from buffering."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from tests.test_auth import claim
 

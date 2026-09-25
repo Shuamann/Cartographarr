@@ -1,6 +1,6 @@
 [project]
 name = "cartographarr"
-version = "0.32.3"
+version = "0.32.4"
 description = "Tautulli geo-intelligence and Plex access control"
 requires-python = ">=3.12"
 
@@ -35,6 +35,13 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI declares dependencies, queries and bodies as default arguments. That
+# is the framework's own shape, not a mistake to be rewritten.
+"app/routers/*.py" = ["B008"]
+"app/auth/*.py" = ["B008"]
+"app/privacy.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

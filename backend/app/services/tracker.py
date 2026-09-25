@@ -219,7 +219,7 @@ def _record(track: Track, started: float, ended: float, seconds: float) -> None:
         db.add(event)
         db.flush()
         try:
-            from app.services import stalls
+            from app.services import stalls, streams
             from app.settings_store import current
 
             settings = current()

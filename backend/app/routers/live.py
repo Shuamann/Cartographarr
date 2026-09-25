@@ -247,7 +247,6 @@ EDITABLE = {c.name for c in Rule.__table__.columns} - {"id", "created_at"}
 def _rule_dict(rule: Rule) -> dict:
     """A rule as the UI edits it: always a condition tree and an action list,
     whether it was saved that way or with the older flat columns."""
-    import json
 
     out = {c.name: getattr(rule, c.name) for c in Rule.__table__.columns}
     out["conditions"] = enforcer.rule_tree(rule)
@@ -885,7 +884,10 @@ def banned_on_map(db: Db, scope: ViewerScope) -> dict:
         return {"type": "FeatureCollection", "features": []}
 
     features = []
-    for mid, lat, lon, city, plays, last in db.execute(
+    # Named `seen` rather than `plays`, which is the imported helper: the loop
+    # variable shadowed it, and a later edit reaching for plays() here would
+    # have got an integer.
+    for mid, lat, lon, city, seen, last in db.execute(
         select(
             History.machine_id,
             IpLocation.lat,
@@ -907,7 +909,7 @@ def banned_on_map(db: Db, scope: ViewerScope) -> dict:
                     "machine_id": mid,
                     "label": bans[mid].label,
                     "city": city,
-                    "count": plays,
+                    "count": seen,
                     "last": last,
                 },
             }

@@ -8,7 +8,6 @@ and cannot be taken back.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Body, HTTPException
 

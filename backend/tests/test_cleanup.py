@@ -85,7 +85,7 @@ def seed_attention():
     from datetime import timedelta
 
     from app.db import session_scope
-    from app.models import History, MediaItem, StreamEvent
+    from app.models import History, StreamEvent
 
     with session_scope() as db:
         db.add(item(10, "Stalls for people", 12, file_bitrate=30000, file_checked_at=datetime.now(UTC),

@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.32.4 - 2026-09-25
+
+### Fixed
+- Stalls recorded live were never given a cause at the moment they were recorded. The code that works one out used a
+  name it had not imported, inside a try that quietly logged the failure, so every stall waited for the next sync to
+  be explained. Found by running the linter, which is now part of the audit script so the next one of these is caught
+  the same way
+
 ## 0.32.3 - 2026-09-25
 
 ### Fixed
