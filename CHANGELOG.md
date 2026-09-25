@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.29.0 - 2026-09-25
+
+### Added
+- Settings can now work out the problem bitrate from your own streams instead of leaving you with a round number.
+  Every remote stream is already recorded with the file's bitrate and whether it stalled, so it offers the bitrate
+  nine in ten clean remote streams stayed under, and says what that is made of. It fills the field and leaves saving
+  to you, because a stall can be a bad evening on somebody else's line as easily as a file that is too big
+- Nothing is offered when there is too little remote watching to say, or when the files that stalled are no bigger
+  than the ones that played cleanly, which is itself worth knowing
+
 ## 0.28.0 - 2026-09-24
 
 ### Added

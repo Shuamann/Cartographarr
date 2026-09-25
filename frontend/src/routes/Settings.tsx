@@ -634,6 +634,11 @@ function SettingsForm() {
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Syncing" && <SyncNow />}
+            {section.title === "Library and access review" && (
+              <BitrateAdvice
+                onUse={(mbps) => setDraft({ ...draft, library_bitrate_threshold_mbps: mbps })}
+              />
+            )}
             {section.title === "Server upload" && <UploadSource />}
           </section>
         ))}
@@ -941,6 +946,48 @@ function UploadSource() {
       {plex}
       {limit} {using}
     </p>
+  );
+}
+
+/* What this server's remote viewers actually manage.
+ *
+ * The problem bitrate out of the box is a round number that knows nothing
+ * about this house. Every remote stream is recorded with the file's bitrate
+ * and whether it stalled, so the answer is already here: it is offered rather
+ * than applied, because a stall can be a bad evening on somebody else's line
+ * as easily as a file that is too big.
+ */
+type Advice = {
+  days: number;
+  clean_streams: number;
+  stalled_streams: number;
+  clean_typical: number | null;
+  clean_high: number | null;
+  stalled_typical: number | null;
+  stalled_high: number | null;
+  suggestion: number | null;
+  why: string | null;
+};
+
+function BitrateAdvice({ onUse }: { onUse: (mbps: number) => void }) {
+  const advice = useApi<Advice>("/library/bitrate-advice");
+  if (advice.error || !advice.data) return null;
+  const a = advice.data;
+  if (!a.why) return null;
+  return (
+    <div className="row sync-now">
+      {a.suggestion != null && (
+        <button type="button" className="btn" onClick={() => onUse(a.suggestion as number)}>
+          Use {a.suggestion} Mbps
+        </button>
+      )}
+      <span className="muted small">
+        {a.why}
+        {a.clean_streams > 0
+          ? ` Read from ${a.clean_streams + a.stalled_streams} remote streams over ${a.days} days.`
+          : ""}
+      </span>
+    </div>
   );
 }
 

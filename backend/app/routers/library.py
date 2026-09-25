@@ -280,6 +280,16 @@ async def stores_trend(_: AdminUser, weeks: int = Query(12, ge=2, le=52)) -> dic
     return await asyncio.to_thread(store_service.trend, weeks)
 
 
+@router.get("/bitrate-advice")
+async def bitrate_advice(_: AdminUser, days: int = Query(90, ge=7, le=3650)) -> dict:
+    """What the problem bitrate threshold could be, read from remote streams."""
+    import asyncio
+
+    from app.services import streams
+
+    return await asyncio.to_thread(streams.bitrate_advice, days)
+
+
 @router.get("/stores/trouble")
 async def store_trouble(
     _: AdminUser, store: str = Query(..., min_length=1), days: int = Query(30, ge=1, le=3650)

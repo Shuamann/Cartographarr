@@ -351,3 +351,92 @@ def prune(keep_days: int = 400) -> int:
     with session_scope() as db:
         result = db.execute(delete(BandwidthSample).where(BandwidthSample.minute < cutoff))
         return result.rowcount or 0
+
+
+# ---- what a remote viewer can actually take ---------------------------------
+
+WINDOW_DAYS = 90
+"""How far back to look for an answer. A season of watching, so a month of one
+household's bad line does not decide it."""
+
+ENOUGH_CLEAN = 25
+ENOUGH_STALLED = 5
+"""Below this there is no answer worth giving, only a guess dressed up as one."""
+
+
+def _percentile(values: list[int], share: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(len(ordered) * share))]
+
+
+def bitrate_advice(days: int = WINDOW_DAYS) -> dict[str, Any]:
+    """Where remote watching starts going wrong on this server.
+
+    The threshold in Settings decides which files Library calls a problem for
+    remote viewers, and out of the box it is a round number rather than
+    anything about this house. Every remote stream is already recorded with
+    the file's bitrate and whether it stalled, so the answer is in there: the
+    bitrate most remote streams manage, against the bitrate the ones that
+    stalled were at.
+
+    It is deliberately not automatic. A stall can be a bad evening on somebody
+    else's line as easily as a file that is too big, so this offers a number
+    and says what it is made of.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import StreamSession
+
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
+    with session_scope() as db:
+        rows = db.execute(
+            select(StreamSession.file_bitrate, StreamSession.buffer_count)
+            .where(StreamSession.started_at >= cutoff, StreamSession.location == "wan",
+                   StreamSession.file_bitrate.is_not(None))
+        ).all()
+
+    clean = [int(bitrate) for bitrate, buffers in rows if not buffers]
+    stalled = [int(bitrate) for bitrate, buffers in rows if buffers]
+    mbps = lambda kbps: round(kbps / 1000, 1) if kbps else None  # noqa: E731
+
+    answer: dict[str, Any] = {
+        "days": days,
+        "clean_streams": len(clean),
+        "stalled_streams": len(stalled),
+        "clean_typical": mbps(_percentile(clean, 0.5)),
+        "clean_high": mbps(_percentile(clean, 0.9)),
+        "stalled_typical": mbps(_percentile(stalled, 0.5)),
+        "stalled_high": mbps(_percentile(stalled, 0.75)),
+        "suggestion": None,
+        "why": None,
+    }
+    if len(clean) < ENOUGH_CLEAN or len(stalled) < ENOUGH_STALLED:
+        answer["why"] = (
+            f"Not enough remote watching yet to say: {len(clean)} streams that played cleanly and "
+            f"{len(stalled)} that stalled, in {days} days."
+        )
+        return answer
+
+    clean_high = answer["clean_high"]
+    stalled_high = answer["stalled_high"]
+    if clean_high is None or stalled_high is None or stalled_high <= clean_high:
+        answer["why"] = (
+            "The files that stalled are no bigger than the ones that played cleanly, so the bitrate is not what "
+            "is going wrong out there. Look at Why beside the store, or at the viewers themselves."
+        )
+        return answer
+
+    # Rounded to the nearest half, because a threshold of 8.4 implies a
+    # precision that watching 200 streams does not give you.
+    answer["suggestion"] = round(clean_high * 2) / 2
+    answer["why"] = (
+        f"Nine in ten remote streams that played cleanly were {clean_high} Mbps or under, while the ones that "
+        f"stalled ran up to {stalled_high} Mbps. Flagging files above {answer['suggestion']} Mbps catches the "
+        "band your remote viewers struggle with."
+    )
+    return answer
