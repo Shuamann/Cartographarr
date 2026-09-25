@@ -75,3 +75,47 @@ def test_a_slow_plex_is_an_error_not_a_hang(client, monkeypatch):
     monkeypatch.setattr(asyncio, "wait_for", never)
     res = client.get("/api/sharing?fresh=true")
     assert res.status_code == 504 and "45 seconds" in res.json()["detail"]
+
+
+# ---- routes that keep coming back --------------------------------------------
+
+_rows = iter(range(1000, 9999))
+
+
+def _flag(db, user_id, a, b, when, kind="travel"):
+    from app.models import TravelFlag
+
+    row = TravelFlag(user_id=user_id, kind=kind, from_city=a, to_city=b, from_ip="1.1.1.1", to_ip="2.2.2.2",
+                     from_history_id=next(_rows), to_history_id=next(_rows),
+                     from_started=when, to_started=when + 600, km=700, hours=0.2, kmh=3500,
+                     hosting_involved=False, status="new")
+    db.add(row)
+    db.flush()
+    return row.id
+
+
+def test_a_route_that_keeps_repeating_is_counted(client):
+    """A phone on a mobile network lands in a different city every evening.
+    Flagging that twenty times is not twenty pieces of evidence."""
+    from datetime import UTC, datetime
+
+    from app.db import session_scope
+
+    claim(client)
+    now = int(datetime.now(UTC).timestamp())
+    with session_scope() as db:
+        for n in range(4):
+            _flag(db, 7, "Topeka", "Chicago", now - n * 86400)
+        # The same route the other way round is the same route.
+        _flag(db, 7, "Chicago", "Topeka", now - 5 * 86400)
+        # A different account's identical route is counted separately.
+        _flag(db, 8, "Topeka", "Chicago", now - 86400)
+        # And a one off stays a one off.
+        _flag(db, 7, "Topeka", "Berlin", now - 7 * 86400)
+
+    rows = client.get("/api/travel-flags").json()
+    by_route = {(r["user_id"], r["from_city"], r["to_city"]): r["times_seen"] for r in rows}
+    assert by_route[(7, "Topeka", "Chicago")] == 5
+    assert by_route[(7, "Chicago", "Topeka")] == 5
+    assert by_route[(8, "Topeka", "Chicago")] == 1
+    assert by_route[(7, "Topeka", "Berlin")] == 1

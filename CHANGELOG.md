@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.31.0 - 2026-09-25
+
+### Added
+- Shared account signals now say how often the same account has been flagged between the same two places. A route
+  that keeps coming back is nearly always how that connection is carried, a phone on a mobile network or a VPN with
+  a favourite exit, rather than two people. Nothing is hidden: the count is shown so the ones worth reading stand
+  out, and the pattern can be ignored from the signal itself as before
+
 ## 0.30.0 - 2026-09-25
 
 ### Added

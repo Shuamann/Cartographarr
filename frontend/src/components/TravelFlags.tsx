@@ -130,6 +130,19 @@ export default function TravelFlags({
                     VPN
                   </span>
                 )}
+                {(f.times_seen ?? 1) >= 3 && (
+                  <span
+                    className="pill"
+                    title={
+                      "This account has been flagged between these two places " +
+                      `${f.times_seen} times. A route that keeps coming back is usually how their connection is ` +
+                      "carried, a phone on a mobile network or a VPN with a favourite exit, rather than two people. " +
+                      "Open it and ignore the pattern if that is what it is."
+                    }
+                  >
+                    seen {f.times_seen}&times;
+                  </span>
+                )}
                 {f.status !== "new" && <span className="pill">{f.status}</span>}
               </span>
               <span className="log-caret" aria-hidden="true">

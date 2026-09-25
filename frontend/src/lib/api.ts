@@ -603,6 +603,9 @@ export type TravelFlag = {
   kmh: number | null;
   hosting_involved: boolean;
   status: "new" | "reviewed" | "ignored";
+  /** How often this account has been flagged between these two places. A
+   *  route that keeps repeating is usually a carrier or a VPN, not sharing. */
+  times_seen?: number;
 };
 
 export type IntegrationStatus = {

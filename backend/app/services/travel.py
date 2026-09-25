@@ -59,6 +59,40 @@ def pair(a: str, b: str) -> tuple[str, str]:
     return (a, b) if a <= b else (b, a)
 
 
+def where_of(flag) -> tuple[str, str]:
+    """The two ends of a flag, as something that can be counted.
+
+    The stored keys are filled in the first time a signal is opened, so older
+    flags fall back to the city and then to the address. Order free, because
+    Topeka to Chicago and Chicago to Topeka are the same route.
+    """
+    ends = (
+        (flag.from_key or flag.from_city or flag.from_ip or "?"),
+        (flag.to_key or flag.to_city or flag.to_ip or "?"),
+    )
+    return pair(*ends)
+
+
+def times_seen(db, user_ids: list[int]) -> dict[tuple[int, str, str], int]:
+    """How often each account has been flagged between the same two places.
+
+    A pair that keeps coming back is nearly always how that connection routes:
+    a phone on a carrier network that lands in a different city each evening,
+    or a VPN with a favourite exit. Genuine sharing does not repeat the same
+    two cities twenty times. Shown rather than hidden, because it is the
+    person looking who knows which of their friends travels.
+    """
+    from app.models import TravelFlag
+
+    if not user_ids:
+        return {}
+    counts: dict[tuple[int, str, str], int] = {}
+    for flag in db.execute(select(TravelFlag).where(TravelFlag.user_id.in_(user_ids))).scalars():
+        a, b = where_of(flag)
+        counts[(flag.user_id, a, b)] = counts.get((flag.user_id, a, b), 0) + 1
+    return counts
+
+
 def ignore_patterns() -> dict[tuple[int, str, str], int]:
     with session_scope() as db:
         return {

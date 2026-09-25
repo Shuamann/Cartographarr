@@ -1189,13 +1189,21 @@ def travel_flags(db: Db, scope: ViewerScope, status: str | None = None, limit: i
     if scope is not None:
         stmt = stmt.where(TravelFlag.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
     stmt = stmt.order_by(desc(TravelFlag.to_started)).limit(limit)
+    found = db.execute(stmt).all()
+
+    # How often this account has been flagged between the same two places
+    # before. A route that keeps repeating is usually a carrier or a VPN.
+    from app.services import travel
+
+    seen = travel.times_seen(db, sorted({flag.user_id for flag, _ in found if flag.user_id is not None}))
 
     return [
         {
             **{c.name: getattr(flag, c.name) for c in TravelFlag.__table__.columns},
             "user_name": name or str(flag.user_id),
+            "times_seen": seen.get((flag.user_id, *travel.where_of(flag)), 1),
         }
-        for flag, name in db.execute(stmt).all()
+        for flag, name in found
     ]
 
 
