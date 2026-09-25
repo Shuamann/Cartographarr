@@ -196,27 +196,36 @@ LENSES = {
 def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> dict[str, Any]:
     from app.db import session_scope
     from app.services import library
+    from app.services.stores import labels
 
     kept = _kept()
+    # Read once for the whole page. Worked out per row it was a database round
+    # trip per file, four hundred of them, for an answer that cannot change
+    # while the page is being built.
+    named = labels()
+    # Enough to still fill the page once the kept files are dropped, rather
+    # than twice as many described for the sake of it.
+    wanted = limit + len(kept)
     with session_scope() as db:
         if kind == "messy":
-            found = library.messy_files(db, days, limit=limit * 2)
-            rows = [_row(f, "messy", _messy_why(f), threshold_kbps) for f in found["files"]]
+            found = library.messy_files(db, days, limit=wanted)
+            rows = [_row(f, "messy", _messy_why(f), threshold_kbps, named) for f in found["files"]]
             extra = {"checked": found["checked"], "counts": found["counts"]}
         elif kind == "room":
-            found = candidates(days=days, limit=limit * 2)
-            rows = [_row(f, "room", f.get("why"), threshold_kbps) for f in found["items"]]
+            found = candidates(days=days, limit=wanted)
+            rows = [_row(f, "room", f.get("why"), threshold_kbps, named) for f in found["items"]]
             extra = {"reclaimable": found["reclaimable"], "found": found["found"]}
         else:
-            found = library.problem_files(db, threshold_kbps, days, limit=limit * 2)
-            rows = [_row(f, "trouble", _trouble_why(f), threshold_kbps) for f in found]
+            found = library.problem_files(db, threshold_kbps, days, limit=wanted)
+            rows = [_row(f, "trouble", _trouble_why(f), threshold_kbps, named) for f in found]
             extra = {}
 
     rows = [row for row in rows if row["rating_key"] not in kept]
     return {"kind": kind, "items": rows[:limit], "total": len(rows), "kept": len(kept), "days": days, **extra}
 
 
-def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int) -> dict[str, Any]:
+def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int,
+         named: dict[str, str] | None = None) -> dict[str, Any]:
     """Every row the same shape, whichever question found it.
 
     Including the findings: a file listed for taking up room still gets the
@@ -235,7 +244,7 @@ def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int) 
         "kind": kind,
         "why": why,
         "findings": findings,
-        "store": file.get("store") or name_for(file.get("file_path")),
+        "store": file.get("store") or name_for(file.get("file_path"), named),
     }
 
 

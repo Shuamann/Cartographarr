@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.32.1 - 2026-09-25
+
+### Changed
+- Awkward to play opens in about a fifth of the time on a large library. It was reading the track lists of every file
+  in the library on every visit, and describing twelve thousand files in order to show two hundred. It now reads the
+  few columns it needs, remembers what it worked out against the moment each file was last scanned, and fills in the
+  detail only for the rows on screen
+
 ## 0.32.0 - 2026-09-25
 
 ### Changed

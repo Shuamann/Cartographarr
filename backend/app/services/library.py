@@ -49,9 +49,18 @@ def _tracks(value: str | None) -> list[dict[str, Any]]:
 
 def file_issues(item: MediaItem) -> list[str]:
     """What is awkward about a file, independent of who watches it."""
+    return issues_of(item.audio_tracks, item.subtitle_tracks, item.file_container)
+
+
+def issues_of(audio_tracks: str | None, subtitle_tracks: str | None, container: str | None) -> list[str]:
+    """The same question asked of the three columns it actually needs.
+
+    Whole library sweeps read these columns rather than loading every file, so
+    the work is here and `file_issues` is the convenience on top.
+    """
     issues: list[str] = []
-    audio = _tracks(item.audio_tracks)
-    subs = _tracks(item.subtitle_tracks)
+    audio = _tracks(audio_tracks)
+    subs = _tracks(subtitle_tracks)
     codecs = {str(a.get("codec") or "").lower() for a in audio}
     if audio and not codecs & COMPATIBLE_AUDIO:
         issues.append("no_compatible_audio")
@@ -68,9 +77,28 @@ def file_issues(item: MediaItem) -> list[str]:
     # language changes nothing for anyone.
     if len(audio) > 1 and any(not a.get("language") or str(a.get("language")).lower() in ("und", "unknown", "") for a in audio):
         issues.append("untagged_audio")
-    if str(item.file_container or "").lower() in LEGACY_CONTAINERS:
+    if str(container or "").lower() in LEGACY_CONTAINERS:
         issues.append("legacy_container")
     return issues
+
+
+_ISSUES_CACHE: dict[int, tuple[Any, tuple[str, ...]]] = {}
+"""Worked out issues, kept against the moment the file was last read.
+
+Reading thirty thousand track lists took most of a second every time the page
+was opened, for an answer that only changes when the file is read again. The
+scan stamps `file_checked_at`, so that is the key: a rescanned file recomputes
+itself and nothing else has to be invalidated.
+"""
+
+
+def issues_cached(rating_key: int, checked_at: Any, audio: str | None, subs: str | None, container: str | None) -> list[str]:
+    hit = _ISSUES_CACHE.get(rating_key)
+    if hit is not None and hit[0] == checked_at:
+        return list(hit[1])
+    found = issues_of(audio, subs, container)
+    _ISSUES_CACHE[rating_key] = (checked_at, tuple(found))
+    return found
 
 
 def _title(item: MediaItem) -> str:
@@ -295,15 +323,20 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     """Files with a known awkwardness, most watched first."""
     from app.services.library_scan import in_library
 
-    items = db.execute(
-        select(MediaItem).where(MediaItem.file_checked_at.is_not(None), MediaItem.file_bitrate.is_not(None), in_library())
-    ).scalars().all()
+    # Columns, not whole rows: everything below needs four fields per file,
+    # and the files worth describing in full are the handful that are shown.
+    scanned = db.execute(
+        select(MediaItem.rating_key, MediaItem.file_checked_at, MediaItem.audio_tracks,
+               MediaItem.subtitle_tracks, MediaItem.file_container, MediaItem.media_type,
+               MediaItem.full_title, MediaItem.title)
+        .where(MediaItem.file_checked_at.is_not(None), MediaItem.file_bitrate.is_not(None), in_library())
+    ).all()
     seen = observed_trouble(db, days)
     counts: Counter = Counter()
     flagged = []
-    for item in items:
-        issues = file_issues(item)
-        happened = seen.get(item.rating_key) or Counter()
+    for key, checked_at, audio_tracks, subtitle_tracks, container, media_type, full_title, short in scanned:
+        issues = issues_cached(key, checked_at, audio_tracks, subtitle_tracks, container)
+        happened = seen.get(key) or Counter()
         # Proof beats prediction. A file whose audio was converted for real
         # viewers belongs here even when its track list looks unremarkable,
         # and it is not listed twice when the track list already said so.
@@ -314,13 +347,24 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
         for i in issues:
             counts[i] += 1
         if issues and (issue is None or issue in issues):
-            flagged.append((item, issues))
-    plays = play_stats(db, days, [i.rating_key for i, _ in flagged]) if flagged else {}
+            flagged.append((key, full_title or short or f"Item {key}", issues))
+    plays = play_stats(db, days, [key for key, _, _ in flagged]) if flagged else {}
     from app.services.findings import explain
 
+    # Sorted on what is cheap to know, then described.
+    flagged.sort(key=lambda row: (-int((plays.get(row[0]) or {}).get("plays") or 0), row[1]))
+    shown = flagged[:limit]
+    items = {
+        m.rating_key: m
+        for m in db.execute(select(MediaItem).where(MediaItem.rating_key.in_([key for key, _, _ in shown]))).scalars()
+    }
+
     rows = []
-    for item, issues in flagged:
-        stats = plays.get(item.rating_key, {})
+    for key, _name, issues in shown:
+        item = items.get(key)
+        if item is None:
+            continue
+        stats = plays.get(key, {})
         row = {
             **describe_file(item),
             "plays": int(stats.get("plays") or 0),
@@ -328,17 +372,16 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
             "transcodes": int(stats.get("transcodes") or 0),
         }
         row["issues"] = issues
-        happened = seen.get(item.rating_key) or Counter()
+        happened = seen.get(key) or Counter()
         causes = [{"cause": c, "streams": n} for c, n in happened.most_common()]
         row["findings"] = explain(row, 10**9, causes or None, None,
                                   "Sonarr" if item.media_type == "episode" else "Radarr")
         rows.append(row)
-    rows.sort(key=lambda r: (-r["plays"], r["title"]))
     return {
-        "checked": len(items),
+        "checked": len(scanned),
         "counts": [{"issue": k, "label": ISSUES[k], "files": counts.get(k, 0)} for k in ISSUES],
-        "files": rows[:limit],
-        "total": len(rows),
+        "files": rows,
+        "total": len(flagged),
     }
 
 

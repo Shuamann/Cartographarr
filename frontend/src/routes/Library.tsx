@@ -1637,7 +1637,9 @@ const LENSES: { id: Lens; label: string; blurb: string }[] = [
   {
     id: "messy",
     label: "Awkward to play",
-    blurb: "Audio no common device can play, subtitles only as pictures, a container from another decade.",
+    blurb:
+      "Audio no common device can play, subtitles only as pictures, a container from another decade, or anything "
+      + "that had to be converted for the people who actually watched it.",
   },
   {
     id: "room",
