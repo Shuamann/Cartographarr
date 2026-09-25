@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.27.0 - 2026-09-24
+
+### Added
+- Storage now shows each store week by week, so a mount going downhill can be told from one bad evening. It counts
+  the share of plays that stalled at all rather than the number of stalls, because one stream that rebuffers forty
+  times is one stream that went badly, and it says which way each store is heading once there are enough weeks to say
+- Weeks from before this app started watching live streams are drawn as a gap rather than as weeks where nothing went
+  wrong, and the week in progress is marked as not over yet
+
 ## 0.26.0 - 2026-09-24
 
 ### Added

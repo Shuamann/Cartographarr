@@ -92,3 +92,73 @@ def test_viewers_cannot_see_storage(client):
     as_viewer(client, "all")
     assert client.get("/api/library/stores").status_code == 403
     assert client.put("/api/library/stores/movies", json={"label": "x"}).status_code == 403
+
+
+def seed_weeks():
+    """Two weeks of watching from one mount: a quiet one, then a bad one where
+    a single stream rebuffered all evening."""
+    from app.db import session_scope
+    from app.models import History, MediaItem, StreamEvent
+
+    now = datetime.now(UTC)
+    last_week = now - timedelta(days=7)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, title="Film", media_type="movie",
+                         file_path="/movies/Film (2020)/film.mkv", file_size=1, file_bitrate=9000))
+        row = 0
+        for when in (last_week, now):
+            for _ in range(12):
+                row += 1
+                db.add(History(row_id=row, reference_id=row, rating_key=1, user_id=7,
+                               started=int(when.timestamp()) - row * 60, media_type="movie"))
+        # Last week: one stream that stalled once. This week: one stream that
+        # stalled six times, which is still one stream that went badly.
+        db.add(StreamEvent(kind="buffering", user_id=7, rating_key=1, session_key="a", seconds=9,
+                           started_at=last_week.replace(tzinfo=None), ended_at=last_week.replace(tzinfo=None)))
+        for _ in range(6):
+            db.add(StreamEvent(kind="buffering", user_id=7, rating_key=1, session_key="b", seconds=9,
+                               started_at=now.replace(tzinfo=None) - timedelta(minutes=30),
+                               ended_at=now.replace(tzinfo=None) - timedelta(minutes=30)))
+
+
+def test_a_store_is_judged_by_the_streams_that_went_badly_not_the_stalls(client):
+    claim(client)
+    seed_weeks()
+    answer = client.get("/api/library/stores/trend?weeks=8").json()
+    store = next(s for s in answer["stores"] if s["store"] == "/movies")
+    counted = [p for p in store["points"] if p["stalled_percent"] is not None]
+    assert len(counted) == 2, counted
+    # Six rebuffers in one stream is one stream out of twelve plays, not six.
+    assert counted[-1]["stalls"] == 6 and counted[-1]["stalled_streams"] == 1
+    assert counted[-1]["stalled_percent"] == round(1 / 12 * 100, 1)
+    assert counted[-1]["partial"] is True
+    assert counted[0]["stalled_percent"] == round(1 / 12 * 100, 1)
+
+
+def test_weeks_from_before_anything_was_counted_are_a_gap_not_a_good_week(client):
+    claim(client)
+    seed_weeks()
+    answer = client.get("/api/library/stores/trend?weeks=8").json()
+    store = next(s for s in answer["stores"] if s["store"] == "/movies")
+    early = store["points"][0]
+    assert early["stalled_percent"] is None and early["stalls"] is None
+    assert answer["recording_from"] is not None
+
+
+def test_which_way_a_store_is_heading():
+    from app.services.stores import _direction
+
+    assert _direction([1.0, 1.2]) is None  # not enough weeks to say anything
+    assert _direction([1.0, 1.1, 1.0, 1.2]) == "steady"
+    assert _direction([1.0, 1.2, 4.0, 6.0]) == "worse"
+    assert _direction([6.0, 4.0, 1.2, 1.0]) == "better"
+    # A store where almost nothing ever goes wrong is steady, not swinging
+    # wildly between nought and a tenth of a percent.
+    assert _direction([0.0, 0.1, 0.0, 0.3]) == "steady"
+
+
+def test_viewers_cannot_see_the_trend(client):
+    from tests.test_privacy import as_viewer
+
+    as_viewer(client, "all")
+    assert client.get("/api/library/stores/trend").status_code == 403

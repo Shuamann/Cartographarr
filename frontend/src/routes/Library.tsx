@@ -1251,6 +1251,22 @@ type Store = {
   transcode_percent: number | null;
 };
 
+type StorePoint = {
+  week: string;
+  plays: number;
+  stalls: number | null;
+  stalled_streams: number | null;
+  stalled_percent: number | null;
+  partial: boolean;
+};
+
+type StoreTrend = {
+  store: string;
+  points: StorePoint[];
+  worst: number | null;
+  direction: "worse" | "steady" | "better" | null;
+};
+
 function StorageSection({ days }: { days: number }) {
   const data = useApi<{ stores: Store[]; days: number; depth: number }>(`/library/stores?days=${days}`, [days]);
   const [naming, setNaming] = useState<string | null>(null);
@@ -1349,7 +1365,105 @@ function StorageSection({ days }: { days: number }) {
           ))}
         </tbody>
       </table>
+      <StoreTrends />
     </>
+  );
+}
+
+/* Whether a store has always been like this.
+ *
+ * The table above is a snapshot, and a snapshot cannot tell a disk going bad
+ * from one bad evening. This is the share of plays that stalled at all, week
+ * by week, per store: one stream that rebuffers all night is one bad stream,
+ * so the number stays something anybody can read.
+ */
+const WHICH_WAY: Record<string, string> = {
+  worse: "Getting worse",
+  better: "Getting better",
+  steady: "Steady",
+};
+
+function StoreTrends() {
+  const data = useApi<{ stores: StoreTrend[]; weeks: number; recording_from: string | null }>("/library/stores/trend");
+  if (data.error) return null;
+  if (!data.data) return <Loading label="Reading the weeks" />;
+  const shown = data.data.stores.filter((s) => s.points.some((p) => p.stalled_percent != null));
+  if (shown.length === 0) {
+    return (
+      <p className="muted small">
+        Nothing to compare week to week yet. Stalls are counted from the day this app started watching live streams,
+        and a week needs ten plays from a store before its share means anything.
+      </p>
+    );
+  }
+  const since = data.data.recording_from;
+  const weeks = shown[0].points.filter((p) => p.stalled_percent != null).length;
+  return (
+    <>
+      <h3 className="section-head">Week by week</h3>
+      <p className="muted small">
+        The share of plays that stalled at all, per week.
+        {since && weeks < data.data.weeks
+          ? ` Counted since ${new Date(`${since}T00:00:00`).toLocaleDateString()}, so this fills out over the coming weeks.`
+          : ""}
+      </p>
+      <div className="store-trends">
+        {shown.map((s) => (
+          <div key={s.store} className="store-trend">
+            <div className="min0">
+              <strong>{s.store}</strong>
+              <p className="muted small">
+                {s.direction ? WHICH_WAY[s.direction] : "Too early to say"}
+                {s.worst != null ? ` · worst week ${s.worst}%` : ""}
+              </p>
+            </div>
+            <StallSpark points={s.points} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* The same drawn-by-hand approach as the dashboard's sparkline, with two
+   differences: weeks nobody was counting are a gap rather than a zero, and
+   the week in progress is a hollow point because it is not over yet. */
+function StallSpark({ points }: { points: StorePoint[] }) {
+  const known = points.filter((p) => p.stalled_percent != null);
+  if (known.length < 2) {
+    const one = known[0];
+    return <span className="muted small">{one ? `${one.stalled_percent}% this week` : "not enough weeks yet"}</span>;
+  }
+  const width = 220;
+  const height = 40;
+  const top = Math.max(...known.map((p) => p.stalled_percent as number), 5);
+  // The weeks before anything was counted are not drawn at all, so two known
+  // weeks span the box instead of huddling at the right hand end. Gaps in the
+  // middle stay gaps, because a week nobody watched is not a week of nothing.
+  const from = points.findIndex((p) => p.stalled_percent != null);
+  const span = Math.max(points.length - 1 - from, 1);
+  const at = (p: StorePoint, i: number) => [
+    ((i - from) / span) * width,
+    height - ((p.stalled_percent as number) / top) * height,
+  ];
+  let path = "";
+  points.forEach((p, i) => {
+    if (p.stalled_percent == null) return;
+    const [x, y] = at(p, i);
+    path += `${path ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)} `;
+  });
+  const last = known[known.length - 1];
+  const lastIndex = points.lastIndexOf(last);
+  const [lx, ly] = at(last, lastIndex);
+  return (
+    <span className="store-spark-wrap">
+      <svg className="spark store-spark" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
+           aria-label={`Plays that stalled per week, worst ${top}%`}>
+        <path d={path} className="spark-line" />
+        <circle cx={lx} cy={ly} r={2.5} className={last.partial ? "spark-dot open" : "spark-dot"} />
+      </svg>
+      <span className="muted small">{last.stalled_percent}%</span>
+    </span>
   );
 }
 

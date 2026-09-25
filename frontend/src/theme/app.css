@@ -732,6 +732,49 @@ code {
   stroke: none;
 }
 
+/* One store's weeks: short, wide, and sat beside its name rather than under a
+   heading of its own. */
+.store-trends {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.store-trend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.store-spark-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+}
+
+.store-spark {
+  width: 130px;
+  height: 40px;
+}
+
+.spark-dot {
+  fill: var(--accent);
+}
+
+/* The week in progress: hollow, because it is not over yet. */
+.spark-dot.open {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
 /* ---- activity ---------------------------------------------------------- */
 
 .session-list {

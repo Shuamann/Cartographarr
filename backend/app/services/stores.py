@@ -12,6 +12,7 @@ together: four mounts off one NAS become one store called what you call it.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -122,6 +123,129 @@ def summary(days: int = 30) -> dict[str, Any]:
         })
     out.sort(key=lambda s: -s["size"])
     return {"stores": out, "days": days, "depth": depth}
+
+
+WEEKS = 12
+"""How many weeks of history the trend covers. Long enough to tell a bad week
+from a store going downhill, short enough that a disk replaced in the spring
+is not still being held against it."""
+
+
+def trend(weeks: int = WEEKS) -> dict[str, Any]:
+    """How often watching from each store went wrong, week by week.
+
+    The summary says which store is worst now. This says whether it always was.
+    A mount that has crept up over six weeks is a disk going bad; one that had
+    a single terrible week was a night when something else was wrong, and the
+    two want different things done about them.
+
+    Counted as the share of plays that stalled at all, rather than how many
+    stalls there were: one bad stream that rebuffers forty times is one bad
+    stream, and a rate that can pass 100 per 100 plays is a rate nobody can
+    read.
+    """
+    from app.models import History, MediaItem, StreamEvent
+    from app.services.library_scan import in_library
+
+    now = datetime.now(UTC)
+    start = now - timedelta(weeks=weeks)
+    depth = current().library_store_depth
+    named = labels()
+
+    def week_of(moment: datetime) -> str:
+        """Monday of that week, as a date, which is what the axis is labelled with."""
+        day = moment.date() - timedelta(days=moment.weekday())
+        return day.isoformat()
+
+    with session_scope() as db:
+        where = [MediaItem.file_path.is_not(None), in_library()]
+        store_of = {
+            key: (named.get(root_of(path, depth) or UNKNOWN) or root_of(path, depth) or UNKNOWN)
+            for key, path in db.execute(select(MediaItem.rating_key, MediaItem.file_path).where(*where)).all()
+        }
+        played = db.execute(
+            select(History.rating_key, History.started)
+            .where(History.started >= int(start.timestamp()), History.rating_key.is_not(None))
+        ).all()
+        stalled = db.execute(
+            select(StreamEvent.rating_key, StreamEvent.started_at, StreamEvent.session_key)
+            .where(StreamEvent.started_at >= start.replace(tzinfo=None), StreamEvent.rating_key.is_not(None))
+        ).all()
+        # Stalls are only known from the day this app started watching live
+        # streams. Before that a week with no stalls in it is a week nobody
+        # was counting, which is not the same thing and must not be drawn as
+        # a good week.
+        first = db.execute(select(func.min(StreamEvent.started_at))).scalar()
+
+    recording_from = week_of(first.replace(tzinfo=UTC)) if first else None
+    this_week = week_of(now)
+    weeks_wanted = [week_of(start + timedelta(weeks=n)) for n in range(weeks + 1)]
+    counts: dict[str, dict[str, dict[str, Any]]] = {}
+
+    def bucket(store: str, week: str) -> dict[str, Any]:
+        return counts.setdefault(store, {}).setdefault(week, {"plays": 0, "streams": set(), "stalls": 0})
+
+    for key, started in played:
+        store = store_of.get(key)
+        if store:
+            bucket(store, week_of(datetime.fromtimestamp(started, UTC)))["plays"] += 1
+    for key, at, session_key in stalled:
+        store = store_of.get(key)
+        if store:
+            week = bucket(store, week_of(at.replace(tzinfo=UTC)))
+            week["stalls"] += 1
+            # One stream that rebuffers all evening is one stream that went badly.
+            week["streams"].add(session_key or f"event-{key}-{at}")
+
+    out = []
+    for store, by_week in counts.items():
+        points = []
+        for week in weeks_wanted:
+            here = by_week.get(week) or {"plays": 0, "streams": set(), "stalls": 0}
+            counted = recording_from is not None and week >= recording_from
+            bad = len(here["streams"])
+            points.append({
+                "week": week,
+                "plays": here["plays"],
+                "stalls": here["stalls"] if counted else None,
+                "stalled_streams": bad if counted else None,
+                # Weeks with barely anything watched say nothing, and drawn as
+                # zero they say something untrue, so they have no rate at all.
+                # Nor do weeks from before anything was being counted.
+                "stalled_percent": round(min(bad, here["plays"]) / here["plays"] * 100, 1)
+                if counted and here["plays"] >= 10 else None,
+                # The week in progress is short, so its rate is thin evidence.
+                "partial": week == this_week,
+            })
+        rated = [p["stalled_percent"] for p in points if p["stalled_percent"] is not None]
+        out.append({
+            "store": store,
+            "points": points,
+            "worst": max(rated) if rated else None,
+            "direction": _direction(rated),
+        })
+    out.sort(key=lambda s: -(s["worst"] or 0))
+    return {"stores": out, "weeks": weeks, "recording_from": recording_from}
+
+
+def _direction(rated: list[float]) -> str | None:
+    """Which way a store is heading: the recent half against the earlier half.
+
+    Deliberately blunt. With one number a week there is no trend worth fitting
+    a line to, and the question being asked is only whether to go and look.
+    """
+    if len(rated) < 4:
+        return None
+    half = len(rated) // 2
+    before = sum(rated[:half]) / half
+    after = sum(rated[half:]) / (len(rated) - half)
+    if before < 0.5 and after < 0.5:
+        return "steady"
+    if after > before * 1.5 and after - before >= 0.5:
+        return "worse"
+    if before > after * 1.5 and before - after >= 0.5:
+        return "better"
+    return "steady"
 
 
 def rename(prefix: str, label: str) -> None:
