@@ -732,6 +732,40 @@ code {
   stroke: none;
 }
 
+/* The breakdown under a store's row: who, on what, and which titles. */
+.store-why-row > td {
+  padding-top: 0;
+  background: var(--surface-2);
+}
+
+.store-why-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.store-why-row-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.store-why-name {
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The count keeps its line; the name is what gets shortened. */
+.store-why-row-item .small {
+  white-space: nowrap;
+}
+
 /* One store's weeks: short, wide, and sat beside its name rather than under a
    heading of its own. */
 .store-trends {

@@ -248,6 +248,117 @@ def _direction(rated: list[float]) -> str | None:
     return "steady"
 
 
+TOP = 4
+"""How many viewers, devices or titles are worth naming. Past four it is a list
+rather than an answer."""
+
+
+def trouble(store: str, days: int = 30) -> dict[str, Any]:
+    """What the stalling at one store is actually made of.
+
+    A store with a bad number next to it is not necessarily bad storage. The
+    same number comes from a disk that cannot keep up, from one household on a
+    poor connection, and from one enormous new film nobody can stream. They
+    want different things done about them, and only the breakdown tells them
+    apart: stalls on your own network point at the storage, stalls from remote
+    viewers point at the line out of the house or at the file's bitrate.
+    """
+    from app.models import MediaItem, StreamEvent
+    from app.services.library import _since
+    from app.services.library_scan import in_library
+
+    since, cutoff = _since(days)
+    depth = current().library_store_depth
+    named = labels()
+
+    with session_scope() as db:
+        keys = [
+            key
+            for key, path in db.execute(
+                select(MediaItem.rating_key, MediaItem.file_path)
+                .where(MediaItem.file_path.is_not(None), in_library())
+            ).all()
+            if (named.get(root_of(path, depth) or UNKNOWN) or root_of(path, depth) or UNKNOWN) == store
+        ]
+        events = []
+        if keys:
+            events = db.execute(
+                select(StreamEvent)
+                .where(StreamEvent.started_at >= cutoff, StreamEvent.rating_key.in_(keys),
+                       StreamEvent.kind == "buffering")
+            ).scalars().all()
+            events = [{
+                "session_key": e.session_key,
+                "username": e.username,
+                "player": e.player,
+                "platform": e.platform,
+                "rating_key": e.rating_key,
+                "full_title": e.full_title,
+                "location": e.location,
+                "transcode_decision": e.transcode_decision,
+                "cause": e.cause,
+                "seconds": e.seconds,
+            } for e in events]
+
+    def top(field: str) -> list[dict[str, Any]]:
+        counted: dict[Any, dict[str, Any]] = {}
+        for event in events:
+            value = event.get(field)
+            if value is None:
+                continue
+            row = counted.setdefault(value, {"name": value, "events": 0, "streams": set()})
+            row["events"] += 1
+            row["streams"].add(event.get("session_key") or id(event))
+        out = [{**row, "streams": len(row["streams"])} for row in counted.values()]
+        out.sort(key=lambda r: -r["events"])
+        return out[:TOP]
+
+    remote = sum(1 for e in events if e["location"] == "wan")
+    local = sum(1 for e in events if e["location"] == "lan")
+    transcoded = sum(1 for e in events if e["transcode_decision"] == "transcode")
+    streams = len({e["session_key"] or id(e) for e in events})
+    people, devices, titles = top("username"), top("player"), top("full_title")
+
+    return {
+        "store": store,
+        "days": days,
+        "events": len(events),
+        "streams": streams,
+        "remote": remote,
+        "local": local,
+        "transcoded": transcoded,
+        "people": people,
+        "devices": devices,
+        "titles": titles,
+        "causes": top("cause"),
+        "notes": _trouble_notes(len(events), remote, local, people, titles),
+    }
+
+
+def _trouble_notes(events: int, remote: int, local: int, people: list[dict[str, Any]],
+                   titles: list[dict[str, Any]]) -> list[str]:
+    """The two or three sentences worth leading with, in the order they answer
+    the question. Nothing is said about a handful of stalls: four bad streams
+    in a month is a month, not a pattern."""
+    if events < 5:
+        return []
+    notes = []
+    if remote and remote >= events * 0.8:
+        notes.append(
+            "Every stall here was a viewer watching from outside the house"
+            if remote == events
+            else f"{remote} of {events} stalls here were viewers watching from outside the house"
+        )
+        notes.append("That points at the line out of the house, or at the bitrate of these files, rather than at this storage.")
+    elif local and local >= events * 0.5:
+        notes.append(f"{local} of {events} stalls here were on your own network, which is where storage trouble shows up.")
+    if people and people[0]["events"] >= max(5, events * 0.5):
+        notes.append(f"{people[0]['events']} of them were {people[0]['name']}, on {people[0]['streams']} streams.")
+    if titles and titles[0]["events"] >= max(5, events * 0.4):
+        notes.append(f"{titles[0]['events']} were one title: {titles[0]['name']}.")
+    return notes
+
+
 def rename(prefix: str, label: str) -> None:
     """Name a root. Two roots with one name are one store."""
     from app.models import LibraryStore

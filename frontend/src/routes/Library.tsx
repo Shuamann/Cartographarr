@@ -1260,6 +1260,23 @@ type StorePoint = {
   partial: boolean;
 };
 
+type StoreCount = { name: string; events: number; streams: number };
+
+type StoreTrouble = {
+  store: string;
+  days: number;
+  events: number;
+  streams: number;
+  remote: number;
+  local: number;
+  transcoded: number;
+  people: StoreCount[];
+  devices: StoreCount[];
+  titles: StoreCount[];
+  causes: StoreCount[];
+  notes: string[];
+};
+
 type StoreTrend = {
   store: string;
   points: StorePoint[];
@@ -1270,6 +1287,7 @@ type StoreTrend = {
 function StorageSection({ days }: { days: number }) {
   const data = useApi<{ stores: Store[]; days: number; depth: number }>(`/library/stores?days=${days}`, [days]);
   const [naming, setNaming] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -1307,7 +1325,8 @@ function StorageSection({ days }: { days: number }) {
       {worst && elsewhereRate != null && (worst.stalls_per_100 ?? 0) > elsewhereRate * 2 && (
         <p className="note">
           Watching from <strong>{worst.store}</strong> stalls {worst.stalls_per_100} times per 100 plays, against{" "}
-          {elsewhereRate} everywhere else. Worth a look at that storage before blaming the files on it.
+          {elsewhereRate} everywhere else. Open <strong>Why</strong> beside it before blaming the storage: stalls from
+          viewers outside the house usually are not the disk.
         </p>
       )}
       <table className="table">
@@ -1324,7 +1343,7 @@ function StorageSection({ days }: { days: number }) {
           </tr>
         </thead>
         <tbody>
-          {stores.map((s) => (
+          {stores.map((s) => [
             <tr key={s.store}>
               <td>
                 {naming === s.store ? (
@@ -1351,22 +1370,99 @@ function StorageSection({ days }: { days: number }) {
               <td className="num">{s.transcode_percent == null ? "" : `${s.transcode_percent}%`}</td>
               <td className="num">{s.stalls_per_100 == null ? "" : s.stalls_per_100}</td>
               <td>
-                <button
-                  className="tab"
-                  onClick={() => {
-                    setNaming(naming === s.store ? null : s.store);
-                    setName(s.store.startsWith("/") ? "" : s.store);
-                  }}
-                >
-                  {naming === s.store ? "Cancel" : "Name"}
-                </button>
+                <span className="row">
+                  {s.stalls > 0 && (
+                    <button
+                      className="tab"
+                      title="What the stalling here is made of"
+                      onClick={() => setAsking(asking === s.store ? null : s.store)}
+                    >
+                      {asking === s.store ? "Hide" : "Why"}
+                    </button>
+                  )}
+                  <button
+                    className="tab"
+                    onClick={() => {
+                      setNaming(naming === s.store ? null : s.store);
+                      setName(s.store.startsWith("/") ? "" : s.store);
+                    }}
+                  >
+                    {naming === s.store ? "Cancel" : "Name"}
+                  </button>
+                </span>
               </td>
-            </tr>
-          ))}
+            </tr>,
+            asking === s.store ? (
+              <tr key={`${s.store}-why`} className="store-why-row">
+                <td colSpan={8}>
+                  <StoreTroublePanel store={s.store} days={days} />
+                </td>
+              </tr>
+            ) : null,
+          ]).flat().filter(Boolean)}
         </tbody>
       </table>
       <StoreTrends />
     </>
+  );
+}
+
+/* What the stalling at one store is made of.
+ *
+ * A bad number beside a mount is not proof of bad storage. The same number
+ * comes from a disk that cannot keep up, from one household on a poor line,
+ * and from one enormous new film. Stalls on your own network are the first
+ * kind; stalls from outside the house are usually not.
+ */
+function StoreTroublePanel({ store, days }: { store: string; days: number }) {
+  const data = useApi<StoreTrouble>(
+    `/library/stores/trouble?store=${encodeURIComponent(store)}&days=${days}`,
+    [store, days],
+  );
+  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (!data.data) return <Loading label="Reading the stalls" />;
+  const t = data.data;
+  if (t.events === 0) return <p className="muted small">Nothing has stalled here in {days} days.</p>;
+  const lists: [string, StoreCount[]][] = [
+    ["Who", t.people],
+    ["On what", t.devices],
+    ["Which titles", t.titles],
+  ];
+  return (
+    <div className="store-why">
+      <p className="muted small">
+        {t.events} {t.events === 1 ? "stall" : "stalls"} across {t.streams}{" "}
+        {t.streams === 1 ? "stream" : "streams"}, {days} days
+        {t.transcoded > 0 ? `, ${t.transcoded} while transcoding` : ""}.
+      </p>
+      {t.notes.length > 0 && (
+        <p className="note">
+          {t.notes.map((n, i) => (
+            <span key={n}>
+              {i > 0 ? " " : ""}
+              {n.endsWith(".") ? n : `${n}.`}
+            </span>
+          ))}
+        </p>
+      )}
+      <div className="store-why-lists">
+        {lists.map(([label, rows]) => (
+          <div key={label} className="min0">
+            <p className="muted small">{label}</p>
+            {rows.length === 0 && <p className="muted small">Not recorded</p>}
+            {rows.map((r) => (
+              <div key={r.name} className="store-why-row-item">
+                <span className="store-why-name">{r.name}</span>
+                <span className="muted small">
+                  {r.events} {r.events === 1 ? "stall" : "stalls"}
+                  {r.streams > 1 ? `, ${r.streams} streams` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

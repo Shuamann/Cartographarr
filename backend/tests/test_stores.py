@@ -162,3 +162,74 @@ def test_viewers_cannot_see_the_trend(client):
 
     as_viewer(client, "all")
     assert client.get("/api/library/stores/trend").status_code == 403
+
+
+def seed_trouble():
+    """Stalls at one mount: nearly all of them one remote viewer, on one title."""
+    from app.db import session_scope
+    from app.models import History, MediaItem, StreamEvent
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, title="Big Film", media_type="movie",
+                         file_path="/movies/Big Film (2026)/big.mkv", file_size=1, file_bitrate=20000))
+        db.add(MediaItem(rating_key=2, title="Small Film", media_type="movie",
+                         file_path="/movies/Small Film (2020)/small.mkv", file_size=1, file_bitrate=4000))
+        for row in range(1, 13):
+            db.add(History(row_id=row, reference_id=row, rating_key=1 if row % 2 else 2, user_id=7,
+                           started=NOW - row * 600, media_type="movie"))
+        for n in range(8):
+            db.add(StreamEvent(kind="buffering", user_id=7, username="faraway", player="Their Roku",
+                               platform="Roku", rating_key=1, full_title="Big Film", location="wan",
+                               transcode_decision="direct play", cause="viewer", session_key=f"s{n // 4}",
+                               seconds=6, started_at=now - timedelta(hours=n), ended_at=now - timedelta(hours=n)))
+        for n in range(2):
+            db.add(StreamEvent(kind="buffering", user_id=8, username="athome", player="Living room",
+                               platform="Roku", rating_key=2, full_title="Small Film", location="lan",
+                               transcode_decision="transcode", cause="one_off", session_key=f"h{n}",
+                               seconds=4, started_at=now - timedelta(hours=n), ended_at=now - timedelta(hours=n)))
+
+
+def test_a_stores_trouble_says_who_and_what_it_was(client):
+    claim(client)
+    seed_trouble()
+    answer = client.get("/api/library/stores/trouble?store=/movies&days=30").json()
+    assert answer["events"] == 10 and answer["streams"] == 4
+    assert answer["remote"] == 8 and answer["local"] == 2 and answer["transcoded"] == 2
+    assert answer["people"][0] == {"name": "faraway", "events": 8, "streams": 2}
+    assert answer["devices"][0]["name"] == "Their Roku"
+    assert answer["titles"][0]["name"] == "Big Film"
+    # The point of the panel: say it is probably not the disk.
+    notes = " ".join(answer["notes"])
+    assert "outside the house" in notes and "rather than at this storage" in notes
+    assert "faraway" in notes
+
+
+def test_trouble_says_nothing_about_a_handful_of_stalls(client):
+    from app.db import session_scope
+    from app.models import MediaItem, StreamEvent
+
+    claim(client)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, title="Film", media_type="movie", file_path="/movies/Film/f.mkv",
+                         file_size=1, file_bitrate=9000))
+        db.add(StreamEvent(kind="buffering", user_id=7, username="someone", rating_key=1, location="wan",
+                           session_key="a", seconds=5, started_at=now, ended_at=now))
+    answer = client.get("/api/library/stores/trouble?store=/movies&days=30").json()
+    assert answer["events"] == 1
+    assert answer["notes"] == []  # one bad stream is a night, not a pattern
+
+
+def test_trouble_of_a_store_with_no_files_is_empty(client):
+    claim(client)
+    seed_trouble()
+    answer = client.get("/api/library/stores/trouble?store=/nowhere&days=30").json()
+    assert answer["events"] == 0 and answer["notes"] == []
+
+
+def test_viewers_cannot_see_a_stores_trouble(client):
+    from tests.test_privacy import as_viewer
+
+    as_viewer(client, "all")
+    assert client.get("/api/library/stores/trouble?store=/movies").status_code == 403

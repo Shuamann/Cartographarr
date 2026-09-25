@@ -280,6 +280,18 @@ async def stores_trend(_: AdminUser, weeks: int = Query(12, ge=2, le=52)) -> dic
     return await asyncio.to_thread(store_service.trend, weeks)
 
 
+@router.get("/stores/trouble")
+async def store_trouble(
+    _: AdminUser, store: str = Query(..., min_length=1), days: int = Query(30, ge=1, le=3650)
+) -> dict:
+    """What the stalling at one store is made of: who, what, and from where."""
+    import asyncio
+
+    from app.services import stores as store_service
+
+    return await asyncio.to_thread(store_service.trouble, store, days)
+
+
 @router.put("/stores/{prefix:path}")
 def name_store(prefix: str, admin: AdminUser, label: str = Body("", embed=True)) -> dict:
     """Name a mount. Two mounts with the same name are one store, which is how

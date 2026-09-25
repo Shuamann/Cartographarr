@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.28.0 - 2026-09-24
+
+### Added
+- Why, beside each store on Storage: what the stalling there is actually made of. Who it happened to, on what, which
+  titles, and whether it was on your own network or out on the internet. A mount with a bad number is not always bad
+  storage, and the breakdown is what tells a failing disk from one household on a poor line
+- The warning above the table now points at that breakdown rather than straight at the storage
+
 ## 0.27.0 - 2026-09-24
 
 ### Added
