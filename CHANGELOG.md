@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.25.1 - 2026-09-24
+
+### Fixed
+- Plays that ran past midnight were never imported. Tautulli writes a history row when the stream stops but dates it
+  from when it started, so a film put on at half eleven arrives after midnight with yesterday's date on it. The sync
+  asked only for rows since the newest start time it had seen, so that row fell outside the window and was never
+  asked for again. The window now opens three days earlier than the watermark, and history is asked for oldest first
+  so a row written while the sync is paging cannot fall through a join
+- Everything already lost this way comes back on the first sync after updating, which reads all of history again
+
 ## 0.25.0 - 2026-09-24
 
 ### Added

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import update, func, select, text
@@ -31,6 +31,21 @@ WATERMARK = "history_watermark"
 BACKFILL_OFFSET = "history_backfill_offset"
 EPISODE_NUMBERS = "history_has_episode_numbers"
 SESSIONS = "history_is_per_session"
+LATE_WRITES = "history_window_reaches_back"
+
+LATE_WRITE_DAYS = 3
+"""How far back of the watermark to ask, because a row can be written long
+after the moment it is dated.
+
+Tautulli writes a history row when the stream stops, and dates it from when
+the stream started. A film put on at half past eleven and finished at two in
+the morning is written after midnight with yesterday's date on it. The
+watermark is the newest start time seen, so the next sync would ask for
+everything since today and never see that row again: the play is lost for
+good, which is exactly what happened to overnight viewing.
+
+Three days covers a session left running over a weekend. The overlap costs a
+page or two per sync and the upsert makes repeating a row free."""
 
 
 # ---- small coercions -------------------------------------------------------
@@ -132,9 +147,11 @@ async def sync_history(client: TautulliClient, settings: Settings, full: bool = 
 
     after = None
     if watermark:
-        # Day granularity is all `after` supports; overlap is free because the
-        # upsert is idempotent.
-        after = datetime.fromtimestamp(watermark, UTC).strftime("%Y-%m-%d")
+        # Day granularity is all `after` supports, and the window opens well
+        # before the watermark so that anything written late is still inside
+        # it. See LATE_WRITE_DAYS.
+        opened = datetime.fromtimestamp(watermark, UTC) - timedelta(days=LATE_WRITE_DAYS)
+        after = opened.strftime("%Y-%m-%d")
 
     written = 0
     newest = watermark or 0
@@ -145,7 +162,10 @@ async def sync_history(client: TautulliClient, settings: Settings, full: bool = 
             start=offset,
             length=page,
             order_column="date",
-            order_dir="desc",
+            # Oldest first, so a row written while this is paging lands at the
+            # end rather than pushing every later page along by one and
+            # dropping whatever fell across the join.
+            order_dir="asc",
             after=after,
             # One row per session, not per play. Tautulli would otherwise merge
             # a paused and resumed play into one row, keeping only the last
@@ -615,8 +635,11 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # has none, and history synced as merged plays has the wrong times and only
     # the last device. Reading it all again fixes both, and the upsert makes
     # repeating it safe.
+    # A third: history synced before the window reached back is missing every
+    # play that ran past midnight. Reading it all again is the only way to get
+    # those back, since Tautulli cannot be asked for one row by its id.
     with session_scope() as session:
-        again = [key for key in (EPISODE_NUMBERS, SESSIONS) if _state(session, key) is None]
+        again = [key for key in (EPISODE_NUMBERS, SESSIONS, LATE_WRITES) if _state(session, key) is None]
     history = await sync_history(client, settings, full=full or bool(again))
     if again:
         with session_scope() as session:

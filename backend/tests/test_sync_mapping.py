@@ -186,3 +186,46 @@ def test_history_is_synced_one_row_per_session(client):
         assert [(r.row_id, r.machine_id, r.started, r.media_index) for r in rows] == [
             (10, "phone", 100, 23), (13, "tv", 900, 23),
         ]
+
+
+def test_history_window_reaches_back_past_the_watermark(client):
+    """A play that starts before midnight and stops after it is written with
+    yesterday's date. Asking only for rows since the newest start time loses
+    it, so the window opens days earlier than the watermark."""
+    import asyncio
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import History, SyncState
+    from app.services.sync import LATE_WRITE_DAYS, sync_history
+    from app.settings_store import current
+
+    # Someone watched something on the 17th; the sync has already been as far
+    # as the 20th, because shorter plays that started later finished first.
+    late = int(datetime(2026, 9, 17, 23, 29, tzinfo=UTC).timestamp())
+    watermark = int(datetime(2026, 9, 20, 2, 0, tzinfo=UTC).timestamp())
+    with session_scope() as db:
+        db.merge(SyncState(key="history_watermark", value=str(watermark)))
+
+    asked = []
+
+    class Fake:
+        async def call(self, cmd, **params):
+            asked.append(params)
+            if params["start"]:
+                return {"data": [], "recordsFiltered": 1}
+            return {
+                "data": [{"row_id": "24963", "user_id": "1", "started": str(late),
+                          "stopped": str(late + 8000), "full_title": "A Long Film", "player": "The big TV"}],
+                "recordsFiltered": 1,
+            }
+
+    assert asyncio.run(sync_history(Fake(), current())) == 1
+    assert asked[0]["after"] == "2026-09-17", f"window opened at {asked[0]['after']}"
+    assert LATE_WRITE_DAYS >= 3
+    # And it is asked for oldest first, so paging cannot drop a row at a join.
+    assert asked[0]["order_dir"] == "asc"
+    with session_scope() as db:
+        assert db.execute(select(History.player)).scalars().all() == ["The big TV"]
