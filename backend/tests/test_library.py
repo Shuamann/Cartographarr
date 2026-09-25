@@ -247,3 +247,19 @@ def test_health_summary(client):
     assert h["stalls_week"] == 3 and h["top_stall_cause"] == "Server upload nearly full"
     assert h["peak_upload_mbps"] == 38.5 and h["streams_week"] == 3 and h["transcoded_week"] == 2
     assert h["not_watching"] == 1 and h["people"] == 2
+
+
+def test_the_issue_cache_notices_a_file_being_read_again(client):
+    """The cache is keyed on when the file was last scanned, so a file that is
+    read again (an upgrade, a replacement) is worked out afresh."""
+    from datetime import UTC, datetime
+
+    from app.services import library
+
+    first = datetime(2026, 9, 1, tzinfo=UTC)
+    tracks = '[{"codec": "truehd", "channels": 8, "language": "eng"}]'
+    assert library.issues_cached(1, first, tracks, None, "mkv") == ["no_compatible_audio"]
+    # Same stamp, different tracks: the remembered answer stands.
+    assert library.issues_cached(1, first, '[{"codec": "aac"}]', None, "mkv") == ["no_compatible_audio"]
+    # New stamp: read again.
+    assert library.issues_cached(1, datetime(2026, 9, 2, tzinfo=UTC), '[{"codec": "aac"}]', None, "mkv") == []

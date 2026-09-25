@@ -92,11 +92,19 @@ itself and nothing else has to be invalidated.
 """
 
 
+CACHE_LIMIT = 250_000
+"""A ceiling, so a library far larger than any of these was written for cannot
+quietly become the biggest thing in memory. Past it the whole lot is dropped
+and worked out again, which costs one slow page."""
+
+
 def issues_cached(rating_key: int, checked_at: Any, audio: str | None, subs: str | None, container: str | None) -> list[str]:
     hit = _ISSUES_CACHE.get(rating_key)
     if hit is not None and hit[0] == checked_at:
         return list(hit[1])
     found = issues_of(audio, subs, container)
+    if len(_ISSUES_CACHE) >= CACHE_LIMIT:
+        _ISSUES_CACHE.clear()
     _ISSUES_CACHE[rating_key] = (checked_at, tuple(found))
     return found
 

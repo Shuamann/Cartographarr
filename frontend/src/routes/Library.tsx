@@ -238,7 +238,8 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
       {o.scanned_at && pending > 0 && (
         <p className="note">
           Reading audio and subtitle tracks: {o.checked.toLocaleString()} of {o.titles.toLocaleString()} files so far,
-          about 3,000 a minute. Messy files grows as this finishes. Bitrate, resolution and 4K lists are already complete.
+          about 3,000 a minute. Awkward to play grows as this finishes. Bitrate, resolution and 4K lists are already
+          complete.
         </p>
       )}
       <OldStalls />

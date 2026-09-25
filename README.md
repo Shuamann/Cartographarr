@@ -241,6 +241,8 @@ Every stall gets a likely cause, worked out again as patterns form:
 - **Upload nearly full**, if you set your upload capacity in Settings
 - **Server side**: someone else stalled at the same moment
 - **The file**: other people stall on the same title
+- **One stream that kept stalling**: the same sitting stalled three times or
+  more, which is a stream that was not being kept going rather than bad luck
 - **The viewer**: they stall on many titles while nobody else does
 
 Set **Upload capacity** in Settings and Cartographarr also notifies you
@@ -256,14 +258,22 @@ minute until done. Files removed from Plex drop out at the next scan, and a
 file that changed size (an upgrade or a replacement) has its tracks read again.
 Both jobs show on the Tasks page in Settings.
 
-- **Problem files**: over a bitrate limit and watched remotely, stalling, or
-  transcoded for most remote viewers
-- **Why streams transcode**: each reason, on which platforms, the worst
-  titles, and the usual fix
-- **Messy files**: no audio most devices can play, image or styled
-  subtitles, piles of duplicate subtitles, untagged audio, old containers
+- **Files worth attention**, the same rows asked three ways:
+  - **Trouble for viewers**: stalling, transcoded for most remote viewers, or
+    a bitrate too high for the way it is watched
+  - **Awkward to play**: no audio most devices can play, image or styled
+    subtitles, piles of duplicate subtitles, untagged audio, old containers,
+    and anything that had to be converted for the people who actually watched
+    it, which catches the files whose track list looks perfectly ordinary
+  - **Taking up room**: big, and either never played, not played in years, or
+    4K nobody has ever been sent in 4K
+- **Why streams transcode**: each reason, on which platforms and which
+  devices, the worst titles, and the usual fix
 - **4K copies**: whether a 4K picture ever reaches a screen
 - **Requested, never watched**: Seerr requests the requester never played
+
+Anything you decide to live with can be kept, with a reason, and stops being
+suggested in all three.
 
 Open any file for what exactly is wrong with it, named from its own tracks and
 how it played, and how to fix it. For plays from before streams were recorded,
@@ -277,6 +287,17 @@ anything else, which is most compatibility swaps, waits under **Replacements**
 beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
+
+### The problem bitrate
+
+**Library** calls a file a problem for remote viewers when its bitrate is above
+**library_bitrate_threshold_mbps**, which starts as a round 20. Once enough
+remote streams have been recorded, Settings offers a number read from this
+server instead: the bitrate nine in ten clean remote streams stayed under, next
+to what the ones that stalled were running at. It fills the field and leaves
+the saving to you, because a stall can be a bad evening on somebody else's line
+as easily as a file that is too big. It stays quiet when the streams do not
+support an answer.
 
 ## Making it yours
 
@@ -358,11 +379,12 @@ says Seerr was not updated.
 When a replacement for a file finishes importing, whatever was reported about
 that file is closed with a note saying what replaced it.
 
-## Worth a second look
+## Taking up room
 
-**Library, Worth a second look** lists big files nobody watches, biggest first,
-with why each one stands out: never played, not played in years, or 4K that has
-only ever been sent to a screen scaled down. Each says which storage it is on.
+**Files worth attention, Taking up room** lists big files nobody watches,
+biggest first, with why each one stands out: never played, not played in years,
+or 4K that has only ever been sent to a screen scaled down. Each says which
+storage it is on.
 
 Nothing is deleted from here. Plex, Radarr and Sonarr own the files, so this
 says what is worth deciding about and hands over. A file you decide to keep is
@@ -380,6 +402,17 @@ Give two mounts the same name and they count as one store, which is how several
 shares off one box read together. Where several libraries share a mount
 (`/mnt/user/movies`, `/mnt/user/tv`), raise **library_store_depth** so the name
 goes deeper than the first part of the path.
+
+**Why**, beside a store, breaks its stalling down: who it happened to, on what
+device, which titles, and whether it was on your own network or out on the
+internet. A bad number is not proof of bad storage. Stalls on your own network
+are where storage trouble shows up; stalls from viewers outside the house are
+usually the line out of the house or the bitrate of the files.
+
+Underneath, each store carries its last twelve weeks, as the share of plays
+that stalled at all. That is what tells a disk going downhill from one bad
+evening. Weeks from before this app started watching live streams are left as a
+gap rather than drawn as weeks where nothing went wrong.
 
 ## Access review
 
