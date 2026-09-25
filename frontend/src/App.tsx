@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { api, useApi, type AuthState, type Capabilities, type SetupStatus } from "./lib/api";
 import { CapabilityProvider } from "./components/Gated";
 import { brandingUrl, useBranding } from "./lib/useBranding";
-import { applyAccent } from "./theme/accent";
+import { applyAccent, setScheme } from "./theme/accent";
 import { useUrlFilters } from "./lib/useUrlFilters";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Dashboard from "./routes/Dashboard";
@@ -12,11 +12,27 @@ import Login from "./routes/Login";
 import Setup from "./routes/Setup";
 // MapLibre is most of the bundle and the app opens on the dashboard, so the
 // map arrives only when someone asks for it.
-const Map = lazy(() => import("./routes/Map"));
-const Reports = lazy(() => import("./routes/Reports"));
-const Library = lazy(() => import("./routes/Library"));
-const Home = lazy(() => import("./routes/Home"));
-const Issues = lazy(() => import("./routes/Issues"));
+/* A tab left open across a deploy still holds the old module graph, and the
+ * chunk it wants to fetch went out with the last build. Nothing to recover:
+ * fetch the page again, once, and the new build answers. The flag makes it
+ * once rather than a loop when the chunk is genuinely missing. */
+function fresh<T>(load: () => Promise<T>): () => Promise<T> {
+  return () =>
+    load().catch((error) => {
+      const stale = sessionStorage.getItem("reloaded-for-chunk");
+      if (!stale) {
+        sessionStorage.setItem("reloaded-for-chunk", "1");
+        location.reload();
+      }
+      throw error;
+    });
+}
+
+const Map = lazy(fresh(() => import("./routes/Map")));
+const Reports = lazy(fresh(() => import("./routes/Reports")));
+const Library = lazy(fresh(() => import("./routes/Library")));
+const Home = lazy(fresh(() => import("./routes/Home")));
+const Issues = lazy(fresh(() => import("./routes/Issues")));
 import History from "./routes/History";
 import People, { type Selection } from "./routes/People";
 import Rules from "./routes/Rules";
@@ -291,13 +307,20 @@ function Brand() {
   const name = branding.data?.app_name ?? "Cartographarr";
 
   useEffect(() => {
+    sessionStorage.removeItem("reloaded-for-chunk");
+  }, []);
+
+  useEffect(() => {
     if (!branding.data) return;
     // Kept where the rest of the branding is applied, and remembered so a
     // reload paints in the right colour before the first request answers.
+    setScheme(branding.data.theme);
     applyAccent(branding.data.accent);
     try {
       if (branding.data.accent) localStorage.setItem("accent", branding.data.accent);
       else localStorage.removeItem("accent");
+      if (branding.data.theme) localStorage.setItem("theme.colours", branding.data.theme);
+      else localStorage.removeItem("theme.colours");
     } catch {
       /* remembering the colour is a convenience only */
     }

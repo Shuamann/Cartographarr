@@ -321,11 +321,20 @@ support an answer.
 
 ## Making it yours
 
-**Settings, Appearance** takes a name, a logo and a colour. Pick the colour and
-the buttons, links, map pins and charts follow it; the hover colour, the ink on
-top of a button and the wash behind a selection are worked out from it, in
-light and in dark, so it only has to look right once. The sign-in page has it
-before anyone signs in.
+**Settings, Appearance** takes a name, a logo, and two sets of colours.
+
+The **accent** is the one colour buttons, links, map pins and charts are built
+from. The hover colour, the ink on top of a button and the wash behind a
+selection are worked out from it, in light and in dark, so it only has to look
+right once, and it reaches the borders and raised surfaces too rather than
+being a highlight on whatever is selected.
+
+The **theme editor** underneath sets the page, the panels and menus, the top
+bar and the text, per theme. Everything else (raised panels, borders, quieter
+text) is worked out from those four, a step at a time, so they cannot
+disagree. A few dark schemes are offered to start from, for anyone who wants
+the blue-grey gone. Both are read before anyone signs in, so the sign-in page
+is the app's face too.
 
 ## The home page
 

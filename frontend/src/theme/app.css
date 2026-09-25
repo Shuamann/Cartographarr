@@ -53,7 +53,7 @@ a {
   padding: 0 16px;
   height: 52px;
   flex: 0 0 auto;
-  background: var(--surface);
+  background: var(--bar);
   border-bottom: 1px solid var(--border);
 }
 
@@ -3844,6 +3844,16 @@ label.locked .pill {
 .accent-chip.on {
   border-color: var(--ink);
   box-shadow: 0 0 0 2px var(--surface) inset;
+}
+
+/* Four colour wells with their names, two across. */
+.theme-parts label {
+  gap: 4px;
+}
+
+.theme-parts .row {
+  align-items: center;
+  gap: 10px;
 }
 
 .accent-input {

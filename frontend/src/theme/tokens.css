@@ -11,6 +11,8 @@
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #eef1f5;
+  /* The top bar, which people like to set apart from the panels. */
+  --bar: var(--surface);
   --surface-3: #e3e8ef;
   --border: #d8dee7;
   --border-strong: #b9c3d0;
@@ -92,6 +94,7 @@
   --bg: #0d1117;
   --surface: #151b23;
   --surface-2: #1c232d;
+  --bar: var(--surface);
   --surface-3: #242d39;
   --border: #2a3440;
   --border-strong: #3a4654;

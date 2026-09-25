@@ -3,6 +3,8 @@ import { useApi } from "./api";
 export type Branding = {
   app_name: string;
   accent: string | null;
+  /** The chosen page, panel, bar and text colours per theme, as stored JSON. */
+  theme: string | null;
   images: { logo: boolean; login_logo: boolean; icon: boolean };
 };
 

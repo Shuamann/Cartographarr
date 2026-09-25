@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.35.0 - 2026-09-25
+
+### Added
+- A theme editor, under Settings, Appearance. Four colours per theme: the page, the panels and menus, the top bar
+  and the text. Everything else follows a step at a time, so raised panels, borders and quieter text stay in
+  agreement rather than being fourteen separate decisions. The top bar is its own colour now, and dark schemes to
+  start from are offered (neutral, black, warm, Plex) for anyone who wants the blue-grey gone
+- Accent stays separate and still tints on top, so a green accent on a neutral grey scheme works
+
+### Fixed
+- "Failed to fetch dynamically imported module" after an update. index.html named the last build's chunks and was
+  being cached; it is now sent with no-cache while the hashed assets beside it are kept for a year. A tab left open
+  across an update reloads itself once when it reaches for a chunk that has gone
+
 ## 0.34.0 - 2026-09-25
 
 ### Added

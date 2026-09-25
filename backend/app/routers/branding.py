@@ -77,6 +77,7 @@ def list_branding() -> dict:
         "app_name": current().app_name,
         # Read before anyone signs in: the sign-in page is the app's face too.
         "accent": current().accent_color or None,
+        "theme": current().theme_colors or None,
         "images": {kind: stored(kind) is not None for kind in sorted(KINDS)},
     }
 

@@ -309,6 +309,27 @@ def _static_dir() -> Path | None:
     return None
 
 
+class _Ui(StaticFiles):
+    """The built app, cached the only way a built app can be.
+
+    Vite puts a hash in every asset filename, so those never change under a
+    name and can be kept for a year. index.html is the opposite: it names this
+    build's hashes, and a browser or a proxy holding yesterday's copy asks for
+    chunks that went out with yesterday's build. That is the "Failed to fetch
+    dynamically imported module" people see after an update, so it is never
+    cached.
+    """
+
+    def file_response(self, *args, **kwargs):  # type: ignore[override]
+        response = super().file_response(*args, **kwargs)
+        path = str(args[0] if args else kwargs.get("full_path", ""))
+        if path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        elif "/assets/" in path.replace("\\", "/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 _static = _static_dir()
 if _static is not None:
     # Mounted last so every /api route still wins. html=True sends index.html
@@ -318,6 +339,6 @@ if _static is not None:
     import mimetypes
 
     mimetypes.add_type("text/javascript", ".mjs")
-    app.mount("/", StaticFiles(directory=_static, html=True), name="ui")
+    app.mount("/", _Ui(directory=_static, html=True), name="ui")
 else:
     log.info("No built frontend found; serving API only")

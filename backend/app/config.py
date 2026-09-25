@@ -14,6 +14,11 @@ from typing import Literal
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+THEME_PARTS = ("bg", "surface", "bar", "ink")
+"""What a person chooses: the page, the panels and menus, the top bar, the
+text. Everything else the interface needs (raised surfaces, borders, quieter
+inks) is worked out from these in the browser."""
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -24,7 +29,16 @@ class Settings(BaseSettings):
     accent_color: str = ""
     """The one colour the app is built around, as #rrggbb. Empty means the
     colour it ships with. Everything else is worked out from it, light and dark
-    alike, including the map, so this is the whole of theming."""
+    alike, including the map."""
+
+    theme_colors: str = ""
+    """The page, the panels, the top bar and the text, per theme, as JSON:
+
+        {"dark": {"bg": "#0b0b0d", "surface": "#141417", "bar": "#0f0f11", "ink": "#eaeaea"}}
+
+    Empty means the colours it ships with. Only these four are asked for; the
+    raised surfaces, borders and quieter inks are worked out from them, which
+    is the difference between choosing a scheme and filling in a form."""
 
     log_level: str = "INFO"
 
@@ -275,6 +289,38 @@ class Settings(BaseSettings):
         if len(body) != 6 or any(c not in "0123456789abcdefABCDEF" for c in body):
             raise ValueError("A colour looks like #22d3ee")
         return f"#{body.lower()}"
+
+    @field_validator("theme_colors", mode="before")
+    @classmethod
+    def _theme(cls, value: object) -> object:
+        """Hex colours under known names only. This ends up in a style the
+        browser applies, so the shape is checked rather than trusted."""
+        import json
+
+        if not isinstance(value, str) or not value.strip():
+            return ""
+        try:
+            parsed = json.loads(value)
+        except ValueError as exc:
+            raise ValueError("Theme colours should be JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Theme colours should be an object of themes")
+        out: dict[str, dict[str, str]] = {}
+        for mode, colours in parsed.items():
+            if mode not in ("dark", "light"):
+                raise ValueError("Themes are dark and light")
+            if not isinstance(colours, dict):
+                raise ValueError(f"The {mode} theme should be an object of colours")
+            kept = {}
+            for name, colour in colours.items():
+                if name not in THEME_PARTS:
+                    raise ValueError(f"Unknown part {name}. Try: {', '.join(THEME_PARTS)}")
+                if colour in (None, ""):
+                    continue
+                kept[name] = cls._colour(colour)
+            if kept:
+                out[mode] = kept
+        return json.dumps(out) if out else ""
 
     @field_validator("trusted_proxy_ips", mode="before")
     @classmethod

@@ -1,6 +1,6 @@
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
-import { ACCENTS, applyAccent } from "../theme/accent";
+import { ACCENTS, SCHEMES, applyAccent, setScheme, type Parts, type Scheme } from "../theme/accent";
 import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
@@ -245,8 +245,8 @@ const PAGES: Page[] = [
     id: "appearance",
     title: "Appearance",
     group: "Cartographarr",
-    blurb: "The name, the colour and the marks shown around the app.",
-    keys: ["app_name", "accent_color"],
+    blurb: "The name, the colours and the marks shown around the app.",
+    keys: ["app_name", "accent_color", "theme_colors"],
   },
   { id: "accounts", title: "Accounts", group: "Cartographarr", blurb: "Who can sign in to Cartographarr." },
   { id: "home", title: "Home page", group: "Cartographarr", blurb: "The links everyone lands on, and who sees each one." },
@@ -652,6 +652,10 @@ function SettingsForm() {
             <AccentPicker
               value={String(draft.accent_color ?? settings.data?.find((x) => x.key === "accent_color")?.value ?? "")}
               onChange={(colour) => setDraft({ ...draft, accent_color: colour })}
+            />
+            <ThemeEditor
+              value={String(draft.theme_colors ?? settings.data?.find((x) => x.key === "theme_colors")?.value ?? "")}
+              onChange={(colours) => setDraft({ ...draft, theme_colors: colours })}
             />
             <BrandingImages />
           </>
@@ -1229,6 +1233,93 @@ function ChangePassword() {
  * top of a button, the wash behind a selection) is worked out from this, light
  * and dark alike, and the map takes it too. Choosing four colours is four
  * chances to make something unreadable. */
+/* The page, the panels, the top bar and the text, for whichever theme is on.
+ *
+ * Four colours, not fourteen: everything else is worked out from them in
+ * theme/accent.ts. Each theme keeps its own set, because a colour that works
+ * on a dark page is unreadable on a light one, and the light theme is left
+ * alone unless somebody is looking at it.
+ */
+const PARTS: { key: keyof Parts; label: string; hint: string }[] = [
+  { key: "bg", label: "Page", hint: "Behind everything" },
+  { key: "surface", label: "Panels and menus", hint: "Cards, tables, dropdowns" },
+  { key: "bar", label: "Top bar", hint: "The strip with the tabs" },
+  { key: "ink", label: "Text", hint: "Quieter text is worked out from it" },
+];
+
+function ThemeEditor({ value, onChange }: { value: string; onChange: (colours: string) => void }) {
+  const mode = (document.documentElement.dataset.theme ?? "light") as "dark" | "light";
+  const scheme: Scheme = (() => {
+    try {
+      return value ? (JSON.parse(value) as Scheme) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const mine = scheme[mode] ?? {};
+  const shown = getComputedStyle(document.documentElement);
+  const showing = (key: keyof Parts) => mine[key] ?? shown.getPropertyValue(`--${key}`).trim() ?? "#000000";
+
+  function put(next: Parts) {
+    const kept = Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Parts;
+    const whole: Scheme = { ...scheme, [mode]: kept };
+    if (!Object.keys(kept).length) delete whole[mode];
+    const text = Object.keys(whole).length ? JSON.stringify(whole) : "";
+    onChange(text);
+    // Shown at once, like the accent. Saving is still the Save button.
+    setScheme(text);
+  }
+
+  return (
+    <section className="card-section">
+      <h3>The {mode} theme</h3>
+      <p className="muted small">
+        Four colours, and the rest follows: raised panels, borders and quieter text are worked out a step at a time
+        from the panel and the text. Switch the theme in the top bar to set the other one.
+      </p>
+      <div className="row wrap accent-row">
+        {SCHEMES.map((preset) => (
+          <button
+            key={preset.name}
+            className="tab"
+            title={preset.blurb}
+            onClick={() => put(mode === "dark" ? preset.dark : {})}
+            disabled={mode !== "dark"}
+          >
+            {preset.name}
+          </button>
+        ))}
+        {Object.keys(mine).length > 0 && (
+          <button className="tab" onClick={() => put({})}>
+            Back to the usual
+          </button>
+        )}
+      </div>
+      {mode !== "dark" && (
+        <p className="muted small">
+          The presets are dark schemes. On the light theme, pick the four colours yourself.
+        </p>
+      )}
+      <div className="grid2 theme-parts">
+        {PARTS.map((part) => (
+          <label key={part.key}>
+            {part.label}
+            <span className="row">
+              <input
+                type="color"
+                className="accent-input"
+                value={showing(part.key) || "#000000"}
+                onChange={(e) => put({ ...mine, [part.key]: e.target.value })}
+              />
+              <small className="muted">{part.hint}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AccentPicker({ value, onChange }: { value: string; onChange: (colour: string) => void }) {
   const current = value || "";
 

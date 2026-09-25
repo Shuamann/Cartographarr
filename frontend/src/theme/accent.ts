@@ -52,6 +52,12 @@ const BLACK: Rgb = { r: 10, g: 14, b: 20 };
  * They are cleared before anything is read, because a value already overridden
  * reads back as the override and tinting a tint drifts further every time. */
 const DERIVED = [
+  "--bg",
+  "--surface",
+  "--bar",
+  "--ink",
+  "--ink-2",
+  "--ink-3",
   "--accent",
   "--accent-hover",
   "--accent-ink",
@@ -80,15 +86,83 @@ const TINTS: [name: string, amount: number][] = [
   ["--map-border", 0.22],
 ];
 
+/* The four colours a person chooses, per theme, as stored in Settings.
+ *
+ * Everything else the interface needs is worked out from them: a panel one
+ * step off the page, a border a step further, ink that quietens twice. Asking
+ * for four colours is choosing a scheme; asking for fourteen is filling in a
+ * form, and the fourteen have to agree with each other or the result is a
+ * mess nobody can undo.
+ */
+export type Parts = { bg?: string; surface?: string; bar?: string; ink?: string };
+export type Scheme = { dark?: Parts; light?: Parts };
+
+let scheme: Scheme = {};
+let accent: string | null = null;
+
+/* Kept here rather than passed around, because the theme flips and the accent
+ * changes at different moments and both have to repaint the same way. */
+export function setScheme(next: Scheme | string | null | undefined): void {
+  scheme = read(next);
+  paint();
+}
+
+export function currentScheme(): Scheme {
+  return scheme;
+}
+
+function read(next: Scheme | string | null | undefined): Scheme {
+  if (!next) return {};
+  if (typeof next !== "string") return next;
+  try {
+    const parsed = JSON.parse(next);
+    return parsed && typeof parsed === "object" ? (parsed as Scheme) : {};
+  } catch {
+    return {};
+  }
+}
+
 /* Applied on load and again whenever the theme flips, since a colour that
  * needs lightening on white needs darkening on black. */
 export function applyAccent(colour: string | null | undefined): void {
+  accent = colour || null;
+  paint();
+}
+
+function paint(): void {
   const root = document.documentElement;
   for (const name of DERIVED) root.style.removeProperty(name);
-  const rgb = colour ? parse(colour) : null;
-  if (!rgb) return;
 
   const dark = (root.dataset.theme ?? "light") === "dark";
+  const chosen = (dark ? scheme.dark : scheme.light) ?? {};
+  const page = parse(chosen.bg ?? "");
+  const panel = parse(chosen.surface ?? "");
+  const text = parse(chosen.ink ?? "");
+  const bar = parse(chosen.bar ?? "");
+  const away = dark ? WHITE : BLACK;  // the direction "lighter than the page" points in
+
+  if (page) root.style.setProperty("--bg", hex(page));
+  if (bar) root.style.setProperty("--bar", hex(bar));
+  if (panel) {
+    root.style.setProperty("--surface", hex(panel));
+    // A panel, a raised panel, a pressed one, then the lines between them:
+    // each one step further from the page in the same direction.
+    root.style.setProperty("--surface-2", hex(mix(panel, away, 0.06)));
+    root.style.setProperty("--surface-3", hex(mix(panel, away, 0.11)));
+    root.style.setProperty("--border", hex(mix(panel, away, 0.18)));
+    root.style.setProperty("--border-strong", hex(mix(panel, away, 0.3)));
+  }
+  if (text) {
+    root.style.setProperty("--ink", hex(text));
+    // Quieter text is the ink fading towards whatever it sits on.
+    const behind = panel ?? page ?? (dark ? BLACK : WHITE);
+    root.style.setProperty("--ink-2", hex(mix(text, behind, 0.35)));
+    root.style.setProperty("--ink-3", hex(mix(text, behind, 0.45)));
+  }
+
+  const rgb = accent ? parse(accent) : null;
+  if (!rgb) return;
+
   const bright = luminance(rgb) > 0.45;
   const base = getComputedStyle(root);
   const tint = (name: string, amount: number): void => {
@@ -115,6 +189,31 @@ export function applyAccent(colour: string | null | undefined): void {
   // Series one is the accent: the single line on a one line chart.
   root.style.setProperty("--chart-1", hex(rgb));
 }
+
+/* Schemes to start from, so the first press changes something. Dark values
+ * only: a light page that is not near white stops being a light page. */
+export const SCHEMES: { name: string; blurb: string; dark: Parts }[] = [
+  {
+    name: "Neutral",
+    blurb: "Grey, no blue in it",
+    dark: { bg: "#101012", surface: "#18181b", bar: "#141416", ink: "#ededef" },
+  },
+  {
+    name: "Black",
+    blurb: "As dark as it goes",
+    dark: { bg: "#000000", surface: "#0c0c0e", bar: "#000000", ink: "#e8e8ea" },
+  },
+  {
+    name: "Warm",
+    blurb: "Brown-grey, easy at night",
+    dark: { bg: "#14110f", surface: "#1d1917", bar: "#181412", ink: "#efe9e4" },
+  },
+  {
+    name: "Plex",
+    blurb: "Near black, bar a shade lighter",
+    dark: { bg: "#1a1a1c", surface: "#232326", bar: "#1f1f22", ink: "#eaeaec" },
+  },
+];
 
 /* What the picker offers, so nobody has to type a hex code to try one. */
 export const ACCENTS: { name: string; value: string }[] = [
