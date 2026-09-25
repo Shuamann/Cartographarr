@@ -62,6 +62,8 @@ type CauseRow = {
   streams: number;
   hardware: number;
   platforms: { name: string; streams: number }[];
+  /** The actual boxes, which is what somebody can go and change. */
+  players?: { name: string; streams: number }[];
   titles: { rating_key: number; title: string | null; streams: number }[];
 };
 
@@ -311,6 +313,12 @@ function Transcodes({ days }: { days: number }) {
               <span className="muted">Platforms: </span>
               {c.platforms.map((p) => `${p.name} (${p.streams})`).join(", ")}
             </p>
+            {c.players && c.players.length > 0 && (
+              <p className="small">
+                <span className="muted">Devices: </span>
+                {c.players.map((p) => `${p.name} (${p.streams})`).join(", ")}
+              </p>
+            )}
             <div className="mini-list">
               {c.titles.map((t) => (
                 <div key={t.rating_key} className="mini">

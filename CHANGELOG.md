@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.31.1 - 2026-09-25
+
+### Changed
+- Why streams transcode now names the devices as well as the platforms. Android tells you nothing you can act on;
+  the stick in the back bedroom that accounts for a fifth of all transcoding does
+
 ## 0.31.0 - 2026-09-25
 
 ### Added

@@ -58,6 +58,7 @@ def seed():
         db.add(StreamEvent(kind="buffering", user_id=2, rating_key=3, started_at=datetime.now(UTC) - timedelta(days=2),
                            ended_at=datetime.now(UTC) - timedelta(days=2), seconds=12, cause="file"))
         db.add(StreamSession(rating_key=4, primary_cause="audio_codec", causes="audio_codec", platform="Roku",
+                             player="The bedroom stick",
                              started_at=datetime.now(UTC) - timedelta(days=1), transcode_decision="transcode"))
         db.add(StreamSession(rating_key=11, stream_video_resolution="4k", started_at=datetime.now(UTC) - timedelta(days=1)))
 
@@ -101,6 +102,9 @@ def test_transcode_causes_and_file_detail(client):
     seed()
     causes = client.get("/api/library/transcodes").json()
     assert causes["causes"][0]["cause"] == "audio_codec" and causes["causes"][0]["platforms"][0]["name"] == "Roku"
+    # Which box, not just which kind of box: a platform cannot be taken out of
+    # a cupboard and looked at.
+    assert causes["causes"][0]["players"][0] == {"name": "The bedroom stick", "streams": 1}
     detail = client.get("/api/library/file/4").json()
     assert detail["plays"] == 3 and detail["transcodes"] == 2 and detail["transcode_causes"] == [{"cause": "audio_codec", "streams": 1}]
     assert client.get("/api/library/file/999").status_code == 404

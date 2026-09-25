@@ -230,20 +230,24 @@ def transcode_causes(db: Session, days: int) -> dict[str, Any]:
 
     _, cutoff = _since(days)
     rows = db.execute(
-        select(StreamSession.causes, StreamSession.platform, StreamSession.rating_key, StreamSession.full_title,
-               StreamSession.transcode_hw)
+        select(StreamSession.causes, StreamSession.platform, StreamSession.player, StreamSession.rating_key,
+               StreamSession.full_title, StreamSession.transcode_hw)
         .where(StreamSession.started_at >= cutoff, StreamSession.causes.is_not(None))
     ).all()
     total = db.execute(select(func.count()).select_from(StreamSession).where(StreamSession.started_at >= cutoff)).scalar() or 0
     by_cause: dict[str, dict[str, Any]] = {}
-    for causes, platform, key, title, hw in rows:
+    for causes, platform, player, key, title, hw in rows:
         for cause in (causes or "").split(","):
             if not cause:
                 continue
-            entry = by_cause.setdefault(cause, {"streams": 0, "hardware": 0, "platforms": Counter(), "titles": Counter(), "names": {}})
+            entry = by_cause.setdefault(cause, {"streams": 0, "hardware": 0, "platforms": Counter(),
+                                                "players": Counter(), "titles": Counter(), "names": {}})
             entry["streams"] += 1
             entry["hardware"] += 1 if hw else 0
             entry["platforms"][platform or "Unknown"] += 1
+            # The platform says Android; the device says which stick in which
+            # room, which is the one somebody can actually go and change.
+            entry["players"][player or "Unknown"] += 1
             if key is not None:
                 entry["titles"][key] += 1
                 entry["names"][key] = title
@@ -255,6 +259,7 @@ def transcode_causes(db: Session, days: int) -> dict[str, Any]:
             "streams": e["streams"],
             "hardware": e["hardware"],
             "platforms": [{"name": n, "streams": c} for n, c in e["platforms"].most_common(5)],
+            "players": [{"name": n, "streams": c} for n, c in e["players"].most_common(5)],
             "titles": [{"rating_key": k, "title": e["names"].get(k), "streams": c} for k, c in e["titles"].most_common(5)],
         })
     out.sort(key=lambda r: -r["streams"])
