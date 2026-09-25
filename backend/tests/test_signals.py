@@ -227,3 +227,55 @@ def test_a_different_title_elsewhere_is_still_a_signal(client):
         db.add(History(row_id=131, user_id=11, machine_id="another-box", rating_key=2, ip_address="198.51.100.2",
                        started=503_700, stopped=507_000, play_duration=3300, full_title="Another Thing"))
     assert len(flags_for()) == 1
+
+
+def test_a_network_that_keeps_moving_is_pointed_out(client):
+    """A phone's address belongs to its carrier's nearest gateway, which can
+    be a different city every evening. The signal says so rather than leaving
+    somebody to work it out."""
+    from app.db import session_scope
+    from app.models import History, IpLocation, TravelFlag, User
+
+    claim(client)
+    now = 1_790_000_000
+    with session_scope() as db:
+        db.add(User(user_id=12, username="phone-user"))
+        for n, (city, lat, lon) in enumerate([("Akron", 41.08, -81.52), ("Columbus", 39.96, -82.99),
+                                              ("Dallas", 32.78, -96.8), ("Indianapolis", 39.77, -86.16)]):
+            db.add(IpLocation(ip=f"198.51.100.2{n}", city=city, lat=lat, lon=lon, accuracy_radius=20,
+                              is_hosting=False, is_private=False, asn_org="A Mobile Network"))
+            db.add(History(row_id=200 + n, user_id=12, machine_id=f"box{n}", rating_key=n,
+                           ip_address=f"198.51.100.2{n}", started=now - n * 4000, stopped=now - n * 4000 + 1200,
+                           play_duration=1200, full_title=f"Thing {n}"))
+        db.add(TravelFlag(id=80, user_id=12, kind="concurrent", from_history_id=200, to_history_id=201,
+                          from_ip="198.51.100.20", to_ip="198.51.100.21", from_city="Akron", to_city="Columbus",
+                          km=311, status="new"))
+
+    detail = client.get("/api/travel-flags/80").json()
+    roaming = detail["roaming"]
+    assert "A Mobile Network" in roaming
+    assert roaming["A Mobile Network"]["count"] == 4
+    assert "Dallas" in roaming["A Mobile Network"]["cities"]
+
+
+def test_a_network_that_stays_put_is_not_mentioned(client):
+    from app.db import session_scope
+    from app.models import History, IpLocation, TravelFlag, User
+
+    claim(client)
+    now = 1_790_000_000
+    with session_scope() as db:
+        db.add(User(user_id=13, username="settled"))
+        db.add(IpLocation(ip="198.51.100.30", city="Topeka", lat=39.05, lon=-95.68, accuracy_radius=20,
+                          is_hosting=False, is_private=False, asn_org="A Home Line"))
+        db.add(IpLocation(ip="198.51.100.31", city="Chicago", lat=41.88, lon=-87.63, accuracy_radius=20,
+                          is_hosting=False, is_private=False, asn_org="Another Line"))
+        db.add(History(row_id=220, user_id=13, machine_id="a", rating_key=1, ip_address="198.51.100.30",
+                       started=now, stopped=now + 1200, play_duration=1200, full_title="One"))
+        db.add(History(row_id=221, user_id=13, machine_id="b", rating_key=2, ip_address="198.51.100.31",
+                       started=now + 1300, stopped=now + 2500, play_duration=1200, full_title="Two"))
+        db.add(TravelFlag(id=81, user_id=13, kind="concurrent", from_history_id=220, to_history_id=221,
+                          from_ip="198.51.100.30", to_ip="198.51.100.31", from_city="Topeka", to_city="Chicago",
+                          km=800, status="new"))
+
+    assert client.get("/api/travel-flags/81").json()["roaming"] == {}

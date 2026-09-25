@@ -220,6 +220,11 @@ Some things look like two places and are not, and none of them are flagged:
   Signals measure from when a play was last watched, not when the session
   closed, so pausing on a phone and later watching on the TV does not count.
 
+A signal also names any network that has been putting that account in several
+cities anyway, with which ones, read from their own plays over the last six
+months. That is what a mobile connection looks like, and it explains a signal
+on its own.
+
 Each signal also says how often that account has been flagged between those
 same two places. A route that keeps coming back is usually how that connection
 is carried, a mobile network or a VPN with a favourite exit, rather than two

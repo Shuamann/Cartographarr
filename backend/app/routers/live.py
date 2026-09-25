@@ -1312,6 +1312,13 @@ def travel_flag_detail(flag_id: int, db: Db, scope: ViewerScope) -> dict:
         "from": first,
         "to": second,
         "gap_seconds": gap,
+        # Where else each of these two networks has put this account. A
+        # connection that keeps landing in different cities explains a signal
+        # without anybody sharing anything.
+        "roaming": travel.roaming(
+            db, flag.user_id,
+            [(first["place"] or {}).get("asn_org"), (second["place"] or {}).get("asn_org")],
+        ),
         "pattern_label": f"{_key_label(from_key)} and {_key_label(to_key)}",
         "ignore": None
         if pattern is None

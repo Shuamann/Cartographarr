@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.34.0 - 2026-09-25
+
+### Added
+- A signal now says when one of the two networks has been putting that account in several cities anyway. A phone's
+  address belongs to its carrier's nearest gateway, which can be two states away and a different one each evening,
+  and that explains a signal without anybody sharing anything. Worked out from the account's own plays over six
+  months, and shown rather than acted on, because whether a network wandering between four cities is a phone or a
+  family is a judgement. On the library this was written against it explains 19 of the 27 remaining signals
+
 ## 0.33.0 - 2026-09-25
 
 ### Fixed

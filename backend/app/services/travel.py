@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert
@@ -100,6 +101,47 @@ def times_seen(db, user_ids: list[int]) -> dict[tuple[int, str, str], int]:
         a, b = where_of(flag)
         counts[(flag.user_id, a, b)] = counts.get((flag.user_id, a, b), 0) + 1
     return counts
+
+
+ROAMING_DAYS = 180
+ROAMING_CITIES = 3
+"""A network that has put one account in this many different cities is a
+connection that moves, not a person who does."""
+
+
+def roaming(db, user_id: int, networks: list[str | None]) -> dict[str, dict[str, Any]]:
+    """For each network named, where else this account has played from it.
+
+    A phone's address belongs to its carrier's nearest gateway, which can be
+    two states away and a different one each evening. The same is true of some
+    home connections carried over a national backbone. Neither is a person
+    travelling, and the giveaway is that the network keeps putting this one
+    account in different cities.
+
+    Offered as something to read, not acted on: whether a network wandering
+    between four cities is a phone or a family is a judgement, and the person
+    looking is the one who can make it.
+    """
+    from app.models import History, IpLocation
+
+    wanted = {name for name in networks if name}
+    if not wanted:
+        return {}
+    since = int((datetime.now(UTC) - timedelta(days=ROAMING_DAYS)).timestamp())
+    seen: dict[str, set[str]] = {}
+    for asn, city in db.execute(
+        select(IpLocation.asn_org, IpLocation.city)
+        .join(History, History.ip_address == IpLocation.ip)
+        .where(History.user_id == user_id, History.started >= since,
+               IpLocation.asn_org.in_(wanted), IpLocation.city.is_not(None))
+        .distinct()
+    ).all():
+        seen.setdefault(asn, set()).add(city)
+    return {
+        asn: {"cities": sorted(cities)[:6], "count": len(cities)}
+        for asn, cities in seen.items()
+        if len(cities) >= ROAMING_CITIES
+    }
 
 
 def ignore_patterns() -> dict[tuple[int, str, str], int]:

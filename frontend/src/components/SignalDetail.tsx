@@ -48,6 +48,9 @@ export type SignalData = {
   gap_seconds: number | null;
   pattern_label: string;
   similar: number;
+  /** Networks at either end that have put this account in several cities, and
+   *  which ones. A connection that moves explains a signal on its own. */
+  roaming?: Record<string, { cities: string[]; count: number }>;
   ignore: { id: number; label: string | null; reason: string | null; created_by: string | null } | null;
 };
 
@@ -137,6 +140,15 @@ export default function SignalDetail({ id, onChanged }: { id: number; onChanged?
         {" "}Locations are city level, accurate to about {accuracy || "an unknown number of"} km.
         {s.hosting_involved && " A VPN or hosting network is involved, which can explain this without anyone sharing a password."}
       </p>
+
+      {Object.entries(s.roaming ?? {}).map(([network, seen]) => (
+        <p key={network} className="note" title="Worked out from this account's own plays over the last six months">
+          <strong>{network}</strong> has put {s.user_name} in {seen.count} different{" "}
+          {seen.count === 1 ? "city" : "cities"} lately: {seen.cities.join(", ")}. A connection that lands in a
+          different place each time, which a mobile network usually does, explains this without anyone sharing
+          anything.
+        </p>
+      ))}
 
       <div className="signal-sides">
         <SideCard title="First play" side={s.from} ip={s.from_ip} banned={bans.ids} />
