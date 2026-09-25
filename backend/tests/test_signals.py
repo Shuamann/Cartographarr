@@ -136,3 +136,94 @@ def test_open_signals_that_no_longer_qualify_are_cleared_but_decisions_are_kept(
     with session_scope() as db:
         assert db.get(TravelFlag, 50) is None
         assert db.get(TravelFlag, 51) is not None
+
+
+# ---- one viewing carried from one network or device to another ---------------
+
+def places():
+    """Two cities far enough apart that any jump between them is impossible."""
+    from app.db import session_scope
+    from app.models import IpLocation, User
+
+    with session_scope() as db:
+        db.add(User(user_id=11, username="wanderer"))
+        db.add(IpLocation(ip="198.51.100.1", city="Topeka", lat=39.05, lon=-95.68,
+                          accuracy_radius=20, is_hosting=False, is_private=False))
+        db.add(IpLocation(ip="198.51.100.2", city="Chicago", lat=41.88, lon=-87.63,
+                          accuracy_radius=20, is_hosting=False, is_private=False))
+
+
+def flags_for(user_id=11):
+    from app.db import session_scope
+    from app.models import TravelFlag
+    from app.services import travel
+    from app.settings_store import current
+    from sqlalchemy import select
+
+    travel.find_flags(current())
+    with session_scope() as db:
+        return db.execute(select(TravelFlag).where(TravelFlag.user_id == user_id)).scalars().all()
+
+
+def test_one_phone_changing_network_is_not_two_people(client):
+    """A phone that leaves mobile data for the wifi at home is recorded
+    against two addresses. It is still one phone."""
+    from app.db import session_scope
+    from app.models import History
+
+    claim(client)
+    places()
+    with session_scope() as db:
+        db.add(History(row_id=100, user_id=11, machine_id="the-phone", rating_key=1, ip_address="198.51.100.1",
+                       started=200_000, stopped=201_000, play_duration=1000, full_title="On the way"))
+        db.add(History(row_id=101, user_id=11, machine_id="the-phone", rating_key=2, ip_address="198.51.100.2",
+                       started=201_100, stopped=202_000, play_duration=900, full_title="Once home"))
+    assert flags_for() == []
+
+
+def test_the_same_thing_picked_up_on_another_device_is_not_two_people(client):
+    """The phone on the way home, the television once there: one viewing."""
+    from app.db import session_scope
+    from app.models import History
+
+    claim(client)
+    places()
+    with session_scope() as db:
+        db.add(History(row_id=110, user_id=11, machine_id="the-phone", rating_key=55, ip_address="198.51.100.1",
+                       started=300_000, stopped=301_800, play_duration=1800, full_title="A Film"))
+        # Twelve minutes later, same film, different box, other side of the map.
+        db.add(History(row_id=111, user_id=11, machine_id="the-telly", rating_key=55, ip_address="198.51.100.2",
+                       started=303_300, stopped=307_000, play_duration=3700, full_title="A Film"))
+    assert flags_for() == []
+
+
+def test_two_people_watching_the_same_film_at_once_is_still_a_signal(client):
+    """The excuse only covers a viewing continuing. Two copies of the same
+    film running side by side for an hour is the thing this is looking for."""
+    from app.db import session_scope
+    from app.models import History
+
+    claim(client)
+    places()
+    with session_scope() as db:
+        db.add(History(row_id=120, user_id=11, machine_id="a-box", rating_key=77, ip_address="198.51.100.1",
+                       started=400_000, stopped=407_200, play_duration=7200, full_title="A Film"))
+        # Starts an hour into the first, not near the end of it.
+        db.add(History(row_id=121, user_id=11, machine_id="another-box", rating_key=77, ip_address="198.51.100.2",
+                       started=403_600, stopped=410_800, play_duration=7200, full_title="A Film"))
+    found = flags_for()
+    assert [f.kind for f in found] == ["concurrent"]
+
+
+def test_a_different_title_elsewhere_is_still_a_signal(client):
+    from app.db import session_scope
+    from app.models import History
+
+    claim(client)
+    places()
+    with session_scope() as db:
+        db.add(History(row_id=130, user_id=11, machine_id="a-box", rating_key=1, ip_address="198.51.100.1",
+                       started=500_000, stopped=503_600, play_duration=3600, full_title="One Thing"))
+        db.add(History(row_id=131, user_id=11, machine_id="another-box", rating_key=2, ip_address="198.51.100.2",
+                       started=503_700, stopped=507_000, play_duration=3300, full_title="Another Thing"))
+    assert len(flags_for()) == 1

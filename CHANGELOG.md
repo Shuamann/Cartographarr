@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.33.0 - 2026-09-25
+
+### Fixed
+- A viewing carried from one network or device to another is no longer a shared account signal. A phone that leaves
+  mobile data for the wifi at home is recorded against two addresses, and one device cannot be in two places; the
+  same thing picked up on the television within half an hour of the phone leaving off is one viewing continuing.
+  Two people watching the same title from two cities overlap for the length of it, not for a few minutes, and are
+  still flagged
+- On the library this was written against that clears 14 of 41 signals, all of them false. Open signals that no
+  longer qualify are cleared on the next sweep by themselves; anything already reviewed or ignored is left alone
+
 ## 0.32.4 - 2026-09-25
 
 ### Fixed

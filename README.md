@@ -206,9 +206,24 @@ device, from where and on which network, with the distance and the time between.
   records new ones as ignored. Ignored patterns are listed on the dashboard and
   can be undone.
 
-A play left paused keeps its session open for hours or days. Signals measure
-from when a play was last watched, not when the session closed, so pausing on
-a phone and later watching on the TV does not count.
+Some things look like two places and are not, and none of them are flagged:
+
+- **One device on two networks.** A phone that leaves mobile data for the wifi
+  at home is recorded against two addresses. One device cannot be in two
+  places, so a changed address is a changed network.
+- **One viewing carried to another device.** The phone on the way home and the
+  television once there is the same thing continuing, so long as the second
+  play begins within half an hour of the first leaving off. Two people watching
+  the same title from two cities overlap for the length of it, not for a few
+  minutes, and are still flagged.
+- **A play left paused**, which keeps its session open for hours or days.
+  Signals measure from when a play was last watched, not when the session
+  closed, so pausing on a phone and later watching on the TV does not count.
+
+Each signal also says how often that account has been flagged between those
+same two places. A route that keeps coming back is usually how that connection
+is carried, a mobile network or a VPN with a favourite exit, rather than two
+people.
 
 ## Reports
 

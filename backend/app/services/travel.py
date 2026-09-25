@@ -30,6 +30,15 @@ PAUSE_SLACK_SECONDS = 600
 """Allowed on top of watch time for ordinary pauses when working out when a
 play last had anyone watching it."""
 
+HANDOFF_SECONDS = 1800
+"""How far either side of one play ending another can start and still be the
+same viewing carried on somewhere else.
+
+Half an hour covers the phone on the way home and the television once there,
+and the overlap at the other end, where the first device's session lingers
+while the second one starts. Two people watching the same thing from two
+cities overlap for the length of the programme, not for a few minutes."""
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -112,6 +121,8 @@ def find_flags(settings: Settings) -> int:
                 History.stopped,
                 History.play_duration,
                 History.ip_address,
+                History.machine_id,
+                History.rating_key,
                 IpLocation.lat,
                 IpLocation.lon,
                 IpLocation.city,
@@ -139,6 +150,13 @@ def find_flags(settings: Settings) -> int:
         if last is None or last.ip_address == row.ip_address:
             continue
 
+        # One device cannot be in two places. A phone that leaves mobile data
+        # for the wifi at home, or a laptop that changes network, is recorded
+        # against two addresses, and that is somebody walking through their
+        # own front door rather than two people sharing a password.
+        if last.machine_id and last.machine_id == row.machine_id:
+            continue
+
         # Too vague to draw a conclusion from. A 1000 km stated error can
         # manufacture a 1000 km "journey" out of two plays on the same sofa.
         if max(last.accuracy_radius or 0, row.accuracy_radius or 0) > settings.impossible_max_accuracy_km:
@@ -162,6 +180,17 @@ def find_flags(settings: Settings) -> int:
         departed = last.stopped or last.started
         if last.play_duration:
             departed = min(departed, last.started + last.play_duration + PAUSE_SLACK_SECONDS)
+        # The same thing, picked up elsewhere. Watching on the phone and then
+        # on the television is one viewing continuing, which is why the second
+        # play begins around where the first left off. Two people watching the
+        # same title at once overlap for far longer than this.
+        if (
+            last.rating_key is not None
+            and last.rating_key == row.rating_key
+            and abs(row.started - departed) <= HANDOFF_SECONDS
+        ):
+            continue
+
         hours = (row.started - departed) / 3600
 
         # A gap of seconds is the same phenomenon as an overlap: nobody
