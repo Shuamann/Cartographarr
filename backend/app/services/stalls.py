@@ -9,6 +9,8 @@ lot:
   the server's side or its connection, not one viewer's
 - **file**: several people have stalled on this same title, so the file is
   the common factor
+- **stream**: this one stream stalled again and again in a single sitting,
+  which is a stream that could not be kept going rather than a coincidence
 - **viewer**: this viewer stalls across many different titles while others
   watching at the time do not, so their device or connection is the common
   factor
@@ -30,9 +32,15 @@ CAUSES: dict[str, str] = {
     "upload": "Server upload nearly full",
     "server": "Server side, others stalled too",
     "file": "This file, others stall on it",
+    "stream": "One stream that kept stalling",
     "viewer": "Viewer's device or connection",
     "one_off": "One-off so far",
 }
+
+SAME_STREAM = 3
+"""Stalls in one sitting before it stops being bad luck. Two can be a pair of
+skips either side of an advert break; three and up is a stream that is not
+being kept going."""
 
 OVERLAP = timedelta(seconds=90)
 FILE_WINDOW = timedelta(days=60)
@@ -83,6 +91,19 @@ def classify(db: Session, event: Any, capacity_mbps: float = 0, upload_percent: 
         if others_on_file >= 1:
             people = "person has" if others_on_file == 1 else "people have"
             return "file", f"{others_on_file} other {people} stalled on this title in the last 60 days."
+
+    # One stream stalling over and over is the commonest shape of all, and
+    # calling each of those a one-off says the opposite of what happened.
+    if event.session_key:
+        same_stream = db.execute(
+            select(func.count()).select_from(StreamEvent).where(
+                StreamEvent.session_key == event.session_key,
+                StreamEvent.kind == event.kind,
+                StreamEvent.user_id == event.user_id,
+            )
+        ).scalar() or 0
+        if same_stream >= SAME_STREAM:
+            return "stream", f"This one stream stalled {same_stream} times in a sitting."
 
     if event.user_id is not None:
         titles = db.execute(

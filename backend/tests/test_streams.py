@@ -83,10 +83,11 @@ def test_upload_alert_fires_once_per_half_hour(client, monkeypatch):
     assert len(sent) == 2 and "82%" in sent[0]
 
 
-def _stall(db, user, rating_key, start, seconds=10, machine="m"):
+def _stall(db, user, rating_key, start, seconds=10, machine="m", session_key=None):
     from app.models import StreamEvent
 
     e = StreamEvent(kind="buffering", user_id=user, machine_id=machine, rating_key=rating_key,
+                    session_key=session_key,
                     started_at=start, ended_at=start + timedelta(seconds=seconds), seconds=seconds)
     db.add(e)
     db.flush()
@@ -120,6 +121,19 @@ def test_stall_causes(client):
         for i, key in enumerate((801, 802, 803)):
             last = _stall(db, 5, key, t3 + timedelta(hours=i * 5))
         assert classify(db, last)[0] == "viewer"
+
+    t5 = t + timedelta(days=20)
+    with session_scope() as db:
+        # One stream that rebuffers all evening is not a run of one-offs.
+        for i in range(2):
+            twice = _stall(db, 9, 950, t5 + timedelta(minutes=i * 5), session_key="sitting")
+        assert classify(db, twice)[0] == "one_off"
+        third = _stall(db, 9, 950, t5 + timedelta(minutes=20), session_key="sitting")
+        cause, detail = classify(db, third)
+        assert cause == "stream" and "3 times in a sitting" in detail
+        # Another stream of the same person's is judged on its own.
+        alone = _stall(db, 9, 951, t5 + timedelta(hours=6), session_key="another")
+        assert classify(db, alone)[0] == "one_off"
 
     t4 = t + timedelta(days=9)
     with session_scope() as db:

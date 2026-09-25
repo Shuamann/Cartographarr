@@ -284,7 +284,8 @@ FIELDS: list[Field] = [
           triggers=("file",), hint="Different people. Three is a pattern; one is a bad evening."),
     Field("file_stall_cause", "Likely cause of its stalls", "File", "choice", lambda s, c: s.get("stall_cause"),
           fixed=(("upload", "The server's upload"), ("server", "The server"), ("file", "The file"),
-                 ("viewer", "The viewer"), ("one_off", "One off")), triggers=("file",)),
+                 ("stream", "One stream that kept stalling"), ("viewer", "The viewer"),
+                 ("one_off", "One off")), triggers=("file",)),
 
     Field("issue_kind", "Kind of problem", "Report", "choice", lambda s, c: s.get("issue_type"),
           fixed=(("video", "Video"), ("audio", "Audio"), ("subtitles", "Subtitles"), ("other", "Other")),

@@ -128,6 +128,7 @@ const STALL_CAUSES: Record<string, string> = {
   upload: "Upload nearly full",
   server: "Server side",
   file: "This file",
+  stream: "One stream kept stalling",
   viewer: "Viewer's device or connection",
   one_off: "One-off",
 };

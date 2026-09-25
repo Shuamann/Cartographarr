@@ -106,9 +106,9 @@ export default function Issues() {
 
   return (
     <div className="pad">
-      <div className="row-between">
+      <div className="row-between wrap">
         <h1>Issues</h1>
-        <div className="row">
+        <div className="row wrap">
           <button className="btn create" onClick={() => setRaising(!raising)}>
             {raising ? "Cancel" : "+ Report"}
           </button>

@@ -567,6 +567,11 @@ input:focus-visible {
   gap: 16px;
   margin-bottom: 10px;
 }
+
+/* A heading and its controls, where the controls are too wide for a phone. */
+.row-between.wrap {
+  flex-wrap: wrap;
+}
 .small {
   font-size: 12px;
 }

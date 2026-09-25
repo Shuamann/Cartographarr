@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.30.0 - 2026-09-25
+
+### Added
+- A stall cause for one stream that kept stalling. A stream that rebuffered eleven times in one sitting was being
+  called eleven one-offs, which says the opposite of what happened. On the library this was written against it moves
+  21 of 52 stalls out of "no pattern yet" and names them properly, and rules can ask about it like any other cause
+
+### Fixed
+- The Issues heading and its buttons no longer run off the side of a phone
+
 ## 0.29.0 - 2026-09-25
 
 ### Added
