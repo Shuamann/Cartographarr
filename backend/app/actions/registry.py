@@ -367,3 +367,164 @@ register(
         triggers=("file", "issue", "replacement"),
     )
 )
+
+
+# ---- asking for a replacement ------------------------------------------------
+#
+# The one action that spends somebody's bandwidth without being asked, so it is
+# the most careful: it only grabs a release that fixes something the file is
+# actually wrong about, never one Radarr or Sonarr would refuse or hold, and it
+# answers to the day's limit on automatic downloads in Settings before it is
+# ever called. What it queues then follows the same path as one queued by hand,
+# and shows up in Replacements with "a rule" as who asked.
+
+def pick_release(releases: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The one release worth taking without asking anybody.
+
+    `compare_releases` has already sorted by how many of the file's problems
+    each would fix. Anything blocked, held for a manual import, or that fixes
+    nothing is not something to grab while nobody is watching.
+    """
+    for release in releases:
+        if release.get("blocked") or release.get("held"):
+            continue
+        if not release.get("fixes"):
+            continue
+        if not release.get("guid") or release.get("indexer_id") is None:
+            continue
+        return release
+    return None
+
+
+async def _queue_replacement(session: Session, params: Params) -> str:
+    import asyncio
+    import json
+
+    from datetime import UTC, datetime
+
+    from fastapi import HTTPException
+
+    from app.db import session_scope
+    from app.models import Replacement
+    from app.routers.library import _arr_target
+    from app.services import replacements
+    from app.services.automations import AUTOMATION
+
+    rating_key = session.get("rating_key")
+    if not rating_key:
+        raise LookupError("Nothing to replace: this is not about a file")
+    try:
+        target, service = await _arr_target(int(rating_key))
+    except HTTPException as exc:  # the route's own words, which are the clearest ones
+        raise LookupError(str(exc.detail)) from exc
+
+    found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+    raw = await asyncio.wait_for(service.releases(found["id"], episode_id), timeout=150)
+    title = target["item"].get("title") or session.get("full_title") or "it"
+    ranked = replacements.compare_releases(
+        raw,
+        {**target["item"], "findings": session.get("findings") or []},
+        target["item"].get("duration"),
+        int(current().library_bitrate_threshold_mbps * 1000),
+    )
+    chosen = pick_release(ranked)
+    if chosen is None:
+        return f"left {title} alone: nothing on offer would fix what is wrong with it"
+
+    existing = await service.current_file(found["id"], episode_id)
+    await service.grab(chosen["guid"], int(chosen["indexer_id"]))
+    now = datetime.now(UTC)
+    with session_scope() as db:
+        db.add(Replacement(
+            rating_key=int(rating_key), title=title, service=service.name, arr_id=found["id"],
+            episode_id=episode_id, guid=chosen["guid"], indexer_id=int(chosen["indexer_id"]), status="queued",
+            release=json.dumps(chosen),
+            current=json.dumps({**target["item"], "arr_file_id": (existing or {}).get("id")}),
+            created_by=AUTOMATION, created_at=now, updated_at=now,
+        ))
+    return f"asked {service.label} for {chosen['title']} to replace {title}: {', '.join(chosen['fixes'])}"
+
+
+register(
+    Action(
+        name="queue_replacement",
+        label="Grab a better copy",
+        description=(
+            "Searches, and takes the best release that would fix what is wrong with the file. Nothing held for a "
+            "manual import, nothing that fixes none of it, and never more than the day's limit in Settings. "
+            "It appears in Replacements as asked for by a rule."
+        ),
+        execute=_queue_replacement,
+        triggers=("file", "issue"),
+    )
+)
+
+
+# ---- answering a report ------------------------------------------------------
+
+AUTHOR = "a rule"
+"""Whose name goes on a note or a resolution a rule left. The same words as
+the Replacements list uses, so nobody has to work out where it came from."""
+
+
+async def _comment_on_issue(session: Session, params: Params) -> str:
+    from app.services import issues
+
+    issue_id = session.get("issue_id")
+    if not issue_id:
+        raise LookupError("Nothing to comment on: this is not about a report")
+    message = (params.get("message") or "").strip()
+    if not message:
+        raise LookupError("A note with nothing in it says nothing")
+    title, _notes, warning = await issues.add_comment(int(issue_id), message, AUTHOR)
+    return f"commented on {title}" + (f" ({warning})" if warning else "")
+
+
+async def _resolve_issue(session: Session, params: Params) -> str:
+    """Close a report.
+
+    From a report, it closes that one. From a file or a replacement, it closes
+    whatever was reported about that file, which is the useful direction: a
+    better copy has just landed, so what people said about the old one is
+    answered.
+    """
+    from app.services import issues
+
+    note = (params.get("note") or "").strip() or "Closed by a rule."
+    issue_id = session.get("issue_id")
+    if issue_id:
+        title, warning = await issues.mark(int(issue_id), "resolved", AUTHOR, note)
+        return f"marked {title} resolved" + (f" ({warning})" if warning else "")
+    rating_key = session.get("rating_key")
+    if not rating_key:
+        raise LookupError("Nothing to resolve: this is not about a report or a file")
+    closed = await issues.resolve_for_file(int(rating_key), note)
+    if not closed:
+        return "nothing was open about that file"
+    return f"resolved {len(closed)} report{'s' if len(closed) > 1 else ''} about {session.get('full_title') or 'it'}"
+
+
+register(
+    Action(
+        name="comment_on_issue",
+        label="Add a note to the report",
+        description="Leaves a note on the report, here and in Seerr, signed as coming from a rule.",
+        execute=_comment_on_issue,
+        param_schema={"message": {"type": "string", "label": "What the note says"}},
+        triggers=("issue",),
+    )
+)
+
+register(
+    Action(
+        name="resolve_issue",
+        label="Mark the report resolved",
+        description=(
+            "Closes the report, here and in Seerr, with a note saying why. Asked from a file or a replacement it "
+            "closes whatever was reported about that file, which is what a landed replacement usually answers."
+        ),
+        execute=_resolve_issue,
+        param_schema={"note": {"type": "string", "label": "Why it is being closed"}},
+        triggers=("issue", "file", "replacement"),
+    )
+)

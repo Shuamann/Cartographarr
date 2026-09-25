@@ -20,6 +20,7 @@ from app.auth.deps import AdminUser, CurrentUser
 from app.db import session_scope
 from app.models import History, Issue, MediaItem, StreamEvent, StreamSession, User
 from app.redact import redact
+from app.services import issues as issue_service
 from app.settings_store import current
 
 log = logging.getLogger(__name__)
@@ -262,64 +263,38 @@ async def raise_issue(
         db.flush()
         issue_id, title = issue.id, issue.title
     audit.record(user, "issue.create", f"Reported {issue_type} trouble with {title}", target=str(issue_id))
-    from app.services import issues as issue_service
-
     await issue_service.announce(issue_id)
     return {"id": issue_id}
-
-
-async def _to_seerr(issue_id: int, send) -> str | None:
-    """Do the Seerr half of an action. A failure is reported, not raised: the
-    decision was made here, and the next sync would undo a half written one."""
-    from app.integrations.seerr import seerr
-    from app.services import issues as service
-
-    with session_scope() as db:
-        issue = db.get(Issue, issue_id)
-        seerr_id = issue.seerr_id if issue else None
-    if not (seerr_id and seerr.configured()):
-        return None
-    try:
-        await send(service, seerr_id)
-    except Exception as exc:  # noqa: BLE001
-        from app.integrations.base import describe_failure
-
-        return f"Seerr was not updated: {describe_failure(exc)}"
-    return None
 
 
 @router.post("/{issue_id}/comment")
 async def comment(issue_id: int, user: CurrentUser, message: str = Body(..., embed=True)) -> dict:
     if not message.strip():
         raise HTTPException(400, "Nothing to add")
+    # Whose report it is stays a question for the router: the service writes
+    # the note, this decides whether this person may.
     mine = _asker(user)
-    now = datetime.now(UTC).replace(tzinfo=None)
-    with session_scope() as db:
-        issue = db.get(Issue, issue_id)
-        if issue is None or (mine is not None and issue.reporter_user_id != mine):
-            raise HTTPException(404, "No such issue")
-        notes = _comments(issue)
-        notes.append({"message": message.strip(), "author": user.username, "created_at": now.isoformat()})
-        issue.comments = json.dumps(notes)
-        issue.updated_at = now
-        title = issue.title
-    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.comment(seerr_id, message.strip(), user.username))
+    if mine is not None:
+        with session_scope() as db:
+            issue = db.get(Issue, issue_id)
+            if issue is None or issue.reporter_user_id != mine:
+                raise HTTPException(404, "No such issue")
+    try:
+        title, notes, warning = await issue_service.add_comment(issue_id, message, user.username)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
     audit.record(user, "issue.comment", f"Commented on {title}", target=str(issue_id))
-    return {"id": issue_id, "comments": len(notes), "warning": warning}
+    return {"id": issue_id, "comments": notes, "warning": warning}
 
 
 @router.post("/{issue_id}/status")
 async def set_status(issue_id: int, admin: AdminUser, status: str = Body(..., embed=True)) -> dict:
-    if status not in ("open", "resolved"):
-        raise HTTPException(400, "Status is open or resolved")
-    with session_scope() as db:
-        issue = db.get(Issue, issue_id)
-        if issue is None:
-            raise HTTPException(404, "No such issue")
-        issue.status = status
-        issue.updated_at = datetime.now(UTC).replace(tzinfo=None)
-        title = issue.title
-    warning = await _to_seerr(issue_id, lambda service, seerr_id: service.set_status(seerr_id, status, admin.username))
+    try:
+        title, warning = await issue_service.mark(issue_id, status, admin.username)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
     audit.record(admin, "issue.status", f"Marked {title} {status}", target=str(issue_id))
     return {"id": issue_id, "status": status, "warning": warning}
 

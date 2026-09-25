@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.26.0 - 2026-09-24
+
+### Added
+- Rules can now ask for a better copy. "Grab a better copy" searches and takes the best release that would fix what
+  is actually wrong with the file, never one held for a manual import and never one that fixes nothing, and answers
+  to the day's limit on automatic downloads in Settings. What it queues follows the same path as a replacement asked
+  for by hand and shows up in the list as asked for by a rule
+- Rules can answer a report: "Add a note to the report" leaves a note here and in Seerr, signed as coming from a
+  rule, and "Mark the report resolved" closes it with a note saying why. Asked from a file or a replacement instead
+  of a report, it closes whatever was reported about that file, which is what a replacement landing usually answers
+
 ## 0.25.1 - 2026-09-24
 
 ### Fixed

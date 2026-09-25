@@ -206,3 +206,82 @@ def test_the_builder_offers_the_right_questions_for_each_trigger(client):
     actions = {a["name"]: a for a in client.get("/api/actions").json()}
     assert actions["terminate"]["triggers"] == ["stream"]
     assert "file" in actions["arr_search"]["triggers"]
+
+
+# ---- what a rule can do about a report or a file -----------------------------
+
+def seed_report(rating_key=1, status="open"):
+    """A report about a file, as the sweep would find it."""
+    from app.db import session_scope
+    from app.models import Issue
+
+    with session_scope() as db:
+        row = Issue(seerr_id=None, source="local", issue_type="audio", status=status, rating_key=rating_key,
+                    title="Trouble", media_type="movie", message="No sound at all", reporter_user_id=7,
+                    created_at=datetime.now(UTC).replace(tzinfo=None), updated_at=datetime.now(UTC).replace(tzinfo=None))
+        db.add(row)
+        db.flush()
+        return row.id
+
+
+def test_a_rule_can_leave_a_note_on_a_report(client):
+    from app.actions import registry
+    from app.db import session_scope
+    from app.models import Issue
+
+    claim(client)
+    issue_id = seed_report()
+    action = registry.get("comment_on_issue")
+    said = asyncio.run(action.execute({"subject": "issue", "issue_id": issue_id},
+                                      {"message": "A better copy is on the way."}))
+    assert "Trouble" in said
+    with session_scope() as db:
+        notes = json.loads(db.get(Issue, issue_id).comments)
+    assert notes[-1]["message"] == "A better copy is on the way."
+    # Signed, so nobody wonders who wrote it.
+    assert notes[-1]["author"] == "a rule"
+
+
+def test_a_rule_closes_the_reports_about_a_file_it_replaced(client):
+    from app.actions import registry
+    from app.db import session_scope
+    from app.models import Issue
+
+    claim(client)
+    mine = seed_report(rating_key=1)
+    someone_elses = seed_report(rating_key=2)
+    action = registry.get("resolve_issue")
+    # A replacement subject knows its file, not any particular report.
+    said = asyncio.run(action.execute({"subject": "replacement", "rating_key": 1, "full_title": "Trouble"},
+                                      {"note": "Replaced with a copy that has working audio."}))
+    assert "1 report" in said
+    with session_scope() as db:
+        assert db.get(Issue, mine).status == "resolved"
+        assert db.get(Issue, someone_elses).status == "open"
+
+
+def test_an_automatic_grab_leaves_anything_it_would_have_to_ask_about():
+    """The one action that spends bandwidth only takes a release that fixes
+    something and that Radarr would import on its own."""
+    from app.actions.registry import pick_release
+
+    assert pick_release([]) is None
+    assert pick_release([{"guid": "a", "indexer_id": 1, "fixes": [], "held": False, "blocked": False}]) is None
+    assert pick_release([{"guid": "a", "indexer_id": 1, "fixes": ["Playable audio (AAC)"], "held": True}]) is None
+    assert pick_release([{"guid": "a", "indexer_id": 1, "fixes": ["Playable audio (AAC)"], "blocked": True}]) is None
+    good = {"guid": "b", "indexer_id": 2, "fixes": ["Playable audio (AAC)"], "held": False, "blocked": False}
+    assert pick_release([{"guid": "a", "indexer_id": 1, "fixes": [], "blocked": True}, good]) is good
+
+
+def test_only_the_actions_that_suit_a_trigger_are_offered(client):
+    from app.actions import registry
+
+    claim(client)
+    for name, trigger, offered in [
+        ("terminate", "stream", True), ("terminate", "file", False),
+        ("queue_replacement", "file", True), ("queue_replacement", "stream", False),
+        ("comment_on_issue", "issue", True), ("comment_on_issue", "file", False),
+        ("resolve_issue", "replacement", True),
+    ]:
+        action = registry.get(name)
+        assert (trigger in action.triggers) is offered, f"{name} on {trigger}"

@@ -255,6 +255,78 @@ async def set_status(seerr_id: int, status: str, author: str | None = None, note
     await _post(f"/issue/{seerr_id}/{'resolved' if status == 'resolved' else 'open'}")
 
 
+async def _mirror(issue_id: int, send) -> str | None:
+    """Do the Seerr half of a change made here.
+
+    A failure is reported rather than raised: the decision was made in this
+    app, and the next sync would only half write it back anyway.
+    """
+    from app.models import Issue
+
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        seerr_id = issue.seerr_id if issue else None
+    if not (seerr_id and seerr.configured()):
+        return None
+    try:
+        await send(seerr_id)
+    except Exception as exc:  # noqa: BLE001 - Seerr being down is not a reason to lose the note
+        from app.integrations.base import describe_failure
+
+        return f"Seerr was not updated: {describe_failure(exc)}"
+    return None
+
+
+def _notes(issue) -> list[dict[str, Any]]:
+    try:
+        return json.loads(issue.comments or "[]")
+    except ValueError:
+        return []
+
+
+async def add_comment(issue_id: int, message: str, author: str | None) -> tuple[str, int, str | None]:
+    """Add a note to a report, here and in Seerr.
+
+    Returns the report's title, how many notes it now has, and a warning if
+    Seerr could not be told. Used by the Issues page and by rules, so a note
+    left by a rule reads the same as one left by a person.
+    """
+    from app.models import Issue
+
+    text = message.strip()
+    if not text:
+        raise ValueError("Nothing to add")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        if issue is None:
+            raise LookupError("No such issue")
+        notes = _notes(issue)
+        notes.append({"message": text, "author": author, "created_at": now.isoformat()})
+        issue.comments = json.dumps(notes)
+        issue.updated_at = now
+        title = issue.title
+    warning = await _mirror(issue_id, lambda seerr_id: comment(seerr_id, text, author))
+    return title, len(notes), warning
+
+
+async def mark(issue_id: int, status: str, author: str | None, note: str | None = None) -> tuple[str, str | None]:
+    """Resolve or reopen a report, here and in Seerr."""
+    from app.models import Issue
+
+    if status not in ("open", "resolved"):
+        raise ValueError("Status is open or resolved")
+    with session_scope() as db:
+        issue = db.get(Issue, issue_id)
+        if issue is None:
+            raise LookupError("No such issue")
+        issue.status = status
+        issue.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        title = issue.title
+    warning = await _mirror(issue_id, lambda seerr_id: set_status(seerr_id, status, author, note))
+    return title, warning
+
+
 async def resolve_for_file(rating_key: int, note: str) -> list[int]:
     """Close what this file's replacement was about.
 
