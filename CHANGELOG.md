@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.32.0 - 2026-09-25
+
+### Changed
+- Awkward to play now believes what happened as well as what the tracks say. A file whose audio was converted for
+  people who actually watched it is listed even when its track list looks unremarkable, which on the library this was
+  written against is where most of the converting was coming from: ordinary AAC 5.1 and DTS that particular sticks
+  cannot take. Files the track list already condemns are not listed twice
+
 ## 0.31.1 - 2026-09-25
 
 ### Changed

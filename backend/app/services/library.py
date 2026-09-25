@@ -29,6 +29,8 @@ LEGACY_CONTAINERS = {"avi", "wmv", "asf", "flv", "mpeg", "mpg", "vob", "divx", "
 
 ISSUES: dict[str, str] = {
     "no_compatible_audio": "No audio most devices can play (only TrueHD, DTS or similar)",
+    "audio_converted": "Audio was converted for people who watched it",
+    "subtitles_burned": "Subtitles were burned in for people who watched it",
     "image_subtitles_only": "Only image subtitles, which are burned in when turned on",
     "styled_subtitles": "Styled (ASS) subtitles, which many devices burn in",
     "subtitle_clutter": "Many duplicate subtitle tracks",
@@ -266,6 +268,29 @@ def transcode_causes(db: Session, days: int) -> dict[str, Any]:
     return {"total_streams": total, "causes": out}
 
 
+def observed_trouble(db: Session, days: int) -> dict[int, Counter]:
+    """What actually went wrong for the people who watched, by file.
+
+    Reading the tracks tells you a file has DTS and nothing else, which is
+    clearly awkward. It does not tell you that a perfectly ordinary AAC 5.1
+    track is converted for half the sticks in the house. That only shows up in
+    what happened, so it is read from the streams seen live.
+    """
+    _, cutoff = _since(days)
+    out: dict[int, Counter] = {}
+    rows = db.execute(
+        select(StreamSession.rating_key, StreamSession.causes)
+        .where(StreamSession.started_at >= cutoff, StreamSession.causes.is_not(None),
+               StreamSession.rating_key.is_not(None))
+    ).all()
+    for key, causes in rows:
+        counted = out.setdefault(int(key), Counter())
+        for cause in (causes or "").split(","):
+            if cause:
+                counted[cause] += 1
+    return out
+
+
 def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 200) -> dict[str, Any]:
     """Files with a known awkwardness, most watched first."""
     from app.services.library_scan import in_library
@@ -273,10 +298,19 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     items = db.execute(
         select(MediaItem).where(MediaItem.file_checked_at.is_not(None), MediaItem.file_bitrate.is_not(None), in_library())
     ).scalars().all()
+    seen = observed_trouble(db, days)
     counts: Counter = Counter()
     flagged = []
     for item in items:
         issues = file_issues(item)
+        happened = seen.get(item.rating_key) or Counter()
+        # Proof beats prediction. A file whose audio was converted for real
+        # viewers belongs here even when its track list looks unremarkable,
+        # and it is not listed twice when the track list already said so.
+        if (happened.get("audio_codec") or happened.get("audio_channels")) and "no_compatible_audio" not in issues:
+            issues = [*issues, "audio_converted"]
+        if happened.get("subtitle_burn") and not {"image_subtitles_only", "styled_subtitles"} & set(issues):
+            issues = [*issues, "subtitles_burned"]
         for i in issues:
             counts[i] += 1
         if issues and (issue is None or issue in issues):
@@ -285,7 +319,7 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     from app.services.findings import explain
 
     rows = []
-    for item, _ in flagged:
+    for item, issues in flagged:
         stats = plays.get(item.rating_key, {})
         row = {
             **describe_file(item),
@@ -293,7 +327,11 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
             "remote_plays": int(stats.get("remote") or 0),
             "transcodes": int(stats.get("transcodes") or 0),
         }
-        row["findings"] = explain(row, 10**9, None, None, "Sonarr" if item.media_type == "episode" else "Radarr")
+        row["issues"] = issues
+        happened = seen.get(item.rating_key) or Counter()
+        causes = [{"cause": c, "streams": n} for c, n in happened.most_common()]
+        row["findings"] = explain(row, 10**9, causes or None, None,
+                                  "Sonarr" if item.media_type == "episode" else "Radarr")
         rows.append(row)
     rows.sort(key=lambda r: (-r["plays"], r["title"]))
     return {

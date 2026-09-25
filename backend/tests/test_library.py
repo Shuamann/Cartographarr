@@ -90,6 +90,35 @@ def test_messy_files(client):
     assert client.get("/api/library/messy?issue=nope").status_code == 400
 
 
+def test_a_file_that_was_converted_for_viewers_counts_as_awkward(client):
+    """Reading the tracks says AAC 5.1 is ordinary. What happened says half
+    the sticks in the house could not play it."""
+    from app.db import session_scope
+    from app.models import MediaItem, StreamSession
+
+    claim(client)
+    seed()
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=77, title="Ordinary Looking", full_title="Ordinary Looking", media_type="movie",
+                         file_bitrate=6000, file_checked_at=datetime.now(UTC), file_container="mkv",
+                         audio_codec="aac", audio_channels=6,
+                         audio_tracks='[{"codec": "aac", "channels": 6, "language": "eng"}]'))
+        db.add(StreamSession(rating_key=77, causes="audio_codec", primary_cause="audio_codec", platform="Roku",
+                             player="A stick", transcode_decision="transcode",
+                             started_at=datetime.now(UTC) - timedelta(days=1)))
+
+    messy = client.get("/api/library/messy?days=30").json()
+    listed = {f["rating_key"]: f for f in messy["files"]}
+    assert 77 in listed, "a file proved awkward by what happened should be listed"
+    assert "audio_converted" in listed[77]["issues"]
+    counts = {c["issue"]: c["files"] for c in messy["counts"]}
+    assert counts["audio_converted"] == 1
+    # And it is not double counted when the track list already said so.
+    assert counts["no_compatible_audio"] >= 1
+    only = client.get("/api/library/messy?issue=audio_converted").json()
+    assert [f["rating_key"] for f in only["files"]] == [77]
+
+
 def test_four_k_verdicts(client):
     claim(client)
     seed()
