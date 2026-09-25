@@ -963,11 +963,18 @@ function PlaybackSection({ path, who }: { path: string; who: string }) {
   const share = p.plays ? Math.round((p.transcoded / p.plays) * 100) : 0;
   const count = (cause: string) => p.stall_causes.find((c) => c.cause === cause)?.stalls ?? 0;
   const elsewhere = count("server") + count("upload") + count("file");
+  // "One stream that kept stalling" is counted with the viewer's side: a
+  // sitting that rebuffers again and again is their line at that moment, or a
+  // file too big for it, rather than anything the server did.
+  const theirs = count("viewer") + count("stream");
   const verdict =
     p.stalls === 0
       ? `No stalls recorded for ${who} in the last ${p.days} days.`
-      : count("viewer") / p.stalls >= 0.5
-        ? `Most stalls look like ${who}'s device or connection: stalls across many titles while nobody else stalls.`
+      : theirs / p.stalls >= 0.5
+        ? count("stream") > count("viewer")
+          ? `Most stalls were single streams that kept stalling: usually ${who}'s connection at the time, or a file ` +
+            "too big to send them."
+          : `Most stalls look like ${who}'s device or connection: stalls across many titles while nobody else stalls.`
         : elsewhere / p.stalls >= 0.5
           ? `Most stalls are not down to ${who}: they came from the ${
               count("file") >= count("server") + count("upload") ? "files being watched" : "server or its upload"

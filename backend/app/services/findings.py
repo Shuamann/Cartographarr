@@ -251,6 +251,9 @@ def explain(file: dict[str, Any], threshold_kbps: int, transcode_causes: list[di
                        "Lower Plex's remote streaming limit or keep smaller versions of busy titles."),
             "viewer": ("the viewer stalls on many titles, so it is their device or connection",
                        "Nothing to change in the file; suggest wired or 5 GHz Wi-Fi, or a lower quality setting."),
+            "stream": ("one sitting stalled again and again, so that stream was not being kept going",
+                       "Usually their connection at the time, or this file being too big to send them. "
+                       "Compare its bitrate with what their other streams manage."),
         }.get(top, ("no pattern yet", "Watch whether it happens again."))
         out.append(_finding(
             "stalls", "high" if top == "file" else "medium", "Stalls",

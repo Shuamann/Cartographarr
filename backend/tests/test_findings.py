@@ -155,3 +155,17 @@ def test_reasons_for_older_plays_are_read_from_tautulli(client, monkeypatch):
     assert [f["key"] for f in detail["findings"]] == ["aac_surround"]
     assert "Roku" in detail["findings"][0]["detail"] and "recent plays" in detail["findings"][0]["detail"]
     assert len(asked) == 3  # only the latest three
+
+
+def test_a_stream_that_kept_stalling_is_explained_as_one():
+    """The commonest stall shape needs its own words, or every file it touches
+    reads as "no pattern yet"."""
+    from app.services.findings import explain
+
+    file = {"title": "A Film", "media_type": "movie", "file_bitrate": 9000, "plays": 4, "remote_plays": 4,
+            "transcodes": 0, "audio_tracks": [{"codec": "aac", "channels": 2}], "subtitle_tracks": [],
+            "video_codec": "h264", "video_resolution": "1080p", "file_container": "mkv"}
+    found = explain(file, 20000, None, [{"cause": "stream", "stalls": 6}], "Radarr")
+    stalls = next(f for f in found if f["key"] == "stalls")
+    assert "again and again" in stalls["detail"]
+    assert "too big to send them" in stalls["fix"]
