@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.36.0 - 2026-09-25
+
+### Added
+- A Globe toggle on the Map tab, beside the other layers. Every layer works on it: places, heat, live streams,
+  banned devices and the country shading. It is remembered, and it survives a theme change, which rebuilds the
+  style underneath
+
 ## 0.35.0 - 2026-09-25
 
 ### Added

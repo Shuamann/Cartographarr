@@ -92,6 +92,9 @@ export default function MapRoute({
   const [showBanned, setShowBanned] = useState(() => localStorage.getItem("layer.banned") !== "off");
   // Countries: shaded by what the list says to do about each, and clickable.
   const [showCountries, setShowCountries] = useState(() => localStorage.getItem("layer.countries") !== "off");
+  // Flat by default: it is the shape people expect a map to be, and it does
+  // not hide half the world behind the planet.
+  const [globe, setGlobe] = useState(() => localStorage.getItem("layer.globe") === "on");
   const blocked = useApi<{ items: { code: string; name: string | null; mode: string; vpn_mode: string | null }[] }>(
     nav.isAdmin && showCountries ? "/geoblocks" : null,
     [showCountries],
@@ -221,6 +224,14 @@ export default function MapRoute({
               />
               Accuracy
             </label>
+            <label className="check" title="Wrap the map round a globe instead of flattening it">
+              <input
+                type="checkbox"
+                checked={globe}
+                onChange={(e) => toggleLayer("globe", e.target.checked, setGlobe)}
+              />
+              Globe
+            </label>
             <label className="check" title="Density instead of individual pins">
               <input
                 type="checkbox"
@@ -307,6 +318,7 @@ export default function MapRoute({
             focusSession={focusSession}
             onFocusUsed={onFocusUsed}
             flyTarget={flyTarget}
+            globe={globe}
             showHeat={showHeat}
             heatMetric={heatMetric}
             banned={showBanned ? bannedPoints.data ?? null : null}
@@ -438,6 +450,7 @@ function MapCanvas({
   banned,
   countryModes,
   onPickCountry,
+  globe,
 }: {
   features: MapPoint[];
   onSelect: (feature: MapPoint) => void;
@@ -455,6 +468,7 @@ function MapCanvas({
   /* Country code to flag, warn or stop. Null when the layer is off. */
   countryModes: Record<string, string> | null;
   onPickCountry: (code: string, name: string) => void;
+  globe: boolean;
 }) {
   const nav = useNav();
   const openDeviceRef = useRef(nav.openDevice);
@@ -463,6 +477,15 @@ function MapCanvas({
   const map = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  /* Round or flat. Set again after a restyle as well as on the switch, since
+     a new style brings its own projection with it and `ready` goes false and
+     back whenever the theme flips. */
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    m.setProjection({ type: globe ? "globe" : "mercator" });
+  }, [ready, globe]);
 
   // Map event handlers are registered once and would otherwise capture the
   // first render's values forever, so the live data is read through refs.

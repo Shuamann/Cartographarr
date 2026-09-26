@@ -22,7 +22,8 @@ rather than the player name, because anyone can rename "Living Room TV".
 
 - **Map** every play, with the location's real uncertainty drawn around it.
   VPN locations are purple, banned devices red, live streams amber. A heat map
-  can count plays, devices or users.
+  can count plays, devices or users, and a **Globe** toggle wraps the map round
+  a planet instead of flattening it.
 - **Live activity** on the dashboard and the map, with the same card in both:
   what is playing, how, from where, and buttons to stop it or ban the device
 - **People**: every user and their devices in one list. Open anyone for where
