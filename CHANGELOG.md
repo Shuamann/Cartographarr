@@ -4,6 +4,12 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.36.2 - 2026-09-26
+
+### Fixed
+- The meridians on the home page globe stopped at 80 degrees, leaving a bare cap where they should meet at the pole.
+  They now run the whole way. Parallels still stop short, since at the pole one is a point
+
 ## 0.36.1 - 2026-09-26
 
 ### Added

@@ -30,9 +30,12 @@ export function graticule(step = 15): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (let lon = -180; lon < 180; lon += step) {
     const line: [number, number][] = [];
-    for (let lat = -80; lat <= 80; lat += 5) line.push([lon, lat]);
+    // All the way to the poles, because meridians meeting there is the thing
+    // that makes a wireframe read as a sphere. Stopping at 80 left a bare cap.
+    for (let lat = -90; lat <= 90; lat += 5) line.push([lon, lat]);
     features.push({ type: "Feature", properties: { kind: "meridian" }, geometry: { type: "LineString", coordinates: line } });
   }
+  // Parallels stop short on purpose: at the pole one is a point.
   for (let lat = -75; lat <= 75; lat += step) {
     const line: [number, number][] = [];
     for (let lon = -180; lon <= 180; lon += 5) line.push([lon, lat]);
