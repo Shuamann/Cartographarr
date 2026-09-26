@@ -45,6 +45,17 @@ function luminance({ r, g, b }: Rgb): number {
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
+/* How far apart two colours are to read, the WCAG way: 21 is black on white,
+ * 1 is a colour on itself. Body text wants 4.5. Used by the theme editor to
+ * say so before somebody saves text they cannot read. */
+export function contrast(a: string, b: string): number | null {
+  const one = parse(a);
+  const two = parse(b);
+  if (!one || !two) return null;
+  const [light, dark] = [luminance(one), luminance(two)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
+}
+
 const WHITE: Rgb = { r: 255, g: 255, b: 255 };
 const BLACK: Rgb = { r: 10, g: 14, b: 20 };
 

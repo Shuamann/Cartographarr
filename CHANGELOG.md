@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.36.1 - 2026-09-26
+
+### Added
+- The theme editor says when the text and the page are too close to read, with the actual ratio. It is the one
+  choice a colour picker can make that cannot be undone by looking, since the picker ends up on the page nobody
+  can read
+
 ## 0.36.0 - 2026-09-25
 
 ### Added

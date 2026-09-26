@@ -1,6 +1,6 @@
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
-import { ACCENTS, SCHEMES, applyAccent, setScheme, type Parts, type Scheme } from "../theme/accent";
+import { ACCENTS, SCHEMES, applyAccent, contrast, setScheme, type Parts, type Scheme } from "../theme/accent";
 import Tasks from "../components/Tasks";
 import { useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
@@ -1260,6 +1260,12 @@ function ThemeEditor({ value, onChange }: { value: string; onChange: (colours: s
   const shown = getComputedStyle(document.documentElement);
   const showing = (key: keyof Parts) => mine[key] ?? shown.getPropertyValue(`--${key}`).trim() ?? "#000000";
 
+  // The one thing a colour picker can do that cannot be undone by looking:
+  // text nobody can read, on a page nobody can then find the picker on.
+  const worst = [contrast(showing("ink"), showing("bg")), contrast(showing("ink"), showing("surface"))]
+    .filter((n): n is number => n != null);
+  const faint = worst.length && Math.min(...worst) < 4.5 ? Math.min(...worst) : null;
+
   function put(next: Parts) {
     const kept = Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Parts;
     const whole: Scheme = { ...scheme, [mode]: kept };
@@ -1298,6 +1304,12 @@ function ThemeEditor({ value, onChange }: { value: string; onChange: (colours: s
       {mode !== "dark" && (
         <p className="muted small">
           The presets are dark schemes. On the light theme, pick the four colours yourself.
+        </p>
+      )}
+      {faint && (
+        <p className="note bad-note">
+          This text is hard to read on these colours ({faint.toFixed(1)} to 1, and text wants 4.5). Move the text and
+          the page further apart.
         </p>
       )}
       <div className="grid2 theme-parts">
