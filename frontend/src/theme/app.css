@@ -737,6 +737,78 @@ code {
   stroke: none;
 }
 
+/* The release picker: a tile each, because the decision needs all of a
+   release at once rather than a row to scan across. */
+.release-filters {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.release-filters label {
+  gap: 4px;
+}
+
+.release-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.release-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.release-tile.blocked {
+  opacity: 0.6;
+}
+
+.release-tile header {
+  display: grid;
+  gap: 6px;
+}
+
+.release-badges {
+  gap: 4px;
+}
+
+.release-fixes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ok);
+  font-size: 0.85rem;
+}
+
+.release-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.release-facts dt {
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.release-facts dd {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.release-tile .btn {
+  margin-top: auto;
+}
+
 /* Big for what they are: the filter row, and a tick beside each file. */
 .big-filters {
   align-items: flex-end;

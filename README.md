@@ -300,9 +300,13 @@ Open any file for what exactly is wrong with it, named from its own tracks and
 how it played, and how to fix it. For plays from before streams were recorded,
 the reason is read back from Tautulli.
 
-**Find a replacement** has Radarr or Sonarr search the indexers and compares
-each release with the current file: formats, size, rough bitrate, which
-problems it would fix, and whether it waits for you. Download one and it is
+**Find a replacement** has Radarr or Sonarr search the indexers and shows each
+release as a tile against the current file: what it would fix, what it is made
+of, size, rough bitrate, seeders, age, indexer and the profile score. Filter by
+resolution, source, size, or whether the service would import it by itself.
+Best first means most of this file's problems solved, then the service's own
+score, rather than one blended number that would have to decide what a fixed
+soundtrack is worth in custom format points. Download one and it is
 followed until ready. Radarr and Sonarr import an upgrade by themselves;
 anything else, which is most compatibility swaps, waits under **Replacements**
 beside the current file to **Confirm** (import it in place of the old file) or

@@ -207,3 +207,26 @@ def test_live_shows_the_queue_entry(client, monkeypatch):
     live = client.get(f"/api/library/replacements/{queued['id']}/live").json()
     assert live["status"] == "downloading" and live["live"]["queue"]["progress"] == 0.75
     assert live["live"]["queue"]["time_left"] == "00:04:10" and live["live"]["queue"]["client"] == "NZBGet"
+
+
+def test_what_it_fixes_comes_first_then_the_profile_score():
+    """Two numbers, not one blended one: how much of this file's trouble a
+    release would fix, then what the service thinks of it against the
+    profile. Blending them would mean deciding what a fixed soundtrack is
+    worth in custom format points, which nothing says."""
+    from app.services.replacements import compare_releases
+
+    current = {"findings": [{"key": "no_compatible_audio"}]}
+    releases = [
+        {"guid": "well-rated", "indexerId": 1, "title": "Film.1080p.WEB-DL.x264", "size": 5_000_000_000,
+         "approved": True, "customFormatScore": 500},
+        {"guid": "fixes-it", "indexerId": 1, "title": "Film.1080p.WEB-DL.DDP5.1.x264", "size": 6_000_000_000,
+         "approved": True, "customFormatScore": 0},
+        {"guid": "fixes-it-too", "indexerId": 1, "title": "Film.1080p.WEB-DL.DDP5.1.H.264", "size": 7_000_000_000,
+         "approved": True, "customFormatScore": 90},
+    ]
+    out = compare_releases(releases, current, duration_ms=2 * 3600 * 1000, threshold_kbps=20000)
+    # Both the ones that fix the audio come first; between them, the profile
+    # decides; the highly rated one that fixes nothing is last.
+    assert [r["guid"] for r in out] == ["fixes-it-too", "fixes-it", "well-rated"]
+    assert out[0]["custom_format_score"] == 90 and out[0]["fixes"]

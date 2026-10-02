@@ -911,22 +911,23 @@ function ago(iso: string | null | undefined): string {
 
 const CHANNELS: Record<number, string> = { 2: "stereo", 6: "5.1", 8: "7.1" };
 
-/* Releases Radarr or Sonarr can find, each against the current file, in a
- * pop-up over a dimmed page. One compact row each, sortable by any column. */
-type SortKey = "rank" | "fixes" | "held" | "quality" | "score" | "size" | "bitrate" | "video" | "audio" | "seeders" | "age";
+/* Releases Radarr or Sonarr can find, each against the current file.
+ *
+ * A tile each rather than a row, because the decision needs the whole of a
+ * release at once: what it would fix, what it is made of, how big, how old,
+ * and whether the service will take it by itself. Best first, which means
+ * most of this file's problems solved, then the service's own score against
+ * the profile.
+ */
+type SortKey = "best" | "score" | "size" | "bitrate" | "seeders" | "age";
 
-const SORTS: Record<SortKey, (r: Release) => number | string> = {
-  rank: () => 0,
-  fixes: (r) => r.fixes.length,
-  held: (r) => (r.held ? 1 : 0),
-  quality: (r) => r.quality ?? "",
-  score: (r) => r.custom_format_score ?? -1e9,
-  size: (r) => r.size ?? 0,
-  bitrate: (r) => r.estimated_bitrate ?? 0,
-  video: (r) => `${r.parsed.video_codec ?? ""}${r.parsed.hdr ?? ""}`,
-  audio: (r) => `${r.parsed.audio_codec ?? ""}${r.parsed.audio_channels ?? ""}`,
-  seeders: (r) => r.seeders ?? -1,
-  age: (r) => r.age_days ?? 1e9,
+const SORTS: Record<SortKey, { label: string; of: (r: Release) => number }> = {
+  best: { label: "Best first", of: () => 0 },
+  score: { label: "Profile score", of: (r) => r.custom_format_score ?? -1e9 },
+  size: { label: "Smallest", of: (r) => -(r.size ?? 0) },
+  bitrate: { label: "Lowest bitrate", of: (r) => -(r.estimated_bitrate ?? 0) },
+  seeders: { label: "Most seeders", of: (r) => r.seeders ?? -1 },
+  age: { label: "Newest", of: (r) => -(r.age_days ?? 1e9) },
 };
 
 function ReleasePicker({
@@ -942,24 +943,18 @@ function ReleasePicker({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const found = useApi<{ service: string; current: FileInfo; releases: Release[] }>(`/library/file/${ratingKey}/releases`);
-  const [sort, setSort] = useState<SortKey>("rank");
-  const [ascending, setAscending] = useState(false);
+  const [sort, setSort] = useState<SortKey>("best");
+  const [resolution, setResolution] = useState("");
+  const [protocol, setProtocol] = useState("");
+  const [maxSize, setMaxSize] = useState(0);
   const [hideBlocked, setHideBlocked] = useState(true);
+  const [hideHeld, setHideHeld] = useState(false);
   const [queued, setQueued] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     ref.current?.showModal();
   }, []);
-
-  function sortBy(key: SortKey) {
-    if (sort === key) setAscending(!ascending);
-    else {
-      setSort(key);
-      // Smaller is better for age; bigger for the rest.
-      setAscending(key === "age" || key === "quality");
-    }
-  }
 
   async function queue(release: Release) {
     const how = release.held
@@ -976,23 +971,20 @@ function ReleasePicker({
   }
 
   const all = found.data?.releases ?? [];
-  const blockedCount = all.filter((r) => r.blocked).length;
-  const visible = all.filter((r) => !hideBlocked || !r.blocked);
-  const rows =
-    sort === "rank"
-      ? visible
-      : [...visible].sort((a, b) => {
-          const [x, y] = [SORTS[sort](a), SORTS[sort](b)];
-          const cmp = typeof x === "string" ? x.localeCompare(String(y)) : x - (y as number);
-          return ascending ? cmp : -cmp;
-        });
+  const resolutions = [...new Set(all.map((r) => r.parsed.resolution).filter(Boolean))] as string[];
+  const protocols = [...new Set(all.map((r) => r.protocol).filter(Boolean))] as string[];
+  const sizes = all.map((r) => r.size ?? 0).filter(Boolean);
+  const biggest = sizes.length ? Math.max(...sizes) : 0;
 
-  const head = (key: SortKey, text: string, hint?: string) => (
-    <th className={key === "rank" ? undefined : "sortable"} title={hint} onClick={() => sortBy(key)} aria-sort={sort === key ? (ascending ? "ascending" : "descending") : "none"}>
-      {text}
-      {sort === key ? (ascending ? " \u25b2" : " \u25bc") : ""}
-    </th>
+  const visible = all.filter(
+    (r) =>
+      (!hideBlocked || !r.blocked) &&
+      (!hideHeld || !r.held) &&
+      (!resolution || r.parsed.resolution === resolution) &&
+      (!protocol || r.protocol === protocol) &&
+      (!maxSize || (r.size ?? 0) <= maxSize),
   );
+  const rows = sort === "best" ? visible : [...visible].sort((a, b) => SORTS[sort].of(b) - SORTS[sort].of(a));
 
   return (
     <dialog ref={ref} className="dialog wide" onClose={onClose} aria-labelledby="release-picker-title">
@@ -1024,88 +1016,142 @@ function ReleasePicker({
 
       {found.data && (
         <>
-          <div className="row-between release-toolbar">
-            <span className="muted small">
-              {visible.length} of {all.length} releases. <span className="pill ok">Waits</span> means it is held for you to
-              confirm; <span className="pill warn">Auto</span> means {label} imports it by itself.
-            </span>
-            {blockedCount > 0 && (
-              <label className="check small">
-                <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
-                Hide {blockedCount} {label} would refuse
+          <div className="row wrap release-filters">
+            <label>
+              Order
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                {(Object.keys(SORTS) as SortKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    {SORTS[key].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Resolution
+              <select value={resolution} onChange={(e) => setResolution(e.target.value)}>
+                <option value="">Any</option>
+                {resolutions.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {protocols.length > 1 && (
+              <label>
+                Source
+                <select value={protocol} onChange={(e) => setProtocol(e.target.value)}>
+                  <option value="">Either</option>
+                  {protocols.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
               </label>
             )}
-          </div>
-          {rows.length === 0 ? (
-            <p className="muted">No releases found.</p>
-          ) : (
-            <div className="release-table-wrap">
-              <table className="table release-table">
-                <thead>
-                  <tr>
-                    {head("fixes", "Fixes", "Problems with the current file this release would likely fix")}
-                    <th>Release</th>
-                    {head("held", "Import", "Whether it waits for you or imports by itself")}
-                    {head("quality", "Quality")}
-                    {head("score", "Score", `${label}'s custom format score`)}
-                    {head("size", "Size")}
-                    {head("bitrate", "Mbps", "Estimated from size and running time")}
-                    {head("video", "Video")}
-                    {head("audio", "Audio")}
-                    {head("seeders", "Peers")}
-                    {head("age", "Age")}
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.guid} className={r.blocked ? "blocked" : undefined}>
-                      <td>
-                        {r.fixes.length > 0 ? (
-                          <span className="pill ok" title={r.fixes.join("\n")}>
-                            {r.fixes.length === 1 ? r.fixes[0] : `${r.fixes.length} fixes`}
-                          </span>
-                        ) : (
-                          <span className="muted">none</span>
-                        )}
-                      </td>
-                      <td className="release-name" title={[r.title, r.indexer, ...r.rejections].filter(Boolean).join("\n")}>
-                        <span className="clip">{r.title}</span>
-                        {r.languages.length > 0 && r.languages.join(",") !== "English" && (
-                          <span className="muted"> {r.languages.join(", ")}</span>
-                        )}
-                        {r.blocked && <span className="danger-text"> {r.rejections.join("; ")}</span>}
-                      </td>
-                      <td>
-                        {r.held ? <span className="pill ok">Waits</span> : <span className="pill warn">Auto</span>}
-                      </td>
-                      <td>{r.quality ?? ""}</td>
-                      <td className="num" title={r.custom_formats?.join("\n") || undefined}>
-                        {r.custom_format_score ?? ""}
-                      </td>
-                      <td className="num">{size(r.size)}</td>
-                      <td className="num">{r.estimated_bitrate ? (r.estimated_bitrate / 1000).toFixed(1) : ""}</td>
-                      <td>
-                        {[r.parsed.video_codec?.toUpperCase(), r.parsed.bit_depth ? `${r.parsed.bit_depth}b` : null, r.parsed.hdr]
-                          .filter(Boolean)
-                          .join(" ")}
-                      </td>
-                      <td>
-                        {r.parsed.audio_codec
-                          ? `${r.parsed.audio_codec.toUpperCase()}${r.parsed.audio_channels ? ` ${CHANNELS[r.parsed.audio_channels] ?? ""}` : ""}`
-                          : ""}
-                      </td>
-                      <td className="num">{r.seeders ?? ""}</td>
-                      <td className="num">{r.age_days != null ? `${r.age_days}d` : ""}</td>
-                      <td>
-                        <button className="btn small-btn" onClick={() => queue(r)} disabled={queued !== null}>
-                          {queued === r.guid ? "Queued" : "Get"}
-                        </button>
-                      </td>
-                    </tr>
+            {biggest > 0 && (
+              <label>
+                At most
+                <select value={maxSize} onChange={(e) => setMaxSize(Number(e.target.value))}>
+                  <option value={0}>Any size</option>
+                  {[5, 10, 15, 20, 30, 50].map((gb) => (
+                    <option key={gb} value={gb * 1e9}>
+                      {gb} GB
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </label>
+            )}
+            <label className="check">
+              <input type="checkbox" checked={hideHeld} onChange={(e) => setHideHeld(e.target.checked)} />
+              Only ones it will import by itself
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
+              Hide what {label} would refuse
+            </label>
+          </div>
+
+          <p className="muted small">
+            {rows.length} of {all.length} releases. Best first means most of this file's problems solved, then{" "}
+            {label}&apos;s own score against your profile. <span className="pill ok">Waits</span> is held for you to
+            confirm; <span className="pill warn">Auto</span> is imported by itself.
+          </p>
+
+          {rows.length === 0 ? (
+            <p className="muted">Nothing matches those filters.</p>
+          ) : (
+            <div className="release-tiles">
+              {rows.map((r) => (
+                <article key={r.guid} className={r.blocked ? "release-tile blocked" : "release-tile"}>
+                  <header>
+                    <strong className="clip" title={r.title}>
+                      {r.title}
+                    </strong>
+                    <span className="row wrap release-badges">
+                      {r.parsed.resolution && <span className="pill">{r.parsed.resolution}</span>}
+                      {r.parsed.source && <span className="pill">{r.parsed.source}</span>}
+                      {r.parsed.video_codec && <span className="pill">{r.parsed.video_codec}</span>}
+                      {r.parsed.hdr && <span className="pill">{r.parsed.hdr}</span>}
+                      {r.parsed.audio_codec && (
+                        <span className="pill">
+                          {r.parsed.audio_codec}
+                          {r.parsed.audio_channels ? ` ${r.parsed.audio_channels}ch` : ""}
+                        </span>
+                      )}
+                      <span className={r.held ? "pill ok" : "pill warn"}>{r.held ? "Waits" : "Auto"}</span>
+                    </span>
+                  </header>
+
+                  {r.fixes.length > 0 && (
+                    <ul className="release-fixes">
+                      {r.fixes.map((fix) => (
+                        <li key={fix}>{fix}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <dl className="release-facts">
+                    <div>
+                      <dt>Size</dt>
+                      <dd>{size(r.size)}</dd>
+                    </div>
+                    <div>
+                      <dt>Bitrate</dt>
+                      <dd>{mbps(r.estimated_bitrate)}</dd>
+                    </div>
+                    <div>
+                      <dt>Profile score</dt>
+                      <dd>{r.custom_format_score ?? "0"}</dd>
+                    </div>
+                    <div>
+                      <dt>Seeders</dt>
+                      <dd>{r.seeders ?? "n/a"}</dd>
+                    </div>
+                    <div>
+                      <dt>Age</dt>
+                      <dd>{r.age_days == null ? "?" : `${r.age_days} d`}</dd>
+                    </div>
+                    <div>
+                      <dt>From</dt>
+                      <dd className="clip">{r.indexer ?? "?"}</dd>
+                    </div>
+                  </dl>
+
+                  {(r.custom_formats?.length ?? 0) > 0 && (
+                    <p className="muted small clip">{r.custom_formats?.join(", ")}</p>
+                  )}
+                  {r.rejections.length > 0 && (
+                    <p className="muted small">{r.rejections.join(". ")}</p>
+                  )}
+
+                  <button className="btn" disabled={Boolean(queued)} onClick={() => queue(r)}>
+                    {queued === r.guid ? "Queued" : "Download this"}
+                  </button>
+                </article>
+              ))}
             </div>
           )}
         </>
@@ -1114,8 +1160,7 @@ function ReleasePicker({
   );
 }
 
-/* Whether two descriptions really differ, not just in how much is known:
- * "H264" from a release name against "H264 8-bit" from the file is the same. */
+
 function differs(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
   const x = a.toLowerCase().trim();

@@ -157,7 +157,19 @@ def compare_releases(
             "rejections": reasons,
             "blocked": bool(blocking),
         })
-    out.sort(key=lambda x: (x["blocked"], -len(x["fixes"]), not x["held"], x["size"] or 0))
+    # Best first, on two numbers rather than one blended one. How many of this
+    # file's problems a release would fix is this app's question and comes
+    # first. The custom format score is the service's own opinion of the
+    # release against the profile, and settles the rest. Blending them would
+    # mean picking what one problem is worth in format points, and nothing
+    # about either number says that.
+    out.sort(key=lambda x: (
+        x["blocked"],
+        -len(x["fixes"]),
+        x["held"],
+        -(x["custom_format_score"] or 0),
+        x["size"] or 0,
+    ))
     return out
 
 

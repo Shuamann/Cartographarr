@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.39.0 - 2026-10-01
+
+### Changed
+- ffmpeg and ffprobe come from a pinned static build rather than Debian's packages. Installing them with apt pulled
+  four hundred packages and took ten minutes on a home line, for about 300 MB of image; two static binaries copied
+  from `mwader/static-ffmpeg:9.0.2` are a fraction of that, pull in parallel with the UI build, and sit above the
+  source so an ordinary code change never recopies them
+
+### Added
+- The release picker is tiles rather than table rows: what each release would fix, what it is made of, how big, how
+  fast, how old, where from, and the profile score, all at once. Filter by resolution, source, size, and whether the
+  service would import it by itself or hold it for you
+- Releases are ordered on two numbers rather than one blended one: how many of this file's problems a release would
+  fix, then the service's own score against your profile. Blending them would mean deciding what a fixed soundtrack
+  is worth in custom format points, and nothing says that
+
 ## 0.38.0 - 2026-10-01
 
 ### Added
