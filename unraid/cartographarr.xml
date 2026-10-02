@@ -1,0 +1,93 @@
+<?xml version="1.0"?>
+<!--
+  Unraid container template.
+
+  Copy this to /boot/config/plugins/dockerMan/templates-user/ on the server and
+  the Docker tab can add Cartographarr from it, with every path, port and
+  variable as a field you can edit afterwards. See the README under "On Unraid".
+
+  The image is built on the server rather than pulled, so Repository is a local
+  tag. Build it first, or the template has nothing to start.
+-->
+<Container version="2">
+  <Name>cartographarr</Name>
+  <Repository>cartographarr:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Shuamann/Cartographarr/issues</Support>
+  <Project>https://github.com/Shuamann/Cartographarr</Project>
+  <Overview>
+    Where your Plex library is watched from, and what is wrong with it. Reads Tautulli and Plex: a map of every
+    play, live activity, rules that act on streams, shared account signals, reported problems, and a library view
+    that says which files cause trouble and what to do about them.
+
+    Mount your media shares at the same paths Plex reports if you want to tidy a file's tracks (subtitles, audio,
+    containers). Everything else works without them.
+  </Overview>
+  <Category>MediaApp:Video Tools:Utilities Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:6277]/</WebUI>
+  <TemplateURL/>
+  <!-- No icon shipped: the app's own is uploaded in Settings, Appearance, and
+       this one is only the tile in the Docker tab. Point it anywhere you like. -->
+  <Icon/>
+  <ExtraParams>--user 99:100</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI port" Target="6277" Default="6277" Mode="tcp"
+          Description="The port the interface answers on. 6277 spells MAPS on a phone keypad and is clear of the usual self-hosted stack."
+          Type="Port" Display="always" Required="true" Mask="false">6277</Config>
+
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/cartographarr" Mode="rw"
+          Description="The database, the GeoIP files, uploaded branding and cached posters all live here."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/cartographarr</Config>
+
+  <Config Name="Time zone" Target="TZ" Default="America/Chicago" Mode=""
+          Description="Rules that use a time of day go by this."
+          Type="Variable" Display="always" Required="true" Mask="false">America/Chicago</Config>
+
+  <Config Name="Data directory" Target="DATA_DIR" Default="/data" Mode=""
+          Description="Where the app writes inside the container. Leave as it is unless you moved the appdata mount."
+          Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
+
+  <!--
+    Media, for tidying a file's tracks. The container path must match what Plex
+    reports, which is what Library shows under "Stored on" and at the bottom of
+    a file card. Leave any of these empty if you do not have that share, and use
+    "Add another Path, Port, Variable, Label or Device" in the Docker tab for
+    the ones not listed here.
+
+    Read write, because tidying replaces the file it tidied. Set a share to
+    read only and that file simply cannot be tidied; nothing else minds.
+  -->
+  <Config Name="Movies" Target="/movies" Default="/mnt/user/movies" Mode="rw"
+          Description="Your films, at the path Plex reports."
+          Type="Path" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="TV" Target="/tv" Default="/mnt/user/tv" Mode="rw"
+          Description="Your series, at the path Plex reports."
+          Type="Path" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Kids films" Target="/kidsmovies" Default="/mnt/user/kidsmovies" Mode="rw"
+          Description="A second film library, if you keep one."
+          Type="Path" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Kids TV" Target="/kidstv" Default="/mnt/user/kidstv" Mode="rw"
+          Description="A second series library, if you keep one."
+          Type="Path" Display="always" Required="false" Mask="false"/>
+
+  <Config Name="Anime films" Target="/animemovies" Default="/mnt/user/animemovies" Mode="rw"
+          Description="Another film library, if you keep one."
+          Type="Path" Display="advanced" Required="false" Mask="false"/>
+
+  <Config Name="Anime series" Target="/animetv" Default="/mnt/user/animetv" Mode="rw"
+          Description="Another series library, if you keep one."
+          Type="Path" Display="advanced" Required="false" Mask="false"/>
+</Container>

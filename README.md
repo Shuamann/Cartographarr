@@ -66,10 +66,30 @@ cycle with nothing new takes about a tenth of a second.
 ### On Unraid
 
 Data lives in `/mnt/user/appdata/cartographarr` and the container runs as
-`99:100` to match. Using the Docker template instead of compose: map `/data` to
-your appdata path and publish port 6277.
+`99:100` to match.
 
-Building from a clone, and updating later with the same line:
+**With the template**, so every path and port is a field in the Docker tab
+rather than a flag you have to remember. Build the image once, then:
+
+```bash
+cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t cartographarr:latest .
+cp unraid/cartographarr.xml /boot/config/plugins/dockerMan/templates-user/
+```
+
+Docker tab, **Add Container**, pick `cartographarr` from the template list at
+the top. Fill in the appdata path, the port, your time zone, and a path per
+media share: the container side must match what Plex reports (`/movies`,
+`/kidsmovies`), the host side is wherever that share really lives. Leave a
+media path empty if you do not have it, and use **Add another Path, Port,
+Variable, Label or Device** for any the template does not list.
+
+Afterwards, **Edit** on the container is where mounts are added or changed, and
+Apply rebuilds it with the same settings. To update: build the image again with
+the line above and press **Apply** on the container, or leave the template and
+run the one liner below instead.
+
+**Without the template**, building from a clone and updating later with the
+same line:
 
 ```bash
 cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t cartographarr:latest . && docker rm -f cartographarr && docker run -d --name cartographarr --restart unless-stopped -u 99:100 -p 6277:6277 -v /mnt/user/appdata/cartographarr:/data -e DATA_DIR=/data -e TZ=Etc/UTC cartographarr:latest

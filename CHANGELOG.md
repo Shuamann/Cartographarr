@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.42.2 - 2026-10-02
+
+### Added
+- An Unraid container template, in unraid/cartographarr.xml. Copy it to the templates-user folder and the Docker tab
+  adds Cartographarr with every path, port and variable as a field, media shares included, so mounts are edited in
+  the interface rather than remembered as flags on a command
+
 ## 0.42.1 - 2026-10-02
 
 ### Added
