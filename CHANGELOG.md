@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.45.1 - 2026-10-02
+
+### Changed
+- The Unraid template now defaults the media mount to /mnt/user/data/media rather than /mnt/user, and says in the
+  second mount's description that a remote share under /mnt/remotes belongs there. Both host paths stay editable
+  from Edit on the container; only the container side, /media and /media2, is fixed, because that is what Settings
+  is told about. The README and compose file show two mounts the same way
+
 ## 0.45.0 - 2026-10-02
 
 ### Fixed

@@ -60,21 +60,30 @@
   <!--
     Media, for tidying a file's tracks.
 
-    One mount, not one per library: point this at the parent of your libraries
-    and the app finds each one underneath it, then shows what it matched under
-    Settings, Behaviour, Tidying files. A second is there because libraries are
-    often split across two shares or two pools. Leave both empty and everything
-    except tidying still works.
+    One mount, not one per library: point this at the directory your libraries
+    sit in and the app finds each one underneath it, then shows what it matched
+    under Settings, Library and files. It does not matter whether the names
+    match what Plex reports, because a library whose name means nothing here is
+    found by its files instead.
+
+    A second mount is there because libraries are commonly split across two
+    shares, two pools, or an array share and a remote one. A remote mount under
+    /mnt/remotes works the same as a local share. Leave both empty and
+    everything except tidying still works.
 
     Read write, because tidying replaces the file it tidied. Set a share to
     read only and its files simply cannot be tidied; nothing else minds.
+
+    Both are editable here after the container is made: Edit, change the host
+    path, Apply. The container side (/media, /media2) is what the app is told
+    about in Settings, so leave those alone.
   -->
-  <Config Name="Media" Target="/media" Default="/mnt/user" Mode="rw"
-          Description="The directory holding your libraries. The app looks for each one underneath it and says what it found in Settings, Behaviour, Tidying files."
+  <Config Name="Media" Target="/media" Default="/mnt/user/data/media" Mode="rw"
+          Description="The directory your libraries sit in, for example /mnt/user/data/media. The app looks for each library underneath it, by name where the names match and by the files themselves where they do not, and says what it found under Settings, Library and files."
           Type="Path" Display="always" Required="false" Mask="false"/>
 
   <Config Name="Media (second)" Target="/media2" Default="" Mode="rw"
-          Description="A second place libraries live, if they are split across shares or pools. Leave empty if they are not."
+          Description="A second place libraries live, if they are split across shares or pools. A remote share works here too, at its path under /mnt/remotes, for example /mnt/remotes/SERVER_SHARE/media. Leave empty if everything is in one place."
           Type="Path" Display="always" Required="false" Mask="false"/>
 
 </Container>

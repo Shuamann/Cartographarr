@@ -23,7 +23,9 @@ services:
       # it under Settings, Behaviour, Tidying files: each library is looked for
       # underneath it and the table there says what was found. Read write,
       # because tidying replaces the file it tidied.
-      # - /mnt/user:/media
+      # - /mnt/user/data/media:/media
+      # A second, for libraries kept elsewhere, a remote share included:
+      # - /mnt/remotes/SERVER_SHARE/media:/media2
 
     # One secrets file, shared with local dev. Anything set here wins over the
     # UI and renders read-only in Settings; omit a key entirely to let the UI

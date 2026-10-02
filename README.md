@@ -78,13 +78,15 @@ cp unraid/cartographarr.xml /boot/config/plugins/dockerMan/templates-user/
 
 Docker tab, **Add Container**, pick `cartographarr` from the template list at
 the top. Fill in the appdata path, the port, your time zone, and the media
-path: point it at the directory holding your libraries, `/mnt/user` or
-`/mnt/user/media`, rather than at each library in turn. A second media path is
-there for libraries split across another share or pool. Leave both empty if you
-do not want to tidy files.
+path: point it at the directory your libraries sit in, `/mnt/user/data/media`
+or wherever yours is, rather than at each library in turn. **Media (second)**
+is for libraries kept somewhere else, another pool or a remote share mounted
+under `/mnt/remotes`. Leave both empty if you do not want to tidy files.
 
-Afterwards, **Edit** on the container is where mounts are added or changed, and
-Apply rebuilds it with the same settings. To update: build the image again with
+The host side of each is a field, so **Edit** on the container is where mounts
+are changed afterwards, and Apply rebuilds it with the same settings. Leave the
+container side alone: `/media` and `/media2` are the names the app is given in
+Settings. To update: build the image again with
 the line above and press **Apply** on the container, or leave the template and
 run the one liner below instead.
 
@@ -101,7 +103,13 @@ To tidy a file's tracks, the container also needs to read the media. Mount the
 directory your libraries sit in rather than one share at a time:
 
 ```bash
--v /mnt/user:/media
+-v /mnt/user/data/media:/media
+```
+
+A library kept somewhere else, a remote share included, is a second mount:
+
+```bash
+-v /mnt/remotes/SERVER_SHARE/media:/media2
 ```
 
 Then under **Settings, Library and files**, add `/media` to the mounted
