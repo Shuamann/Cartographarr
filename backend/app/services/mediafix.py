@@ -69,20 +69,120 @@ def path_map() -> list[tuple[str, str]]:
     return pairs
 
 
+def roots() -> list[str]:
+    """The mounted directories to look under, in the order they were given."""
+    raw = (current().media_roots or "").strip()
+    return [part.strip().rstrip("/") for part in raw.replace(";", ",").split(",") if part.strip()]
+
+
+_found: dict[str, str] = {}
+_found_for: tuple[tuple[str, ...], tuple[tuple[str, str], ...]] | None = None
+"""Where each Plex library turned out to live in this container.
+
+Worked out once per library by trying, then kept, because the answer is the
+same for every file in it and the alternative is several stat calls a file on a
+page listing two hundred. Thrown away whenever the settings it was derived from
+change, so a wrong guess is never kept past the fix."""
+
+
+def _memory() -> dict[str, str]:
+    global _found, _found_for
+    now = (tuple(roots()), tuple(path_map()))
+    if now != _found_for:
+        _found, _found_for = {}, now
+    return _found
+
+
+def library_of(file_path: str) -> str:
+    """The top directory of a path, which is the library as Plex reports it."""
+    plex_path = PurePosixPath(file_path.replace("\\", "/"))
+    parts = plex_path.parts
+    if len(parts) > 2 and parts[0] == "/":
+        return "/" + parts[1]
+    return str(plex_path.parent)
+
+
+def _guesses(file_path: str) -> list[str]:
+    """Every place this file might be, best first."""
+    plex_path = PurePosixPath(file_path.replace("\\", "/"))
+    library = library_of(file_path)
+    tail = plex_path.relative_to(library)
+    found = _memory()
+
+    first: list[str] = []
+    known = found.get(library)
+    if known:
+        first.append(str(PurePosixPath(known) / tail))
+    for plex, here in path_map():
+        if file_path.startswith(plex):
+            first.append(str(PurePosixPath(here) / plex_path.relative_to(plex)))
+
+    rest = [file_path]
+    for root in roots():
+        # A root holding the libraries, then a root that is the library.
+        rest.append(str(PurePosixPath(root) / str(plex_path).lstrip("/")))
+        rest.append(str(PurePosixPath(root) / tail))
+    seen: set[str] = set()
+    return [c for c in [*first, *rest] if not (c in seen or seen.add(c))]
+
+
 def local_path(file_path: str | None) -> str | None:
-    """Where this container can read that file, or None if it cannot."""
+    """Where this container can read that file, or None if it cannot.
+
+    In order: wherever this library was last found, anything media_path_map
+    says, the path exactly as Plex gives it, then that path hung under each
+    media root with and without its library name. The first that exists wins.
+    """
     import os
 
     if not file_path:
         return None
-    candidates = [file_path]
-    for plex, here in path_map():
-        if file_path.startswith(plex):
-            candidates.insert(0, str(PurePosixPath(here) / PurePosixPath(file_path).relative_to(plex)))
-    for candidate in candidates:
+    library = library_of(file_path)
+    tail = str(PurePosixPath(file_path.replace("\\", "/")).relative_to(library))
+    for candidate in _guesses(file_path):
         if os.path.exists(candidate):
+            if candidate.endswith(tail):
+                home = candidate[: -len(tail)].rstrip("/")
+                if home and home != library:
+                    _memory()[library] = home
             return candidate
     return None
+
+
+def where_libraries(paths: list[str]) -> list[dict[str, Any]]:
+    """For each library among these files, where it was found and how.
+
+    This is what Settings shows instead of asking somebody to work out a path
+    map: one row per library Plex reports, saying either the directory it was
+    found in or that it was not found at all.
+    """
+    import os
+
+    by_library: dict[str, list[str]] = {}
+    for path in paths:
+        by_library.setdefault(library_of(path), []).append(path)
+
+    rows = []
+    for library, files in sorted(by_library.items()):
+        here = None
+        for path in files[:5]:
+            here = local_path(path)
+            if here:
+                break
+        home = None
+        if here:
+            tail = str(PurePosixPath(files[0].replace("\\", "/")).relative_to(library))
+            home = _memory().get(library) or (here[: -len(tail)].rstrip("/") if here.endswith(tail) else None)
+        rows.append({
+            "library": library,
+            "here": home or (library if here else None),
+            "found": bool(here),
+            "files": len(files),
+            "mapped": any(library.startswith(plex) or plex.startswith(library) for plex, _ in path_map()),
+            "example": files[0],
+            "exists": bool(here) or os.path.isdir(library),
+        })
+    return rows
 
 
 def _tracks(value: Any) -> list[dict[str, Any]]:

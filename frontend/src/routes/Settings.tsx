@@ -158,7 +158,7 @@ const AREAS: Area[] = [
       {
         title: "Tidying files",
         note: "What tidying a file's tracks should aim for, and where this container can read the media. Languages are the three letter codes the tracks carry: eng, spa, jpn. Leave a list empty to keep every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do.",
-        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages", "media_path_map"],
+        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages"],
       },
       {
         title: "Server upload",
@@ -303,6 +303,7 @@ const LABELS: Record<string, string> = {
   keep_subtitle_languages: "Subtitle languages to keep",
   keep_audio_languages: "Audio languages to keep",
   media_path_map: "Where this container sees the media",
+  media_roots: "Mounted media directories",
   access_inactive_days: "Not watching after (days)",
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes (%)",
@@ -643,7 +644,14 @@ function SettingsForm() {
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Syncing" && <SyncNow />}
-            {section.title === "Tidying files" && <TidyStatus />}
+            {section.title === "Tidying files" && (
+              <MediaPaths
+                roots={String(draft.media_roots ?? byKey.get("media_roots")?.value ?? "")}
+                map={String(draft.media_path_map ?? byKey.get("media_path_map")?.value ?? "")}
+                onRoots={(value) => setDraft({ ...draft, media_roots: value })}
+                onMap={(value) => setDraft({ ...draft, media_path_map: value })}
+              />
+            )}
             {section.title === "Library and access review" && (
               <BitrateAdvice
                 onUse={(mbps) => setDraft({ ...draft, library_bitrate_threshold_mbps: mbps })}
@@ -1012,35 +1020,157 @@ function BitrateAdvice({ onUse }: { onUse: (mbps: number) => void }) {
 type TidyStatusRow = {
   checked: number;
   visible: number;
+  libraries: {
+    library: string;
+    here: string | null;
+    found: boolean;
+    files: number;
+    mapped: boolean;
+    example: string;
+  }[];
   missing_roots: string[];
   example: string | null;
   tools: { ready: boolean; ffmpeg: { version: string | null } };
   path_map: [string, string][];
+  roots: string[];
 };
 
-function TidyStatus() {
+/* Where the media is, asked as two questions rather than as one text box.
+ *
+ * First: which directories are mounted in this container. Usually one, often
+ * two when libraries are split across shares, so it is a list you add rows to.
+ * The app then looks for each Plex library underneath them and says what it
+ * found, and only a library it could not find needs a path typed in by hand.
+ * That is the path map, built from the table rather than written as pairs.
+ */
+function MediaPaths({
+  roots,
+  map,
+  onRoots,
+  onMap,
+}: {
+  roots: string;
+  map: string;
+  onRoots: (value: string) => void;
+  onMap: (value: string) => void;
+}) {
   const status = useApi<TidyStatusRow>("/library/tidy/status");
-  if (status.error || !status.data) return null;
+  // Held here as well as in the draft so that emptying a row leaves the box on
+  // screen instead of taking it out from under the cursor.
+  const [rows, setRows] = useState<string[]>(() => {
+    const given = roots.split(",").map((x) => x.trim()).filter(Boolean);
+    return given.length > 0 ? given : [""];
+  });
+
+  function push(next: string[]) {
+    setRows(next.length > 0 ? next : [""]);
+    onRoots(next.map((x) => x.trim()).filter(Boolean).join(", "));
+  }
+
+  const pairs = new Map<string, string>(
+    map
+      .split(",")
+      .map((part) => part.split("="))
+      .filter((bits) => bits.length === 2 && bits[0].trim() && bits[1].trim())
+      .map((bits) => [bits[0].trim(), bits[1].trim()] as [string, string]),
+  );
+
+  function setPair(library: string, here: string) {
+    const next = new Map(pairs);
+    if (here.trim()) next.set(library, here.trim());
+    else next.delete(library);
+    onMap([...next].map(([a, b]) => a + "=" + b).join(", "));
+  }
+
   const s = status.data;
-  const all = s.checked > 0 && s.visible === s.checked;
+  const libraries = s?.libraries ?? [];
+  const lost = libraries.filter((x) => !x.found);
+  const ready = Boolean(s?.tools.ready) && libraries.length > 0 && lost.length === 0;
 
   return (
-    <div className="row sync-now">
-      <span className={all && s.tools.ready ? "pill ok" : "pill warn"}>
-        {all && s.tools.ready ? "ready" : "not ready"}
-      </span>
-      <span className="muted small">
-        {s.tools.ready
-          ? `ffmpeg is here. `
-          : "ffmpeg is not in this image, so nothing can be tidied. "}
-        {s.checked === 0
-          ? "No file paths known yet; the library scan fills these in."
-          : all
-            ? `All ${s.checked} files checked can be opened from inside this container.`
-            : `${s.visible} of ${s.checked} files checked can be opened. Mount ${
-                s.missing_roots.join(", ") || "the shares"
-              } in the container at those paths, or map them below. For example ${s.example ?? ""}`}
-      </span>
+    <div className="media-paths">
+      <div className="row-between">
+        <h4 className="section-title">Where the media is mounted</h4>
+        <span className={ready ? "pill ok" : "pill warn"}>{ready ? "ready" : "not ready"}</span>
+      </div>
+      <p className="muted small">
+        {s && !s.tools.ready
+          ? "ffmpeg is not in this image, so nothing can be tidied whatever is mounted here."
+          : "The directories this container can read, usually the one share that holds every library. Each library is looked for underneath them."}
+      </p>
+
+      <div className="path-rows">
+        {rows.map((row, index) => (
+          <div key={index} className="row">
+            <input
+              value={row}
+              spellCheck={false}
+              placeholder={index === 0 ? "/media" : "/media2"}
+              onChange={(e) => push(rows.map((old, n) => (n === index ? e.target.value : old)))}
+            />
+            <button
+              className="btn"
+              disabled={rows.length === 1 && !rows[0]}
+              onClick={() => push(rows.filter((_, n) => n !== index))}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <div className="row wrap">
+          <button className="btn" onClick={() => setRows([...rows, ""])}>
+            Add another directory
+          </button>
+          <button className="btn" onClick={status.reload} disabled={status.loading}>
+            {status.loading ? "Looking" : "Check again"}
+          </button>
+          <span className="muted small">Save, then check again.</span>
+        </div>
+      </div>
+
+      {libraries.length === 0 ? (
+        <p className="muted small">
+          No file paths known yet. The library scan fills these in, and this table then says where each one was
+          found.
+        </p>
+      ) : (
+        <table className="table media-libraries">
+          <thead>
+            <tr>
+              <th>Library, as Plex reports it</th>
+              <th>Found at</th>
+              <th>Or set it by hand</th>
+            </tr>
+          </thead>
+          <tbody>
+            {libraries.map((row) => (
+              <tr key={row.library}>
+                <td>
+                  <span className={row.found ? "pill ok" : "pill warn"}>{row.found ? "found" : "missing"}</span>{" "}
+                  {row.library}
+                </td>
+                <td className="muted small">
+                  {row.found ? row.here : "Not readable here. For example " + row.example}
+                </td>
+                <td>
+                  <input
+                    value={pairs.get(row.library) ?? ""}
+                    spellCheck={false}
+                    placeholder={row.found ? (row.here ?? "") : "/media/something"}
+                    onChange={(e) => setPair(row.library, e.target.value)}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {s && s.checked > 0 && (
+        <p className="muted small">
+          {s.visible} of the {s.checked} most recent files can be opened from inside this container.
+        </p>
+      )}
     </div>
   );
 }

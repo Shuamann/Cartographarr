@@ -77,11 +77,11 @@ cp unraid/cartographarr.xml /boot/config/plugins/dockerMan/templates-user/
 ```
 
 Docker tab, **Add Container**, pick `cartographarr` from the template list at
-the top. Fill in the appdata path, the port, your time zone, and a path per
-media share: the container side must match what Plex reports (`/movies`,
-`/kidsmovies`), the host side is wherever that share really lives. Leave a
-media path empty if you do not have it, and use **Add another Path, Port,
-Variable, Label or Device** for any the template does not list.
+the top. Fill in the appdata path, the port, your time zone, and the media
+path: point it at the directory holding your libraries, `/mnt/user` or
+`/mnt/user/media`, rather than at each library in turn. A second media path is
+there for libraries split across another share or pool. Leave both empty if you
+do not want to tidy files.
 
 Afterwards, **Edit** on the container is where mounts are added or changed, and
 Apply rebuilds it with the same settings. To update: build the image again with
@@ -97,17 +97,21 @@ cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-
 
 Set `TZ` to your own time zone. Rules that use a time of day go by it.
 
-To tidy a file's tracks, the container also needs to read the media, at the
-paths Plex reports. Add one `-v` per share, with the same name inside:
+To tidy a file's tracks, the container also needs to read the media. Mount the
+directory your libraries sit in rather than one share at a time:
 
 ```bash
--v /mnt/user/movies:/movies -v /mnt/user/tv:/tv -v /mnt/user/kidsmovies:/kidsmovies
+-v /mnt/user:/media
 ```
 
-**Settings, Behaviour, Tidying files** says whether this worked: it checks a
-sample of the paths Plex reports against what the container can actually open,
-and names the shares that are missing. Where the names cannot match, map them
-there instead. Everything else in the app works without these mounts.
+Then under **Settings, Behaviour, Tidying files**, add `/media` to the mounted
+directories and press **Check again**. The table underneath lists every library
+Plex reports and says where it was found: a library Plex calls `/movies` is
+looked for at `/media/movies` and at `/media` itself, and whichever answers is
+remembered. A library that stays missing gets its path typed into the last
+column. Add a second directory for libraries kept on another share.
+
+Everything else in the app works without any of this.
 
 `GIT_COMMIT` tells the app which commit it was built from, so Settings, About
 can say how many commits behind it is. Leave it out and it compares version
@@ -499,10 +503,10 @@ file with styled subtitles" or "anything reported for bad audio" can be
 handled without pressing anything. It starts as record only like every rule,
 and answers to the same daily cap.
 
-To use it, mount the media in the container. The shares want to be where Plex
-already reports them (`/movies`, `/tv`), in which case there is nothing to
-configure; where they differ, set **media_path_map** in Settings as
-`plex=here` pairs. The compose file has the mounts commented out ready.
+To use it, mount the media in the container: the directory your libraries live
+in, not one share per library. **Settings, Behaviour, Tidying files** then
+lists every library and where it found each one, with a box for any it could
+not. The compose file has the mount commented out ready.
 
 One file is worked on at a time, with progress and a Stop button at the top of
 **Files worth attention**. The result is checked against the original, for

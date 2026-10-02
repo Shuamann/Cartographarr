@@ -415,17 +415,21 @@ async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> di
             ]
         seen = [path for path in paths if mediafix.local_path(path)]
         missing = [path for path in paths if path not in set(seen)]
-        roots = sorted({"/" + str(path).replace("\\", "/").strip("/").split("/")[0] for path in missing})
         return {
             "checked": len(paths),
             "visible": len(seen),
-            "missing_roots": roots[:10],
+            # A row per library rather than a list of paths, because what a
+            # person has to decide is per library: this one is found, that one
+            # needs a mount or a mapping.
+            "libraries": mediafix.where_libraries(paths),
+            "missing_roots": sorted({mediafix.library_of(path) for path in missing})[:10],
             "example": missing[0] if missing else None,
         }
 
     answer = await asyncio.to_thread(look)
     answer["tools"] = await asyncio.to_thread(mediafix.tools)
     answer["path_map"] = mediafix.path_map()
+    answer["roots"] = mediafix.roots()
     return answer
 
 

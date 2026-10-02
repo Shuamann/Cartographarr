@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.43.0 - 2026-10-02
+
+### Added
+- Media roots. Rather than a mount per library and a path typed in for each, give the container the directory your
+  libraries sit in and the app finds each one underneath it: a library Plex calls /movies is looked for at
+  /media/movies and at /media itself, and whichever answers is remembered for the rest of that library. More than
+  one root, because libraries are often split across two shares or two pools
+
+### Changed
+- Settings, Behaviour, Tidying files is now a list of mounted directories you add rows to, and a table of every
+  library Plex reports saying where each one was found, with a box to set by hand only the ones it could not. It
+  replaces the single comma separated plex=here box, which gave no way to see what had worked
+- The Unraid template asks for one media directory and an optional second, instead of six named shares. The README
+  and the compose file mount one directory too
+
 ## 0.42.2 - 2026-10-02
 
 ### Added

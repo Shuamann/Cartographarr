@@ -24,8 +24,8 @@
     play, live activity, rules that act on streams, shared account signals, reported problems, and a library view
     that says which files cause trouble and what to do about them.
 
-    Mount your media shares at the same paths Plex reports if you want to tidy a file's tracks (subtitles, audio,
-    containers). Everything else works without them.
+    Mount the directory holding your libraries if you want to tidy a file's tracks (subtitles, audio,
+    containers): the app finds each library underneath it. Everything else works without it.
   </Overview>
   <Category>MediaApp:Video Tools:Utilities Status:Stable</Category>
   <WebUI>http://[IP]:[PORT:6277]/</WebUI>
@@ -58,36 +58,23 @@
           Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
 
   <!--
-    Media, for tidying a file's tracks. The container path must match what Plex
-    reports, which is what Library shows under "Stored on" and at the bottom of
-    a file card. Leave any of these empty if you do not have that share, and use
-    "Add another Path, Port, Variable, Label or Device" in the Docker tab for
-    the ones not listed here.
+    Media, for tidying a file's tracks.
+
+    One mount, not one per library: point this at the parent of your libraries
+    and the app finds each one underneath it, then shows what it matched under
+    Settings, Behaviour, Tidying files. A second is there because libraries are
+    often split across two shares or two pools. Leave both empty and everything
+    except tidying still works.
 
     Read write, because tidying replaces the file it tidied. Set a share to
-    read only and that file simply cannot be tidied; nothing else minds.
+    read only and its files simply cannot be tidied; nothing else minds.
   -->
-  <Config Name="Movies" Target="/movies" Default="/mnt/user/movies" Mode="rw"
-          Description="Your films, at the path Plex reports."
+  <Config Name="Media" Target="/media" Default="/mnt/user" Mode="rw"
+          Description="The directory holding your libraries. The app looks for each one underneath it and says what it found in Settings, Behaviour, Tidying files."
           Type="Path" Display="always" Required="false" Mask="false"/>
 
-  <Config Name="TV" Target="/tv" Default="/mnt/user/tv" Mode="rw"
-          Description="Your series, at the path Plex reports."
+  <Config Name="Media (second)" Target="/media2" Default="" Mode="rw"
+          Description="A second place libraries live, if they are split across shares or pools. Leave empty if they are not."
           Type="Path" Display="always" Required="false" Mask="false"/>
 
-  <Config Name="Kids films" Target="/kidsmovies" Default="/mnt/user/kidsmovies" Mode="rw"
-          Description="A second film library, if you keep one."
-          Type="Path" Display="always" Required="false" Mask="false"/>
-
-  <Config Name="Kids TV" Target="/kidstv" Default="/mnt/user/kidstv" Mode="rw"
-          Description="A second series library, if you keep one."
-          Type="Path" Display="always" Required="false" Mask="false"/>
-
-  <Config Name="Anime films" Target="/animemovies" Default="/mnt/user/animemovies" Mode="rw"
-          Description="Another film library, if you keep one."
-          Type="Path" Display="advanced" Required="false" Mask="false"/>
-
-  <Config Name="Anime series" Target="/animetv" Default="/mnt/user/animetv" Mode="rw"
-          Description="Another series library, if you keep one."
-          Type="Path" Display="advanced" Required="false" Mask="false"/>
 </Container>

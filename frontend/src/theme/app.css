@@ -4365,3 +4365,42 @@ label.locked .pill {
   opacity: 0.8;
   pointer-events: none;
 }
+
+/* ---- where the media is mounted ---------------------------------------- */
+
+.media-paths {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.media-paths h4 {
+  margin: 0;
+}
+
+.path-rows {
+  display: grid;
+  gap: 8px;
+}
+
+/* The box takes the room, the button takes what it needs. */
+.path-rows .row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-rows .row .btn {
+  flex: 0 0 auto;
+}
+
+.table.media-libraries td {
+  vertical-align: middle;
+}
+
+.table.media-libraries td:first-child {
+  white-space: nowrap;
+}
+
+.table.media-libraries input {
+  width: 100%;
+}

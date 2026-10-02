@@ -55,6 +55,18 @@ class Settings(BaseSettings):
     """Audio languages worth keeping, comma separated. Empty keeps every one,
     and a file that would be left silent keeps everything whatever this says."""
 
+    media_roots: str = ""
+    """Where the media is mounted inside this container, as one path per entry.
+
+    Mounting a share per library means a flag per library and a field per
+    library. Mounting the parent instead means one, and this says where to
+    look: for a file Plex calls `/movies/A Film/a.mkv`, every root given here
+    is tried with the whole path hung off it and again with the library name
+    dropped, and whichever answers is remembered for the rest of that library.
+
+    More than one, because a library is often split across two shares or two
+    pools. media_path_map still wins where a name cannot be guessed."""
+
     media_path_map: str = ""
     """How the paths Plex reports line up with this container's mounts, as
     `plex=here` pairs separated by commas. Empty, which is the normal case,

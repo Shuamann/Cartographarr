@@ -715,13 +715,10 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     }
   }
 
-  const root = (t.file_path ?? "").replace(/\\/g, "/").split("/").filter(Boolean)[0];
   const blocked = !t.tools.ready
     ? "ffmpeg is not in this image, so this build cannot tidy anything."
     : !t.local_path
-      ? `This container cannot open ${t.file_path ?? "the file"}. Add ${
-          root ? `-v /mnt/user/${root}:/${root}` : "the share"
-        } to the container, or map the path under Settings, Behaviour, Tidying files.`
+      ? `This container cannot open ${t.file_path ?? "the file"}. Mount the share that holds it, then say where it landed under Settings, Behaviour, Tidying files.`
       : null;
 
   return (

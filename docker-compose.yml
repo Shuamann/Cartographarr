@@ -19,11 +19,11 @@ services:
       - /mnt/user/appdata/cartographarr:/data
 
       # Only needed to tidy a file's tracks from the Library page. Mount the
-      # shares at the paths Plex already reports and there is nothing else to
-      # configure; where they differ, set media_path_map in Settings. Read
-      # write, because tidying replaces the file it tidied.
-      # - /mnt/user/movies:/movies
-      # - /mnt/user/tv:/tv
+      # directory your libraries live in, not one share per library, then add
+      # it under Settings, Behaviour, Tidying files: each library is looked for
+      # underneath it and the table there says what was found. Read write,
+      # because tidying replaces the file it tidied.
+      # - /mnt/user:/media
 
     # One secrets file, shared with local dev. Anything set here wins over the
     # UI and renders read-only in Settings; omit a key entirely to let the UI
