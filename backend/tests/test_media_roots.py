@@ -10,6 +10,7 @@ two roots, and a path that is nowhere at all.
 
 from app.services import mediafix
 from app.settings_store import trial
+from tests.test_auth import claim
 
 
 def make(tmp_path, *relative):
@@ -110,3 +111,40 @@ def test_each_library_is_reported_once_with_where_it_landed(tmp_path):
 def test_nothing_known_reports_nothing(tmp_path):
     with trial({"media_roots": str(tmp_path).replace("\\", "/")}):
         assert mediafix.where_libraries([]) == []
+
+
+# ---- picking a path rather than typing one ----------------------------------
+
+def test_the_container_lists_what_it_can_see(client, tmp_path):
+    """Which directories exist in a container is a question only it can answer."""
+    share = tmp_path / "share"
+    (share / "movies").mkdir(parents=True)
+    (share / "tv").mkdir()
+    (share / ".hidden").mkdir()
+    (share / "a.mkv").write_bytes(b"")
+
+    claim(client)
+    here = str(share).replace("\\", "/")
+    answer = client.get("/api/library/tidy/directories", params={"path": here}).json()
+
+    assert answer["path"] == here
+    assert [row["name"] for row in answer["directories"]] == ["movies", "tv"]
+    assert answer["directories"][0]["path"] == f"{here}/movies"
+    assert answer["parent"]
+
+
+def test_a_half_typed_path_lists_the_directory_it_is_inside(client, tmp_path):
+    """So the list is there to complete from while somebody is still typing."""
+    share = tmp_path / "share"
+    (share / "movies").mkdir(parents=True)
+
+    claim(client)
+    here = str(share).replace("\\", "/")
+    answer = client.get("/api/library/tidy/directories", params={"path": f"{here}/mov"}).json()
+
+    assert answer["path"] == here
+    assert [row["name"] for row in answer["directories"]] == ["movies"]
+
+
+def test_listing_is_admin_only(client):
+    assert client.get("/api/library/tidy/directories").status_code in (401, 403)

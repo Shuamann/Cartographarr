@@ -718,7 +718,7 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
   const blocked = !t.tools.ready
     ? "ffmpeg is not in this image, so this build cannot tidy anything."
     : !t.local_path
-      ? `This container cannot open ${t.file_path ?? "the file"}. Mount the share that holds it, then say where it landed under Settings, Behaviour, Tidying files.`
+      ? `This container cannot open ${t.file_path ?? "the file"}. Mount the share that holds it, then say where it landed under Settings, Library and files.`
       : null;
 
   return (

@@ -4404,3 +4404,216 @@ label.locked .pill {
 .table.media-libraries input {
   width: 100%;
 }
+
+/* ---- settings inputs that fit their values ----------------------------- */
+
+/* On or off, as a switch. The word stays, because a switch on its own asks
+   people to remember which side is which. */
+.switch {
+  /* Its own line, under its label, the way every other control here sits. */
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 9px;
+  margin-top: 6px;
+  padding: 0;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink-2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.switch .knob {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.switch .knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.switch.on .knob {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch.on .knob::after {
+  background: var(--accent-ink);
+  transform: translateX(16px);
+}
+
+.switch.on {
+  color: var(--ink);
+}
+
+.switch:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* A number and its unit read as one thing, so they share one border. */
+.number-field {
+  display: flex;
+  align-items: stretch;
+  margin-top: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.number-field input {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  min-width: 0;
+}
+
+.number-field input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.number-field:focus-within {
+  border-color: var(--accent);
+}
+
+.number-field .unit {
+  display: flex;
+  align-items: center;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-left: 1px solid var(--border);
+}
+
+/* A list of values, each one removable, with a box underneath for the next. */
+.chip-field {
+  margin-top: 6px;
+}
+
+.chip-field .chips:not(:empty) {
+  margin-bottom: 6px;
+}
+
+.chip-field input {
+  margin-top: 0;
+}
+
+.chip-field .chip {
+  font-weight: 400;
+}
+
+/* ---- a path box that lists what the container can see ------------------- */
+
+.path-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-box input {
+  margin-top: 0;
+}
+
+/* Over the page rather than in it, so opening one does not shove the rest of
+   the form down. */
+.path-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+
+.path-list p {
+  margin: 4px 7px;
+}
+
+.path-where {
+  position: sticky;
+  top: -6px;
+  padding: 4px 3px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.path-item {
+  display: block;
+  width: 100%;
+  padding: 6px 7px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.path-item:hover {
+  background: var(--surface-2);
+}
+
+.table.media-libraries .path-box input {
+  width: 100%;
+}
+
+/* The library table: a name, where it was found, and a box to say otherwise.
+   The middle column takes the slack and gives up the end of a long path. */
+.table.media-libraries {
+  table-layout: fixed;
+}
+
+.table.media-libraries th {
+  text-align: left;
+}
+
+.table.media-libraries th:first-child {
+  width: 26%;
+}
+
+.table.media-libraries th.set-by-hand {
+  width: 240px;
+}
+
+.path-example {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}

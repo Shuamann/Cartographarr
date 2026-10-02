@@ -17,7 +17,7 @@ type Section = {
    * rest of the stack is already on. */
   guess?: { key: string; port: number; slug: string; path?: string; publicKey?: string };
 };
-type Area = { area: string; blurb?: string; sections: Section[] };
+type Area = { area: string; group: (typeof NAV_GROUPS)[number]; blurb?: string; sections: Section[] };
 
 /* Grouped into areas rather than one long list, because the page covers
  * unrelated jobs: connecting to things, how it behaves, who gets in, and how
@@ -25,6 +25,7 @@ type Area = { area: string; blurb?: string; sections: Section[] };
 const AREAS: Area[] = [
   {
     area: "Plex and Tautulli",
+    group: "Connections",
     blurb: "Required. Where the history, the live streams and the server details come from.",
     sections: [
       {
@@ -49,6 +50,7 @@ const AREAS: Area[] = [
   },
   {
     area: "Map locations",
+    group: "Connections",
     blurb: "Turns an IP address into a place. Without it there are no map pins.",
     sections: [
       {
@@ -66,6 +68,7 @@ const AREAS: Area[] = [
   },
   {
     area: "Media apps",
+    group: "Connections",
     blurb: "Optional. Links a title out to the app that manages it, and shows who asked for it.",
     sections: [
       {
@@ -99,6 +102,7 @@ const AREAS: Area[] = [
   },
   {
     area: "Alerts and monitoring",
+    group: "Connections",
     blurb: "Optional. Where rules can send a warning, and what watches the sync.",
     sections: [
       {
@@ -133,58 +137,70 @@ const AREAS: Area[] = [
     ],
   },
   {
-    area: "Behaviour",
-    blurb: "How often it looks, and what it does when a rule matches.",
+    area: "Syncing",
+    group: "Cartographarr",
+    blurb: "How often Cartographarr reads from Tautulli, and how hard it reads when it does.",
     sections: [
       {
-        title: "Syncing",
-        keys: [
-          "sync_interval_minutes",
-          "slow_sync_interval_minutes",
-          "sync_page_size",
-          "metadata_concurrency",
-        ],
+        title: "Schedule",
+        note: "History is read often because it is what everything else is built from. Users and libraries change rarely, so they have their own slower round.",
+        keys: ["sync_interval_minutes", "slow_sync_interval_minutes"],
       },
       {
-        title: "Shared account detection",
-        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: pairs are ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance.",
-        keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
-      },
-      {
-        title: "Library and access review",
-        note: "The bitrate above which a remotely watched file counts as a problem in Library, and how long without a play before Access review says someone is not watching.",
-        keys: ["library_bitrate_threshold_mbps", "access_inactive_days"],
-      },
-      {
-        title: "Tidying files",
-        note: "What tidying a file's tracks should aim for, and where this container can read the media. Languages are the three letter codes the tracks carry: eng, spa, jpn. Leave a list empty to keep every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do.",
-        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages"],
-      },
-      {
-        title: "Server upload",
-        note: "Your server's upload speed. Stalls that happen while the upload is nearly full are blamed on the upload rather than a viewer, and you get a notification (through Apprise, at most every half hour) when remote streams use more than the alert level. Leave at 0 to use the Internet upload speed set in Plex under Remote Access.",
-        keys: ["upload_capacity_mbps", "upload_alert_percent"],
-      },
-      {
-        title: "Reported problems",
-        note: "Send word through Apprise when somebody reports something wrong, with what this app already knows about that file. Quiet unless notifications are set up.",
-        keys: ["issue_alerts"],
-      },
-      {
-        title: "Rules and live activity",
-        note: "Whether rules run at all, and how often live activity is checked. Each rule, and the ban list, has its own record only switch on the Rules page.",
-        keys: [
-          "enforce_enabled",
-          "enforce_cooldown_seconds",
-          "activity_poll_seconds",
-          "ban_message",
-        ],
+        title: "How hard it reads",
+        note: "Raise these on a strong box to finish the first sync sooner. Lower them if Tautulli or Plex start timing out.",
+        keys: ["sync_page_size", "metadata_concurrency"],
       },
     ],
   },
   {
-    area: "Access",
-    blurb: "Who can sign in, and how.",
+    area: "Live and rules",
+    group: "Cartographarr",
+    blurb: "Watching streams as they happen, what rules may do about them, and how much upload there is to go round.",
+    sections: [
+      {
+        title: "Live activity",
+        note: "How often the list of who is watching is refreshed. Every check is one request to Tautulli.",
+        keys: ["activity_poll_seconds"],
+      },
+      {
+        title: "Rules",
+        note: "Whether rules run at all, and how long a rule waits before acting on the same stream again. Each rule, and the ban list, has its own record only switch on the Rules page.",
+        keys: ["enforce_enabled", "enforce_cooldown_seconds", "automation_daily_cap", "automation_download_cap", "ban_message"],
+      },
+      {
+        title: "Server upload",
+        note: "Your server's upload speed. Stalls that happen while the upload is nearly full are blamed on the upload rather than on a viewer, and you get a notification, through Apprise and at most every half hour, when remote streams use more than the alert level. Leave the capacity at 0 to use the Internet upload speed set in Plex under Remote Access.",
+        keys: ["upload_capacity_mbps", "upload_alert_percent"],
+      },
+    ],
+  },
+  {
+    area: "Library and files",
+    group: "Cartographarr",
+    blurb: "What counts as a problem file, what tidying one should aim for, and where this container can read the media.",
+    sections: [
+      {
+        title: "Problem files",
+        note: "The average bitrate above which a remotely watched file is listed as a problem in Library. Set it near what one remote stream can comfortably use.",
+        keys: ["library_bitrate_threshold_mbps"],
+      },
+      {
+        title: "Tidying files",
+        note: "What tidying a file's tracks should aim for. Languages are the three letter codes the tracks carry: eng, spa, jpn. An empty list keeps every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do.",
+        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages"],
+      },
+      {
+        title: "Storage",
+        note: "How much of a file's path names the disk it is on. Plex usually reports a mount per library, so one part (/movies, /tv) is right. Raise it where several libraries share a mount (/mnt/user/movies, /mnt/user/tv) and Library, Storage would otherwise count them as one.",
+        keys: ["library_store_depth"],
+      },
+    ],
+  },
+  {
+    area: "People and privacy",
+    group: "Cartographarr",
+    blurb: "What viewers can see, when somebody counts as no longer watching, and when one account in two places is worth flagging.",
     sections: [
       {
         title: "Viewer privacy",
@@ -192,15 +208,27 @@ const AREAS: Area[] = [
         keys: ["viewer_privacy"],
       },
       {
-        title: "Reporting problems",
-        note: "Whether people who sign in as viewers can report something wrong with what they watched. They see what they reported and nothing else: not other people's reports, not who else watched the file, not where it sits on disk. Reporting from a play carries that play's details with it, so nobody has to ask what device they were on. Only an admin closes a report.",
-        keys: ["viewer_reports_issues"],
+        title: "Reported problems",
+        note: "Whether people who sign in as viewers can report something wrong with what they watched, and whether you hear about it. They see what they reported and nothing else: not other people's reports, not who else watched the file, not where it sits on disk. Reporting from a play carries that play's details with it, so nobody has to ask what device they were on. Only an admin closes a report. The alert goes through Apprise and stays quiet until notifications are set up.",
+        keys: ["viewer_reports_issues", "issue_alerts"],
       },
       {
-        title: "Showing inside other dashboards",
-        note: "Turn this on if you open Cartographarr inside Organizr, Homarr or another dashboard that shows apps in a frame; otherwise it shows blank there. Off, no other site can put Cartographarr in a frame, which stops a hidden page tricking a click on Ban or Unshare.",
-        keys: ["allow_framing"],
+        title: "Shared account detection",
+        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: a pair is ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance.",
+        keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
       },
+      {
+        title: "Access review",
+        note: "How long without a play before Access review says somebody is not watching any more.",
+        keys: ["access_inactive_days"],
+      },
+    ],
+  },
+  {
+    area: "Sign-in",
+    group: "Cartographarr",
+    blurb: "How people get in, how long they stay, and where the app may be shown.",
+    sections: [
       {
         title: "Plex sign in",
         note: "Adds Sign in with Plex to the sign-in page. A Plex account signs in as the Cartographarr account linked to it under Accounts, or a viewer account with the same email. Usernames are never matched, and an admin account must be linked to its Plex account first. With new viewers allowed, anyone the server is shared with gets a viewer account the first time they sign in, seeing other people anonymised whatever the viewer privacy setting; change that per account under Accounts. Nobody becomes an admin through Plex, and Cartographarr does not keep their Plex token.",
@@ -217,7 +245,16 @@ const AREAS: Area[] = [
           "proxy_default_role",
         ],
       },
-      { title: "Sessions", keys: ["session_ttl_hours", "session_cookie_secure"] },
+      {
+        title: "Sessions",
+        note: "How long a sign-in lasts, and whether the cookie may travel over plain HTTP. Turn the HTTPS lock on once the app is behind TLS.",
+        keys: ["session_ttl_hours", "session_cookie_secure"],
+      },
+      {
+        title: "Showing inside other dashboards",
+        note: "Turn this on if you open Cartographarr inside Organizr, Homarr or another dashboard that shows apps in a frame; otherwise it shows blank there. Off, no other site can put Cartographarr in a frame, which stops a hidden page tricking a click on Ban or Unshare.",
+        keys: ["allow_framing"],
+      },
     ],
   },
 ];
@@ -241,7 +278,7 @@ const PAGES: Page[] = [
   ...AREAS.map((a): Page => ({
     id: slug(a.area),
     title: a.area,
-    group: ["Behaviour", "Access"].includes(a.area) ? "Cartographarr" : "Connections",
+    group: a.group,
     blurb: a.blurb,
     sections: a.sections,
     keys: a.sections.flatMap((x) => x.keys),
@@ -277,36 +314,39 @@ const PAGES: Page[] = [
 const SECRET_URLS = new Set(["apprise_urls", "webhook_url", "uptime_kuma_push_url", "viewer_message_url"]);
 
 const LABELS: Record<string, string> = {
+  library_store_depth: "Path parts that name the disk",
+  automation_download_cap: "All rules together may queue",
+  automation_daily_cap: "A rule may act at most",
   tautulli_url: "Tautulli URL",
   tautulli_local_url: "Local URL",
   tautulli_api_key: "API key",
   tautulli_verify_ssl: "Verify SSL certificate",
-  tautulli_timeout: "Request timeout (seconds)",
+  tautulli_timeout: "Request timeout",
   plex_token: "Plex token",
   plex_machine_identifier: "Plex server id",
   maxmind_account_id: "MaxMind account ID",
   maxmind_license_key: "MaxMind license key",
   geoip_auto_update: "Keep databases updated",
-  geoip_update_interval_days: "Update every (days)",
-  sync_interval_minutes: "Sync history every (minutes)",
-  slow_sync_interval_minutes: "Sync users and libraries every (minutes)",
+  geoip_update_interval_days: "Update every",
+  sync_interval_minutes: "Sync history every",
+  slow_sync_interval_minutes: "Sync users and libraries every",
   sync_page_size: "Rows per request",
-  metadata_concurrency: "Parallel metadata lookups",
+  metadata_concurrency: "Metadata lookups at once",
   enforce_enabled: "Run rules",
   enforce_dry_run: "Dry run",
-  enforce_cooldown_seconds: "Cooldown per rule (seconds)",
-  activity_poll_seconds: "Check activity every (seconds)",
+  enforce_cooldown_seconds: "Cooldown per rule",
+  activity_poll_seconds: "Check activity every",
   ban_message: "Message shown to a banned device",
-  upload_capacity_mbps: "Upload capacity (Mbps)",
-  library_bitrate_threshold_mbps: "Problem file bitrate (Mbps)",
+  upload_capacity_mbps: "Upload capacity",
+  library_bitrate_threshold_mbps: "Problem file bitrate",
   preferred_audio_language: "Audio language to put first",
   keep_subtitle_languages: "Subtitle languages to keep",
   keep_audio_languages: "Audio languages to keep",
   media_path_map: "Where this container sees the media",
   media_roots: "Mounted media directories",
-  access_inactive_days: "Not watching after (days)",
+  access_inactive_days: "Not watching after",
   viewer_message_url: "Viewer message address",
-  upload_alert_percent: "Warn when upload passes (%)",
+  upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
   auth_proxy_enabled: "Trust a reverse proxy",
   allow_framing: "Allow showing inside other dashboards",
@@ -333,15 +373,113 @@ const LABELS: Record<string, string> = {
   apprise_urls: "Apprise URLs",
   webhook_url: "Webhook URL",
   metrics_token: "Metrics token",
-  impossible_kmh: "Flag faster than (km/h)",
-  impossible_min_km: "Ignore closer than (km)",
-  impossible_max_accuracy_km: "Ignore vaguer than (km)",
-  session_ttl_hours: "Stay signed in for (hours)",
+  impossible_kmh: "Flag faster than",
+  impossible_min_km: "Ignore closer than",
+  impossible_max_accuracy_km: "Ignore vaguer than",
+  session_ttl_hours: "Stay signed in for",
   session_cookie_secure: "Only send the cookie over HTTPS",
   update_check_enabled: "Check for updates",
   update_repository: "GitHub repository",
   update_github_token: "GitHub token",
 };
+
+/* What a box should be, where the value alone does not say.
+ *
+ * A number wants its unit beside it rather than in brackets after its name,
+ * and wants bounds so a stray keystroke cannot set the sync interval to eight
+ * thousand. A comma separated list wants to be a list. Everything not named
+ * here is a plain box, which is right for a URL or a key.
+ */
+type FieldShape = { unit?: string; min?: number; max?: number; step?: number; kind?: "chips" | "lines" };
+
+const SHAPES: Record<string, FieldShape> = {
+  tautulli_timeout: { unit: "seconds", min: 1, max: 300, step: 1 },
+  geoip_update_interval_days: { unit: "days", min: 1, max: 90, step: 1 },
+  sync_interval_minutes: { unit: "minutes", min: 1, max: 1440, step: 1 },
+  slow_sync_interval_minutes: { unit: "minutes", min: 1, max: 10080, step: 1 },
+  sync_page_size: { unit: "rows", min: 50, max: 5000, step: 50 },
+  metadata_concurrency: { unit: "", min: 1, max: 32, step: 1 },
+  enforce_cooldown_seconds: { unit: "seconds", min: 0, max: 86400, step: 10 },
+  automation_daily_cap: { unit: "times a day", min: 1, max: 1000, step: 1 },
+  automation_download_cap: { unit: "downloads a day", min: 0, max: 100, step: 1 },
+  activity_poll_seconds: { unit: "seconds", min: 1, max: 600, step: 1 },
+  upload_capacity_mbps: { unit: "Mbps", min: 0, max: 10000, step: 1 },
+  upload_alert_percent: { unit: "%", min: 0, max: 100, step: 5 },
+  library_bitrate_threshold_mbps: { unit: "Mbps", min: 0, max: 500, step: 0.5 },
+  library_store_depth: { unit: "", min: 1, max: 6, step: 1 },
+  access_inactive_days: { unit: "days", min: 1, max: 3650, step: 1 },
+  impossible_kmh: { unit: "km/h", min: 1, max: 5000, step: 10 },
+  impossible_min_km: { unit: "km", min: 0, max: 5000, step: 10 },
+  impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
+  session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
+  keep_subtitle_languages: { kind: "chips" },
+  keep_audio_languages: { kind: "chips" },
+  trusted_proxy_ips: { kind: "chips" },
+  apprise_urls: { kind: "lines" },
+};
+
+/* A list typed one value at a time, kept as the comma separated string the
+ * settings store expects. Enter or a comma commits what is in the box, which
+ * is what everyone tries first; leaving the box commits it too, because a
+ * value typed and abandoned is a value meant to be there.
+ */
+function Chips({
+  value,
+  locked,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  locked: boolean;
+  placeholder?: string;
+  onChange: (next: string) => void;
+}) {
+  const [typing, setTyping] = useState("");
+  const parts = value.split(",").map((x) => x.trim()).filter(Boolean);
+
+  function add(text: string) {
+    const wanted = text.trim().replace(/,$/, "").trim();
+    setTyping("");
+    if (!wanted || parts.includes(wanted)) return;
+    onChange([...parts, wanted].join(", "));
+  }
+
+  return (
+    <div className="chip-field">
+      <div className="row chips">
+        {parts.map((part) => (
+          <button
+            key={part}
+            type="button"
+            className="chip on"
+            disabled={locked}
+            title="Remove"
+            onClick={() => onChange(parts.filter((x) => x !== part).join(", "))}
+          >
+            {part} &times;
+          </button>
+        ))}
+      </div>
+      <input
+        disabled={locked}
+        spellCheck={false}
+        autoComplete="off"
+        placeholder={parts.length === 0 ? (placeholder ?? "Add one, then Enter") : "Add another"}
+        value={typing}
+        onChange={(e) => (e.target.value.includes(",") ? add(e.target.value) : setTyping(e.target.value))}
+        onBlur={() => add(typing)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            add(typing);
+          } else if (e.key === "Backspace" && !typing && parts.length > 0) {
+            onChange(parts.slice(0, -1).join(", "));
+          }
+        }}
+      />
+    </div>
+  );
+}
 
 /* Where the rest of the stack probably lives.
  *
@@ -494,6 +632,7 @@ function SettingsForm() {
     const isSecret = /key|token|secret|password/.test(key) && !SECRET_URLS.has(key);
     // A masked secret must not be saved back as literal asterisks.
     const masked = isSecret && setting.value === "********";
+    const shape: FieldShape = SHAPES[key] ?? {};
 
     return (
       <label key={key} className={locked ? "locked" : undefined}>
@@ -509,14 +648,56 @@ function SettingsForm() {
             onChange={(v) => setDraft({ ...draft, [key]: v })}
           />
         ) : isBool ? (
-          <select
+          /* A switch rather than an On/Off list: one click, and its state is
+             legible without reading the word in it. */
+          <button
+            type="button"
+            role="switch"
+            aria-checked={value === true}
             disabled={locked}
-            value={String(value)}
-            onChange={(e) => setDraft({ ...draft, [key]: e.target.value === "true" })}
+            className={value === true ? "switch on" : "switch"}
+            onClick={() => setDraft({ ...draft, [key]: value !== true })}
           >
-            <option value="true">On</option>
-            <option value="false">Off</option>
-          </select>
+            <span className="knob" />
+            <span className="switch-word">{value === true ? "On" : "Off"}</span>
+          </button>
+        ) : shape.kind === "chips" ? (
+          <Chips
+            value={String(Array.isArray(value) ? value.join(", ") : value ?? "")}
+            locked={locked}
+            placeholder={key.includes("language") ? "eng, then Enter" : undefined}
+            onChange={(next) => setDraft({ ...draft, [key]: next })}
+          />
+        ) : shape.kind === "lines" ? (
+          /* Many addresses in one setting. One per line is how people paste
+             them, and the store already splits on newlines as well as commas. */
+          <textarea
+            disabled={locked}
+            spellCheck={false}
+            rows={Math.min(8, Math.max(3, String(value ?? "").split(/[\n,]/).length + 1))}
+            placeholder={masked ? "Unchanged" : "One per line"}
+            value={masked && !(key in draft) ? "" : String(value ?? "").split(",").map((x) => x.trim()).join("\n")}
+            onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+          />
+        ) : typeof setting.value === "number" ? (
+          <span className="number-field">
+            <input
+              disabled={locked}
+              type="number"
+              inputMode="decimal"
+              min={shape.min}
+              max={shape.max}
+              step={shape.step}
+              autoComplete="off"
+              value={String(value ?? "")}
+              onChange={(e) => {
+                const text = e.target.value;
+                const parsed = Number(text);
+                setDraft({ ...draft, [key]: text === "" || Number.isNaN(parsed) ? text : parsed });
+              }}
+            />
+            {shape.unit && <span className="unit">{shape.unit}</span>}
+          </span>
         ) : key === "viewer_privacy" ? (
           <select
             disabled={locked}
@@ -583,7 +764,7 @@ function SettingsForm() {
           <small>Parts shown as **** stay as saved. To change one, replace that whole URL.</small>
         )}
         {key === "trusted_proxy_ips" && !locked && (
-          <small>Comma separated. Addresses or CIDRs, for example 172.17.0.0/16.</small>
+          <small>One address or CIDR at a time, for example 172.17.0.0/16.</small>
         )}
       </label>
     );
@@ -643,7 +824,7 @@ function SettingsForm() {
             </div>
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
-            {section.title === "Syncing" && <SyncNow />}
+            {section.title === "Schedule" && <SyncNow />}
             {section.title === "Tidying files" && (
               <MediaPaths
                 roots={String(draft.media_roots ?? byKey.get("media_roots")?.value ?? "")}
@@ -652,7 +833,7 @@ function SettingsForm() {
                 onMap={(value) => setDraft({ ...draft, media_path_map: value })}
               />
             )}
-            {section.title === "Library and access review" && (
+            {section.title === "Problem files" && (
               <BitrateAdvice
                 onUse={(mbps) => setDraft({ ...draft, library_bitrate_threshold_mbps: mbps })}
               />
@@ -1017,6 +1198,109 @@ function BitrateAdvice({ onUse }: { onUse: (mbps: number) => void }) {
  * somebody what to read. Two things have to be true: ffmpeg in the image, and
  * the media readable at the paths Plex reports.
  */
+type Listing = {
+  path: string;
+  parent: string | null;
+  directories: { name: string; path: string }[];
+  error: string | null;
+};
+
+/* A path typed with the container looking over your shoulder.
+ *
+ * Which directories exist inside a container is a question only the container
+ * can answer, so the box asks it: opening it lists what is there, typing
+ * filters the list, Tab completes the one match, and clicking a name goes into
+ * it. The value stays a plain string, because that is what gets saved.
+ */
+function PathBox({
+  value,
+  placeholder,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  placeholder?: string;
+  disabled?: boolean;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // The directory being listed, which trails the value: typing /media/mo lists
+  // /media and filters on "mo".
+  const cut = value.lastIndexOf("/");
+  const at = !value ? "/" : cut <= 0 ? "/" : value.slice(0, cut);
+  const typed = cut < 0 ? value : value.slice(cut + 1);
+  const listing = useApi<Listing>(open ? `/library/tidy/directories?path=${encodeURIComponent(at)}` : null, [at, open]);
+
+  const shown = (listing.data?.directories ?? []).filter((row) =>
+    row.name.toLowerCase().startsWith(typed.toLowerCase()),
+  );
+
+  function go(path: string) {
+    onChange(path);
+    setOpen(true);
+  }
+
+  return (
+    <div className="path-box">
+      <input
+        value={value}
+        disabled={disabled}
+        spellCheck={false}
+        autoComplete="off"
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Tab" && open && shown.length > 0) {
+            // One match completes it. Several complete as far as they agree,
+            // which is what a shell does and what fingers expect.
+            const names = shown.map((row) => row.name);
+            let common = names[0];
+            for (const name of names) {
+              while (!name.toLowerCase().startsWith(common.toLowerCase())) common = common.slice(0, -1);
+            }
+            if (common.length > typed.length || names.length === 1) {
+              e.preventDefault();
+              const base = at === "/" ? "" : at;
+              onChange(`${base}/${names.length === 1 ? names[0] : common}`);
+            }
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        // A click on a name in the list must land before the blur closes it.
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div className="path-list">
+          {listing.loading && <p className="muted small">Looking</p>}
+          {listing.data?.error && <p className="muted small">{listing.data.error}</p>}
+          {listing.data && !listing.data.error && (
+            <>
+              <p className="muted small path-where">{listing.data.path}</p>
+              {listing.data.parent && (
+                <button type="button" className="path-item" onMouseDown={() => go(listing.data!.parent!)}>
+                  .. up
+                </button>
+              )}
+              {shown.map((row) => (
+                <button key={row.path} type="button" className="path-item" onMouseDown={() => go(row.path)}>
+                  {row.name}
+                </button>
+              ))}
+              {shown.length === 0 && <p className="muted small">Nothing here the container can read.</p>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type TidyStatusRow = {
   checked: number;
   visible: number;
@@ -1102,11 +1386,10 @@ function MediaPaths({
       <div className="path-rows">
         {rows.map((row, index) => (
           <div key={index} className="row">
-            <input
+            <PathBox
               value={row}
-              spellCheck={false}
               placeholder={index === 0 ? "/media" : "/media2"}
-              onChange={(e) => push(rows.map((old, n) => (n === index ? e.target.value : old)))}
+              onChange={(next) => push(rows.map((old, n) => (n === index ? next : old)))}
             />
             <button
               className="btn"
@@ -1130,8 +1413,9 @@ function MediaPaths({
 
       {libraries.length === 0 ? (
         <p className="muted small">
-          No file paths known yet. The library scan fills these in, and this table then says where each one was
-          found.
+          {s && s.checked > 0
+            ? "This build of the app does not report the libraries yet. Rebuild the image and this table fills in."
+            : "No file paths known yet. The library scan fills these in, and this table then says where each one was found."}
         </p>
       ) : (
         <table className="table media-libraries">
@@ -1139,7 +1423,7 @@ function MediaPaths({
             <tr>
               <th>Library, as Plex reports it</th>
               <th>Found at</th>
-              <th>Or set it by hand</th>
+              <th className="set-by-hand">Or set it by hand</th>
             </tr>
           </thead>
           <tbody>
@@ -1150,14 +1434,24 @@ function MediaPaths({
                   {row.library}
                 </td>
                 <td className="muted small">
-                  {row.found ? row.here : "Not readable here. For example " + row.example}
+                  {row.found ? (
+                    row.here
+                  ) : (
+                    <>
+                      Not readable here
+                      {/* The whole path is too long to read and too useful to
+                          drop, so it is shortened and kept on hover. */}
+                      <span className="path-example" title={row.example}>
+                        {row.example}
+                      </span>
+                    </>
+                  )}
                 </td>
                 <td>
-                  <input
+                  <PathBox
                     value={pairs.get(row.library) ?? ""}
-                    spellCheck={false}
-                    placeholder={row.found ? (row.here ?? "") : "/media/something"}
-                    onChange={(e) => setPair(row.library, e.target.value)}
+                    placeholder={row.found ? (row.here ?? "") : "Pick where it is"}
+                    onChange={(next) => setPair(row.library, next)}
                   />
                 </td>
               </tr>

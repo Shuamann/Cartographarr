@@ -277,7 +277,7 @@ function AccessReview() {
       <p className="muted small">
         Everyone Tautulli knows about, what they can see, and whether they still use it. Not watching means no plays in
         {" "}
-        {inactive_days} days (change this in Settings, Behaviour). Library lists come from Tautulli, so this works without a
+        {inactive_days} days (change this in Settings, People and privacy). Library lists come from Tautulli, so this works without a
         Plex token; change access from Who has access, or a person&apos;s Access tab.
       </p>
       <div className="row chips">

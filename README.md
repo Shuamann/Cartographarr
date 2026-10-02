@@ -104,12 +104,16 @@ directory your libraries sit in rather than one share at a time:
 -v /mnt/user:/media
 ```
 
-Then under **Settings, Behaviour, Tidying files**, add `/media` to the mounted
+Then under **Settings, Library and files**, add `/media` to the mounted
 directories and press **Check again**. The table underneath lists every library
 Plex reports and says where it was found: a library Plex calls `/movies` is
 looked for at `/media/movies` and at `/media` itself, and whichever answers is
-remembered. A library that stays missing gets its path typed into the last
-column. Add a second directory for libraries kept on another share.
+remembered. A library that stays missing gets its path set in the last column.
+Add a second directory for libraries kept on another share.
+
+Every path box there lists what the container can see: click it for the
+directories at that path, type to filter them, Tab to complete as far as the
+names agree, click one to go into it. Nothing has to be remembered or guessed.
 
 Everything else in the app works without any of this.
 
@@ -141,11 +145,11 @@ out and the UI owns it.
 | `ENFORCE_ENABLED`, `ENFORCE_DRY_RUN` | Whether rules run; `ENFORCE_DRY_RUN=true` locks every rule to record only |
 | `UPLOAD_CAPACITY_MBPS` | Your upload, for stall causes and the upload alert |
 | `API_DOCS` | `true` turns on /docs and /openapi.json, off by default |
-| `ALLOW_FRAMING` | `true` lets dashboards such as Organizr show Cartographarr in a frame (also in Settings, Access) |
+| `ALLOW_FRAMING` | `true` lets dashboards such as Organizr show Cartographarr in a frame (also in Settings, Sign-in) |
 
 ## Signing in with Plex
 
-Switch on **Offer Sign in with Plex** in Settings, Access. A Plex account signs
+Switch on **Offer Sign in with Plex** in Settings, Sign-in. A Plex account signs
 in as the Cartographarr account linked to it under Accounts, or as a viewer
 account with the same email. Usernames are never matched, and an admin must be
 linked to their Plex account before Plex can sign them in. With **Let people
@@ -438,7 +442,7 @@ People who sign in as viewers can report what they watched, and see what they
 reported. Reporting from a play in their History carries that play with it: the
 device, the time, whether it transcoded and whether it stalled. They see their
 own reports and nothing else, and only an admin closes one. Turn it off under
-**Settings, Access**.
+**Settings, People and privacy**.
 
 Comment on an issue, resolve it or reopen it from here. One that came from
 Seerr is updated there as well, signed with the name of whoever acted, since
@@ -504,7 +508,7 @@ handled without pressing anything. It starts as record only like every rule,
 and answers to the same daily cap.
 
 To use it, mount the media in the container: the directory your libraries live
-in, not one share per library. **Settings, Behaviour, Tidying files** then
+in, not one share per library. **Settings, Library and files** then
 lists every library and where it found each one, with a box for any it could
 not. The compose file has the mount commented out ready.
 

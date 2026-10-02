@@ -390,6 +390,11 @@ async def tag_big_files(admin: AdminUser, keys: list[int] = Body(..., embed=True
 # ---- tidying a file's tracks -------------------------------------------------
 
 
+DIRECTORY_CAP = 500
+"""Enough to list a crowded share, few enough that a wrong turn into a folder
+of ten thousand episodes does not hang the box."""
+
+
 @router.get("/tidy/status")
 async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> dict:
     """Whether this container can actually tidy anything, and why not.
@@ -431,6 +436,59 @@ async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> di
     answer["path_map"] = mediafix.path_map()
     answer["roots"] = mediafix.roots()
     return answer
+
+
+@router.get("/tidy/directories")
+async def tidy_directories(_: AdminUser, path: str = Query("/")) -> dict:
+    """What this container can see at a path, one level down.
+
+    Setting a mount means knowing what was actually mounted, which is a
+    question only the container can answer. Directory names and nothing else:
+    no files, no sizes, no contents. Admin only, like everything else here.
+    """
+    import asyncio
+    import os
+
+    def look() -> dict:
+        here = os.path.abspath(path or "/")
+        # A half typed path lists the directory it is inside, which is what
+        # makes completion work while somebody is still typing.
+        if not os.path.isdir(here):
+            here = os.path.dirname(here) or "/"
+
+        names: list[str] = []
+        problem = None
+        try:
+            with os.scandir(here) as entries:
+                for entry in entries:
+                    if entry.name.startswith("."):
+                        continue
+                    try:
+                        if not entry.is_dir():
+                            continue
+                    except OSError:
+                        continue
+                    names.append(entry.name)
+                    if len(names) >= DIRECTORY_CAP:
+                        break
+        except OSError as err:
+            problem = err.strerror or str(err)
+
+        names.sort(key=str.lower)
+        shown = here.replace("\\", "/")
+        if len(shown) > 1:
+            shown = shown.rstrip("/")
+        parent = os.path.dirname(here).replace("\\", "/") or "/"
+        return {
+            "path": shown,
+            "parent": parent if parent != shown else None,
+            "directories": [
+                {"name": name, "path": f"{shown.rstrip('/')}/{name}"} for name in names
+            ],
+            "error": problem,
+        }
+
+    return await asyncio.to_thread(look)
 
 
 @router.get("/file/{rating_key}/tidy")

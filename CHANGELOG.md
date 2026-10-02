@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.44.0 - 2026-10-02
+
+### Added
+- A path box that lists what the container can actually see. Click it and it shows the directories at that path,
+  typing filters them, Tab completes as far as the names agree, and clicking one goes into it. Used for the media
+  directories and for setting a library's path by hand, because which directories exist inside a container is a
+  question only the container can answer
+
+### Changed
+- Settings has had a pass over it. Behaviour and Access, which between them held eleven unrelated sections, are now
+  Syncing, Live and rules, Library and files, People and privacy, and Sign-in: one subject a page, short enough to
+  read in one go. The two near-identical sections about reported problems, one on each old page, are one section
+- Settings inputs now fit their values. On and off is a switch rather than a dropdown. A number is a number box with
+  its unit beside it and bounds on it, instead of free text with the unit in brackets after its name. A comma
+  separated list, such as the subtitle languages to keep or the trusted proxy addresses, is a list of chips you add
+  to one at a time. Apprise URLs get a box that takes one per line, which is how they are pasted
+- library_store_depth, which decides how much of a path names the disk a file sits on, is reachable in Settings for
+  the first time, under Library and files, Storage
+
 ## 0.43.0 - 2026-10-02
 
 ### Added
