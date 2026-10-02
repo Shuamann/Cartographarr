@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.41.1 - 2026-10-01
+
+### Changed
+- The Library uses the width of the screen. It shared a layout with Settings, which is capped at 1180 pixels because
+  prose and form fields stop being readable past about a thousand. Tables and a wall of posters want every pixel a
+  wide screen has, so the Library gets its own cap and the posters a slightly larger tile
+
 ## 0.41.0 - 2026-10-01
 
 ### Fixed

@@ -174,7 +174,7 @@ export default function Library() {
   const waiting = (replacementList.data ?? []).filter((r) => r.status === "ready").length;
 
   return (
-    <div className="settings-layout">
+    <div className="settings-layout wide">
       <nav className="settings-nav" aria-label="Library">
         <h1>Library</h1>
         <div className="settings-nav-group">

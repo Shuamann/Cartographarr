@@ -740,7 +740,7 @@ code {
 /* The poster wall: the library as something to look through. */
 .poster-wall {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
   gap: 12px;
   margin-top: 10px;
 }
@@ -2943,6 +2943,13 @@ label.locked .pill {
   margin: 0 auto;
   padding: var(--pad-page);
   align-items: start;
+}
+
+/* Settings is prose and form fields, which stop being readable past about a
+   thousand pixels. The Library is tables and posters, which want every pixel
+   a wide screen has. */
+.settings-layout.wide {
+  max-width: 1900px;
 }
 .settings-nav {
   position: sticky;
