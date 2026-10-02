@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.37.0 - 2026-10-01
+
+### Added
+- Tidy the tracks, on a file card: convert styled subtitles to SRT, drop picture subtitles that already exist as
+  text, drop duplicate subtitle tracks, add an AC3 track beside audio nothing can play, repackage an old container.
+  ffmpeg and ffprobe now ship in the image. Nothing re-encodes the picture, so a film takes minutes rather than hours
+- What it would do is worked out from what has already been read into the database, so the list shows whether or not
+  the media is mounted here. The command itself is built from ffprobe's own stream list at the moment of running,
+  because mapping streams needs their real indexes
+- One file at a time, with progress and a Stop button at the top of Files worth attention. The result is checked
+  against the original for length and for having a picture in it, and only then replaces it
+
+### Changed
+- The compose file documents the media mounts this needs. Mount the shares at the paths Plex already reports and
+  there is nothing to configure; where they differ, set the path map in Settings
+
 ## 0.36.2 - 2026-09-26
 
 ### Fixed

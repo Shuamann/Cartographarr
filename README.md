@@ -409,6 +409,32 @@ says Seerr was not updated.
 When a replacement for a file finishes importing, whatever was reported about
 that file is closed with a note saying what replaced it.
 
+## Tidying a file's tracks
+
+Most of what the Library finds wrong with a file is not the picture: styled
+subtitles a television burns in, a pile of duplicate subtitle tracks, audio no
+common device can decode, a container from another decade. **Tidy the tracks**,
+on a file card, fixes those with ffmpeg inside this container. Nothing is
+re-encoded, so a film takes minutes and loses no quality.
+
+What is offered comes from the file's own tracks:
+
+- Styled (ASS) subtitles converted to SRT, which stops the burn-in
+- Picture subtitles dropped where the same language exists as text, and kept
+  where it does not, because a picture subtitle is better than none
+- Duplicate subtitle tracks dropped, keeping the first of each kind
+- An AC3 track added beside audio nothing can play, never instead of it
+- An old container repackaged to mkv, streams copied across
+
+To use it, mount the media in the container. The shares want to be where Plex
+already reports them (`/movies`, `/tv`), in which case there is nothing to
+configure; where they differ, set **media_path_map** in Settings as
+`plex=here` pairs. The compose file has the mounts commented out ready.
+
+One file is worked on at a time, with progress and a Stop button at the top of
+**Files worth attention**. The result is checked against the original, for
+length and for still having a picture in it, before it replaces anything.
+
 ## Taking up room
 
 **Files worth attention, Taking up room** lists big files nobody watches,

@@ -17,6 +17,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv
 
+# ffmpeg and ffprobe, for tidying a file's tracks: converting styled subtitles,
+# dropping duplicates, adding an audio track everything can play, repackaging
+# an old container. None of it re-encodes the picture. Roughly 100 MB of layer,
+# and the feature is simply off without it.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Source first, then one install. A dep-caching layer is possible by copying
 # pyproject alone and faking a package dir, but that leaves an empty `app` in
 # site-packages shadowing the real one, a bad trade for ~40s of rebuild.

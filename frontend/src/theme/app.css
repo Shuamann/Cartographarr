@@ -737,6 +737,27 @@ code {
   stroke: none;
 }
 
+/* Tidying: the steps on a file card, and what is running.
+   .mini spreads its children apart, which is wrong for a checkbox and its
+   label, so this row is packed from the left instead. */
+.tidy-step {
+  align-items: flex-start;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.tidy-step > .min0 {
+  flex: 1;
+}
+
+.tidy-step .check strong {
+  color: var(--ink);
+}
+
+.tidy-jobs {
+  margin-bottom: 12px;
+}
+
 /* The breakdown under a store's row: who, on what, and which titles. */
 .store-why-row > td {
   padding-top: 0;

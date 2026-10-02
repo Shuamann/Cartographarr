@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     raised surfaces, borders and quieter inks are worked out from them, which
     is the difference between choosing a scheme and filling in a form."""
 
+    media_path_map: str = ""
+    """How the paths Plex reports line up with this container's mounts, as
+    `plex=here` pairs separated by commas. Empty, which is the normal case,
+    means they are the same: mount the shares where Plex already has them and
+    there is nothing to set. Only needed when they differ, for example
+    `/media/movies=/movies`."""
+
     log_level: str = "INFO"
 
     # ---- Updates -----------------------------------------------------------

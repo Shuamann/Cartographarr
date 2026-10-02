@@ -290,6 +290,80 @@ async def bitrate_advice(_: AdminUser, days: int = Query(90, ge=7, le=3650)) -> 
     return await asyncio.to_thread(streams.bitrate_advice, days)
 
 
+# ---- tidying a file's tracks -------------------------------------------------
+
+
+@router.get("/file/{rating_key}/tidy")
+async def tidy_plan(rating_key: int, _: AdminUser) -> dict:
+    """What tidying this file would do, and whether this container can."""
+    import asyncio
+
+    from app.models import MediaItem
+    from app.services import mediafix
+
+    def look():
+        with session_scope() as db:
+            item = db.get(MediaItem, rating_key)
+            if item is None or item.title is None:
+                return None
+            answer = mediafix.plan(item)
+            answer["local_path"] = mediafix.local_path(item.file_path)
+            return answer
+
+    answer = await asyncio.to_thread(look)
+    if answer is None:
+        raise HTTPException(404, "No such title")
+    answer["tools"] = await asyncio.to_thread(mediafix.tools)
+    return answer
+
+
+@router.post("/file/{rating_key}/tidy")
+async def tidy_file(rating_key: int, admin: AdminUser, steps: list[str] = Body(..., embed=True)) -> dict:
+    """Queue the tidying. One file is worked on at a time."""
+    import asyncio
+
+    from app import audit
+    from app.services import mediafix
+
+    try:
+        job_id = await asyncio.to_thread(mediafix.queue, rating_key, steps, admin.username)
+    except LookupError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    mediafix.start_worker()
+    audit.record(admin, "library.tidy.queued", f"Queued tidying for {rating_key}: {', '.join(steps)}",
+                 target=str(rating_key))
+    return {"job": job_id}
+
+
+@router.get("/tidy/jobs")
+def tidy_jobs(_: AdminUser, db: Db, limit: int = Query(20, ge=1, le=200)) -> list[dict]:
+    import json as json_module
+
+    from app.models import MediaJob
+
+    rows = db.execute(select(MediaJob).order_by(MediaJob.id.desc()).limit(limit)).scalars().all()
+    return [
+        {
+            **{c.name: getattr(job, c.name) for c in MediaJob.__table__.columns},
+            "steps": json_module.loads(job.steps or "[]"),
+        }
+        for job in rows
+    ]
+
+
+@router.post("/tidy/jobs/{job_id}/cancel")
+def cancel_tidy(job_id: int, admin: AdminUser) -> dict:
+    from app import audit
+    from app.services import mediafix
+
+    if not mediafix.cancel(job_id):
+        raise HTTPException(404, "Nothing to stop")
+    audit.record(admin, "library.tidy.cancelled", f"Stopped tidying job {job_id}", target=str(job_id))
+    return {"cancelled": job_id}
+
+
 @router.get("/stores/trouble")
 async def store_trouble(
     _: AdminUser, store: str = Query(..., min_length=1), days: int = Query(30, ge=1, le=3650)

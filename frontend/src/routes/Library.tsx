@@ -516,6 +516,7 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
       {/* Outside the findings: a file can be worth replacing for taking up
           room, not only for being broken. */}
       <ArrActions ratingKey={f.rating_key} arr={f.arr} title={f.title} />
+      <TidyPanel ratingKey={f.rating_key} title={f.title} />
       <dl className="kv">
         <div>
           <dt>Format</dt>
@@ -602,6 +603,158 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
 /* Hand a file back to Radarr or Sonarr. Search asks it to look for a better
  * release, which it only grabs if the quality profile rates it higher; Tag
  * marks it to pick a release by hand. Neither deletes the current file. */
+/* Tidying a file's tracks with ffmpeg, in this container.
+ *
+ * What is offered comes from the file's own tracks, so the list is empty for a
+ * file with nothing wrong. Nothing re-encodes the picture: subtitles are
+ * converted or dropped, an audio track everything can play is added beside the
+ * original, an old container is repackaged.
+ */
+type Tidy = {
+  steps: { key: string; what: string; why: string }[];
+  local_path: string | null;
+  tools: { ready: boolean };
+};
+
+type TidyJob = {
+  id: number;
+  rating_key: number;
+  title: string | null;
+  status: string;
+  progress: number;
+  detail: string | null;
+  saved_bytes: number | null;
+  steps: string[];
+};
+
+function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
+  const plan = useApi<Tidy>(`/library/file/${ratingKey}/tidy`, [ratingKey]);
+  const [chosen, setChosen] = useState<Set<string> | null>(null);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (plan.error || !plan.data || plan.data.steps.length === 0) return null;
+  const t = plan.data;
+  const picked = chosen ?? new Set(t.steps.map((s) => s.key));
+
+  function pick(key: string, on: boolean) {
+    const next = new Set(picked);
+    if (on) next.add(key);
+    else next.delete(key);
+    setChosen(next);
+  }
+
+  async function start() {
+    if (!confirm(`Tidy ${title}?\n\nThe file is read and written once, the result is checked against the original for length and picture, and only then does it replace it. The picture is never re-encoded.`)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.post(`/library/file/${ratingKey}/tidy`, { steps: [...picked] });
+      setMessage({ text: "Queued. It runs one file at a time; progress is at the top of this page.", ok: true });
+    } catch (err) {
+      setMessage({ text: (err as Error).message, ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const blocked = !t.tools.ready
+    ? "ffmpeg is not in this container, so this build cannot tidy anything."
+    : !t.local_path
+      ? "This container cannot see the file. Mount the share where Plex has it, or set the path map in Settings."
+      : null;
+
+  return (
+    <section className="profile-section tidy">
+      <h3>Tidy the tracks</h3>
+      <div className="mini-list">
+        {t.steps.map((step) => (
+          <label key={step.key} className="mini tidy-step">
+            <span className="min0">
+              <span className="check">
+                <input
+                  type="checkbox"
+                  checked={picked.has(step.key)}
+                  disabled={Boolean(blocked)}
+                  onChange={(e) => pick(step.key, e.target.checked)}
+                />
+                <strong>{step.what}</strong>
+              </span>
+              <p className="muted small">{step.why}</p>
+            </span>
+          </label>
+        ))}
+      </div>
+      {blocked ? (
+        <p className="muted small">{blocked}</p>
+      ) : (
+        <div className="row wrap">
+          <button className="btn" disabled={busy || picked.size === 0} onClick={start}>
+            {busy ? "Queueing..." : "Tidy it"}
+          </button>
+          <span className="muted small">
+            The picture is copied, never re-encoded. The original is replaced only after the result is checked.
+          </span>
+        </div>
+      )}
+      {message && <p className={message.ok ? "note" : "note bad-note"}>{message.text}</p>}
+    </section>
+  );
+}
+
+/* What ffmpeg is doing now, and what it did lately. Shown only when there is
+   something to say, so the page is unchanged for anyone not using it. */
+function TidyJobs() {
+  const jobs = useApi<TidyJob[]>("/library/tidy/jobs?limit=8", []);
+  const busy = (jobs.data ?? []).some((j) => j.status === "running" || j.status === "queued");
+  const again = useRef(jobs.reload);
+  again.current = jobs.reload;
+
+  // Only while something is working: a finished list does not change by itself.
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => again.current(), 3000);
+    return () => clearInterval(timer);
+  }, [busy]);
+
+  const rows = jobs.data ?? [];
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="tidy-jobs">
+      <h3 className="section-head">Tidying</h3>
+      <div className="mini-list">
+        {rows.map((job) => (
+          <div key={job.id} className="mini">
+            <div className="min0">
+              <strong>{job.title ?? `Item ${job.rating_key}`}</strong>
+              <p className="muted small">
+                {job.status === "running"
+                  ? `${job.progress}% - ${job.detail ?? "working"}`
+                  : job.status === "queued"
+                    ? "Waiting its turn"
+                    : `${job.status}: ${job.detail ?? ""}`}
+                {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
+              </p>
+            </div>
+            {(job.status === "running" || job.status === "queued") && (
+              <button
+                className="tab"
+                onClick={async () => {
+                  await api.post(`/library/tidy/jobs/${job.id}/cancel`, {});
+                  jobs.reload();
+                }}
+              >
+                Stop
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ArrActions({
   ratingKey,
   arr,
@@ -1683,6 +1836,7 @@ function Attention({ days }: { days: number }) {
 
   return (
     <>
+      <TidyJobs />
       <div className="segmented">
         {LENSES.map((l) => (
           <button key={l.id} className={lens === l.id ? "seg on" : "seg"} onClick={() => choose(l.id)}>

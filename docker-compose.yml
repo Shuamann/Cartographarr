@@ -18,6 +18,13 @@ services:
     volumes:
       - /mnt/user/appdata/cartographarr:/data
 
+      # Only needed to tidy a file's tracks from the Library page. Mount the
+      # shares at the paths Plex already reports and there is nothing else to
+      # configure; where they differ, set media_path_map in Settings. Read
+      # write, because tidying replaces the file it tidied.
+      # - /mnt/user/movies:/movies
+      # - /mnt/user/tv:/tv
+
     # One secrets file, shared with local dev. Anything set here wins over the
     # UI and renders read-only in Settings; omit a key entirely to let the UI
     # own it and persist to the database. See app/settings_store.py.

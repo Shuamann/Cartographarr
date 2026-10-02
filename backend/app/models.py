@@ -818,3 +818,31 @@ class KeepDecision(Base):
     reason: Mapped[str | None] = mapped_column(Text)
     kept_by: Mapped[str | None] = mapped_column(String(64))
     kept_at: Mapped[datetime | None] = mapped_column()
+
+
+class MediaJob(Base):
+    """One run of ffmpeg over one file, and what came of it.
+
+    Kept because these take minutes and nobody watches them: the page is shut,
+    the job carries on, and what happened is readable afterwards. The plan is
+    stored with the job so a finished one still says what it did, even after
+    the file has been read again and no longer needs it.
+    """
+
+    __tablename__ = "media_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rating_key: Mapped[int] = mapped_column(Integer, index=True)
+    title: Mapped[str | None] = mapped_column(String(512))
+    path: Mapped[str | None] = mapped_column(Text)
+    steps: Mapped[str | None] = mapped_column(Text)
+    """The step keys asked for, as JSON, and the words shown with them."""
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    """queued, running, done, failed, cancelled."""
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[str | None] = mapped_column(Text)
+    """The last thing worth saying: what it is doing, or why it stopped."""
+    saved_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    asked_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime | None] = mapped_column(index=True)
+    finished_at: Mapped[datetime | None] = mapped_column()
