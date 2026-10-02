@@ -390,6 +390,11 @@ async def tag_big_files(admin: AdminUser, keys: list[int] = Body(..., embed=True
 # ---- tidying a file's tracks -------------------------------------------------
 
 
+PER_LIBRARY = 4
+"""Extra files fetched for each library, so none of them is judged on one
+path that happens to have been deleted since the scan read it."""
+
+
 DIRECTORY_CAP = 500
 """Enough to list a crowded share, few enough that a wrong turn into a folder
 of ten thousand episodes does not hang the box."""
@@ -418,6 +423,21 @@ async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> di
                     .limit(sample)
                 ).all()
             ]
+            # The newest files in one library can be a single row of a shared
+            # sample, and one stale path is then the whole library's answer. So
+            # each library gets a few of its own, taken from the far end of the
+            # list where nothing has been touched lately.
+            for library in sorted({mediafix.library_of(path) for path in paths}):
+                paths.extend(
+                    row[0]
+                    for row in db.execute(
+                        select(MediaItem.file_path)
+                        .where(MediaItem.file_path.like(f"{library}/%"))
+                        .order_by(MediaItem.rating_key.asc())
+                        .limit(PER_LIBRARY)
+                    ).all()
+                )
+
         seen = [path for path in paths if mediafix.local_path(path)]
         missing = [path for path in paths if path not in set(seen)]
         return {

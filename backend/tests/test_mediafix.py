@@ -61,7 +61,9 @@ def test_sidecar_subtitles_are_not_touched():
 def test_audio_nothing_can_play_gets_a_track_added_not_replaced():
     audio = [{"codec": "truehd", "channels": 8, "language": "eng"}]
     steps = mediafix.plan(item(audio_tracks=json.dumps(audio)))["steps"]
-    assert [s["key"] for s in steps] == ["no_compatible_audio"]
+    # Both offers, because a television and a phone want different tracks and
+    # a file with only TrueHD on it has neither.
+    assert [s["key"] for s in steps] == ["no_compatible_audio", "add_aac_track"]
     assert "beside the original" in steps[0]["what"]
 
 
@@ -322,3 +324,43 @@ def test_unticking_every_audio_track_is_refused_quietly():
     argv = mediafix.build(MANY, [mediafix.CHOSEN], "in.mkv", "out.mkv", {"audio": [], "subtitles": []})
     assert all(f"0:{n}" in mapped(argv) for n in (1, 2, 3)), "a file is never left silent"
     assert not any(f"0:{n}" in mapped(argv) for n in (4, 5, 6)), "but it may be left without subtitles"
+
+
+# ---- adding a stereo track ---------------------------------------------------
+
+def test_a_stereo_aac_track_is_offered_on_a_surround_only_file():
+    """The usual reason a phone converts the audio, and nothing is wrong yet."""
+    plan = mediafix.plan(item(audio_tracks=json.dumps(
+        [{"codec": "eac3", "channels": 6, "language": "eng"}])))
+    assert "add_aac_track" in [s["key"] for s in plan["steps"]]
+
+
+def test_it_is_not_offered_to_a_file_that_already_has_one():
+    plan = mediafix.plan(item(audio_tracks=json.dumps([
+        {"codec": "eac3", "channels": 6, "language": "eng"},
+        {"codec": "aac", "channels": 2, "language": "eng"},
+    ])))
+    assert "add_aac_track" not in [s["key"] for s in plan["steps"]]
+
+
+def test_the_added_track_is_stereo_aac_downmixed_from_the_fullest_mix():
+    streams = [
+        STREAMS[0],
+        {"index": 1, "codec_type": "audio", "codec_name": "aac", "channels": 2, "tags": {"language": "eng"}},
+        {"index": 2, "codec_type": "audio", "codec_name": "truehd", "channels": 8, "tags": {"language": "eng"}},
+    ]
+    argv = mediafix.build(streams, ["add_aac_track"], "in.mkv", "out.mkv")
+    # Downmixed from the eight channel track, not the stereo one already there.
+    assert argv[argv.index("-c:a:2") - 1] == "0:2"
+    assert argv[argv.index("-c:a:2") + 1] == "aac"
+    assert argv[argv.index("-ac:a:2") + 1] == "2"
+    # The originals survive, which is the whole point of adding rather than
+    # converting.
+    assert "-map" in argv and argv.count("-map") == 4
+
+
+def test_two_added_tracks_do_not_land_on_the_same_position():
+    streams = [STREAMS[0], {"index": 1, "codec_type": "audio", "codec_name": "truehd", "channels": 6}]
+    argv = mediafix.build(streams, ["no_compatible_audio", "add_aac_track"], "in.mkv", "out.mkv")
+    assert argv[argv.index("-c:a:1") + 1] == "ac3"
+    assert argv[argv.index("-c:a:2") + 1] == "aac"

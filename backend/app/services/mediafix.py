@@ -85,11 +85,18 @@ page listing two hundred. Thrown away whenever the settings it was derived from
 change, so a wrong guess is never kept past the fix."""
 
 
-_missed: set[str] = set()
-"""Libraries already searched for and not found.
+_missed: dict[str, int] = {}
+"""How many times a library has been searched for and not found.
 
-A search walks the roots, so it must happen once rather than once a file. It is
-thrown away with the rest of the memory whenever the settings change."""
+A search walks the roots, so it cannot happen once a file. But giving up after
+one is worse: the file it searched for may be the one that was deleted this
+morning, and a library is not missing because one film is. So a few goes with
+different files, then it stops asking. Thrown away with the rest of the memory
+whenever the settings change."""
+
+SEARCH_TRIES = 3
+"""Files tried for one library before the roots are left alone. Three stale
+paths in a row is a library that has moved, not a coincidence."""
 
 
 def _memory() -> dict[str, str]:
@@ -144,7 +151,7 @@ SEARCH_DEPTH = 2
 
 
 def _search(library: str, tail: str) -> str | None:
-    """Look under the roots for a directory that holds this file.
+    """Look under the roots for the directory this library lives in.
 
     Plex reports the path its own container sees, and that container maps its
     shares however it likes: a library Plex calls /movies can be /media/Films
@@ -153,12 +160,18 @@ def _search(library: str, tail: str) -> str | None:
     directory under these roots has this film in it", which has one answer and
     does not care what anything is called.
 
-    Walked once per library and remembered, hit or miss.
+    It asks for the film's own folder rather than the file, because the file is
+    the part that gets renamed, re-encoded or deleted while the folder stays.
+    Finding the folder settles where the library lives even when that one file
+    is gone, and the caller is told None for the file either way.
     """
     import os
 
-    if library in _missed:
+    if _missed.get(library, 0) >= SEARCH_TRIES:
         return None
+
+    # "Coyote vs. Acme (2026)" out of "Coyote vs. Acme (2026)/Coyote...mkv".
+    head = tail.split("/")[0]
 
     for root in roots():
         frontier = [root]
@@ -175,13 +188,15 @@ def _search(library: str, tail: str) -> str | None:
                 except OSError:
                     continue
                 for child in children[:SEARCH_WIDTH]:
-                    if os.path.exists(f"{child}/{tail}"):
+                    if os.path.exists(f"{child}/{head}"):
                         _memory()[library] = child
-                        return f"{child}/{tail}"
+                        _missed.pop(library, None)
+                        found = f"{child}/{tail}"
+                        return found if os.path.exists(found) else None
                     below.append(child)
             frontier = below
 
-    _missed.add(library)
+    _missed[library] = _missed.get(library, 0) + 1
     return None
 
 
@@ -261,19 +276,23 @@ def where_libraries(paths: list[str]) -> list[dict[str, Any]]:
 
     rows = []
     for library, files in sorted(by_library.items()):
+        # Several files, because the newest one in a library is the one most
+        # likely to have been moved since the scan read it.
         here = None
-        for path in files[:5]:
+        for path in files[:SEARCH_TRIES + 1]:
             here = local_path(path)
-            if here:
+            if here or _memory().get(library):
                 break
-        home = None
-        if here:
+        home = _memory().get(library)
+        if here and not home:
             tail = str(PurePosixPath(files[0].replace("\\", "/")).relative_to(library))
-            home = _memory().get(library) or (here[: -len(tail)].rstrip("/") if here.endswith(tail) else None)
+            home = here[: -len(tail)].rstrip("/") if here.endswith(tail) else None
         rows.append({
             "library": library,
             "here": home or (library if here else None),
-            "found": bool(here),
+            # Where it lives is the question, not whether one sampled file is
+            # still there: a library found with a stale file is still found.
+            "found": bool(here or home),
             "files": len(files),
             "mapped": any(library.startswith(plex) or plex.startswith(library) for plex, _ in path_map()),
             "example": files[0],
@@ -348,6 +367,19 @@ def plan(item: Any) -> dict[str, Any]:
             "what": "Add an AC3 track beside the original audio",
             "why": "Nothing here can be played by most televisions, sticks and browsers, so Plex converts the audio "
                    "for them, and some clients convert the picture too. The original track is kept.",
+        })
+
+    # Offered on anything without one already, rather than only on a file
+    # something is wrong with. A surround track is the usual reason a phone or
+    # a browser converts the audio, and the fix is not to throw the surround
+    # away: it is to put a small stereo track beside it and let each client
+    # take the one it wants.
+    if audio and not any(_codec(a) == "aac" and int(a.get("channels") or 0) <= 2 for a in audio):
+        steps.append({
+            "key": "add_aac_track",
+            "what": "Add an AAC stereo track beside the original audio",
+            "why": "AAC stereo is the one thing every television, phone, browser and stick plays without converting "
+                   "anything. It costs a few hundred megabytes and the original track is kept untouched.",
         })
 
     # ---- the ones that answer to Settings -----------------------------------
@@ -553,15 +585,32 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
             if str(stream.get("codec_name") or "").lower() in STYLED_SUBTITLES:
                 argv += [f"-c:s:{position}", "srt"]
 
+    # Added tracks go on the end, in the order asked for, so two of them do not
+    # both claim the same position.
+    added = 0
+
     if "no_compatible_audio" in wanted and kept_audio:
         # Beside the original, never instead of it: the lossless track is why
         # somebody keeps the file, and six channels of AC3 play everywhere.
         best = max(kept_audio, key=lambda s: int(s.get("channels") or 0))
         channels = min(int(best.get("channels") or 2), 6)
-        position = len(kept_audio)
+        position = len(kept_audio) + added
         argv += ["-map", f"0:{best['index']}", f"-c:a:{position}", "ac3",
                  f"-ac:a:{position}", str(channels), f"-b:a:{position}", "640k" if channels > 2 else "192k",
                  f"-metadata:s:a:{position}", "title=AC3 (added by Cartographarr)"]
+        added += 1
+
+    if "add_aac_track" in wanted and kept_audio:
+        # Downmixed from whichever track has the most channels, so the stereo
+        # carries the full mix rather than two of its six channels.
+        best = max(kept_audio, key=lambda s: int(s.get("channels") or 0))
+        position = len(kept_audio) + added
+        argv += ["-map", f"0:{best['index']}", f"-c:a:{position}", "aac",
+                 f"-ac:a:{position}", "2", f"-b:a:{position}", "192k",
+                 f"-metadata:s:a:{position}", "title=AAC stereo (added by Cartographarr)"]
+        if _language(best):
+            argv += [f"-metadata:s:a:{position}", f"language={_language(best)}"]
+        added += 1
 
     argv.append(target)
     return argv

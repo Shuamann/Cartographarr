@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.46.0 - 2026-10-02
+
+### Added
+- Library, Remediation queue. Tidying a file's tracks and replacing it with a better copy are the same job from
+  where you are standing, so they share a page: Active shows what is being worked on, History what was. Tidying
+  used to appear as a banner above Files worth attention, which is not anywhere anybody would go looking for it
+- Add an AAC stereo track, as a tidying step on its own. Offered on any file that does not already have one, not
+  only on files something is wrong with: a surround track is the usual reason a phone or a browser converts the
+  audio, and the fix is not to throw the surround away but to put a small stereo track beside it and let each
+  client take the one it wants. Downmixed from whichever track carries the fullest mix, and the originals are kept
+
+### Fixed
+- A library whose sampled file had been deleted since the scan read it was reported missing, and the miss was
+  remembered, so the other files in it were never tried. The search now asks for the film's own folder rather than
+  the file, since the file is the part that gets renamed, re-encoded or deleted while the folder stays, and it is
+  allowed a few goes with different files before it gives up on a library
+- Settings now pulls a few files per library rather than judging each one on whatever happened to be in a shared
+  sample of the forty most recent, where a quiet library could be represented by a single stale path
+
 ## 0.45.1 - 2026-10-02
 
 ### Changed

@@ -112,7 +112,7 @@ const SECTIONS = [
   { id: "four-k", title: "4K copies" },
   { id: "storage", title: "Storage" },
   { id: "requests", title: "Requested, never watched" },
-  { id: "replacements", title: "Replacements" },
+  { id: "queue", title: "Remediation queue" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -171,7 +171,9 @@ export default function Library() {
   const [days, setDays] = useState(90);
   const current = SECTIONS.find((s) => s.id === section)!;
   const replacementList = useApi<Replacement[]>("/library/replacements");
+  const tidyList = useApi<TidyJob[]>("/library/tidy/jobs?limit=30");
   const waiting = (replacementList.data ?? []).filter((r) => r.status === "ready").length;
+  const working = (tidyList.data ?? []).filter((j) => j.status === "running" || j.status === "queued").length;
 
   return (
     <div className="settings-layout wide">
@@ -186,7 +188,10 @@ export default function Library() {
               onClick={() => setSection(s.id)}
             >
               <span>{s.title}</span>
-              {s.id === "replacements" && waiting > 0 && <span className="pill warn">{waiting} ready</span>}
+              {s.id === "queue" && working > 0 && <span className="pill">{working} running</span>}
+              {s.id === "queue" && working === 0 && waiting > 0 && (
+                <span className="pill warn">{waiting} ready</span>
+              )}
             </button>
           ))}
         </div>
@@ -194,7 +199,7 @@ export default function Library() {
       <div className="settings-page">
         <header className="settings-page-head row-between">
           <h2>{current.title}</h2>
-          {section !== "overview" && section !== "requests" && section !== "replacements" && (
+          {section !== "overview" && section !== "requests" && section !== "queue" && (
             <label className="inline-select">
               <span className="muted small">Looking back</span>
               <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -214,7 +219,7 @@ export default function Library() {
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
         {section === "requests" && <Requests />}
-        {section === "replacements" && <Replacements />}
+        {section === "queue" && <RemediationQueue />}
       </div>
     </div>
   );
@@ -707,7 +712,7 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
             }
           : {},
       });
-      setMessage({ text: "Queued. It runs one file at a time; progress is at the top of this page.", ok: true });
+      setMessage({ text: "Queued. It runs one file at a time, and the Remediation queue shows how far along it is.", ok: true });
     } catch (err) {
       setMessage({ text: (err as Error).message, ok: false });
     } finally {
@@ -851,8 +856,8 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
 
 /* What ffmpeg is doing now, and what it did lately. Shown only when there is
    something to say, so the page is unchanged for anyone not using it. */
-function TidyJobs() {
-  const jobs = useApi<TidyJob[]>("/library/tidy/jobs?limit=8", []);
+function TidyJobs({ scope }: { scope: "active" | "history" }) {
+  const jobs = useApi<TidyJob[]>("/library/tidy/jobs?limit=40", []);
   const busy = (jobs.data ?? []).some((j) => j.status === "running" || j.status === "queued");
   const again = useRef(jobs.reload);
   again.current = jobs.reload;
@@ -864,12 +869,13 @@ function TidyJobs() {
     return () => clearInterval(timer);
   }, [busy]);
 
-  const rows = jobs.data ?? [];
+  const working = (job: TidyJob) => job.status === "running" || job.status === "queued";
+  const rows = (jobs.data ?? []).filter((job) => (scope === "active" ? working(job) : !working(job)));
   if (rows.length === 0) return null;
 
   return (
     <section className="tidy-jobs">
-      <h3 className="section-head">Tidying</h3>
+      <h3 className="section-head">{scope === "active" ? "Tidying tracks" : "Tidied"}</h3>
       <div className="mini-list">
         {rows.map((job) => (
           <div key={job.id} className="mini">
@@ -1326,7 +1332,15 @@ const REPLACEMENT_STATUS: Record<Replacement["status"], { label: string; tone: s
 
 const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
 
-function Replacements() {
+/* Everything being done to a file, in one place.
+ *
+ * Tidying a file's tracks and replacing it with a better copy are the same job
+ * from where you are standing: something is being changed about a file and you
+ * want to know how far along it is. They used to live on different pages, one
+ * of them as a banner above an unrelated list, so neither was anywhere you
+ * would go looking.
+ */
+function RemediationQueue() {
   const list = useApi<Replacement[]>("/library/replacements");
   const [tab, setTab] = useState<"active" | "history">("active");
   const rows = list.data ?? [];
@@ -1345,8 +1359,9 @@ function Replacements() {
     <>
       <div className="row-between">
         <p className="muted">
-          Radarr and Sonarr import an upgrade by themselves; anything else waits here once downloaded, beside the current
-          file, for you to confirm or deny. Finished ones move to History.
+          Everything being done to a file: tracks being tidied, and copies being replaced. Radarr and Sonarr import an
+          upgrade by themselves; anything else waits here once downloaded, beside the current file, for you to confirm
+          or deny. Finished work moves to History.
         </p>
         <div className="segmented">
           <button className={tab === "active" ? "seg on" : "seg"} onClick={() => setTab("active")}>
@@ -1357,11 +1372,14 @@ function Replacements() {
           </button>
         </div>
       </div>
+
+      <TidyJobs scope={tab} />
+      {shown.length > 0 && <h3 className="section-head">{tab === "active" ? "Replacing files" : "Replaced"}</h3>}
       {shown.length === 0 && (
         <p className="muted">
           {tab === "active"
-            ? "Nothing in progress. Open a file in any list and choose Find a replacement."
-            : "Nothing finished yet."}
+            ? "Nothing being replaced. Open a file in any list and choose Find a replacement, or Tidy its tracks."
+            : "Nothing replaced yet."}
         </p>
       )}
       <div className="mini-list">
@@ -2382,7 +2400,6 @@ function Attention({ days }: { days: number }) {
 
   return (
     <>
-      <TidyJobs />
       <div className="segmented">
         {LENSES.map((l) => (
           <button key={l.id} className={lens === l.id ? "seg on" : "seg"} onClick={() => choose(l.id)}>

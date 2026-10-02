@@ -362,8 +362,8 @@ Best first means most of this file's problems solved, then the service's own
 score, rather than one blended number that would have to decide what a fixed
 soundtrack is worth in custom format points. Download one and it is
 followed until ready. Radarr and Sonarr import an upgrade by themselves;
-anything else, which is most compatibility swaps, waits under **Replacements**
-beside the current file to **Confirm** (import it in place of the old file) or
+anything else, which is most compatibility swaps, waits under **Remediation
+queue** beside the current file to **Confirm** (import it in place of the old file) or
 **Deny** (delete the download and block that release). **Tag for replacement**
 tags the title `cartographarr-replace` instead, to pick one by hand.
 
@@ -503,6 +503,13 @@ What is offered comes from the file's own tracks:
 - An AC3 track added beside audio nothing can play, never instead of it
 - An old container repackaged to mkv, streams copied across
 
+**Add an AAC stereo track** is offered on any file that has not got one,
+rather than only on files something is wrong with. A surround track is the
+usual reason a phone or a browser converts the audio, and the answer is not to
+throw the surround away: it is to put a small stereo track beside it and let
+each client take the one it wants. It is downmixed from whichever track carries
+the fullest mix, and every original track is kept.
+
 The panel also lists the file's own tracks. Untick a subtitle or audio track
 to drop it, and choose which audio track plays first; all, none and first
 language only are there for files carrying fifty subtitle tracks. A choice
@@ -526,9 +533,11 @@ in, not one share per library. **Settings, Library and files** then
 lists every library and where it found each one, with a box for any it could
 not. The compose file has the mount commented out ready.
 
-One file is worked on at a time, with progress and a Stop button at the top of
-**Files worth attention**. The result is checked against the original, for
-length and for still having a picture in it, before it replaces anything.
+One file is worked on at a time, with progress and a Stop button under
+**Remediation queue**, which is where replacements live too: tidying a file's
+tracks and swapping it for a better copy are the same job from where you are
+standing. The result is checked against the original, for length and for still
+having a picture in it, before it replaces anything.
 
 ## Taking up room
 

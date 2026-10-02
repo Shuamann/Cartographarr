@@ -165,20 +165,47 @@ def test_the_search_reaches_a_library_one_level_further_down(tmp_path):
         assert mediafix.local_path("/movies/A Film/a.mkv") == f"{root}/Archive/Films/A Film/a.mkv"
 
 
-def test_a_library_really_absent_is_searched_for_once(tmp_path, monkeypatch):
-    """A walk per file would be a walk per row on a page listing two hundred."""
+def test_a_library_really_absent_stops_being_searched_for(tmp_path, monkeypatch):
+    """A walk per file would be a walk per row on a page listing two hundred.
+
+    A few goes, because the first file tried may be the one deleted this
+    morning, and then it leaves the roots alone.
+    """
     root = make(tmp_path, "Films/A Film/a.mkv")
     import os
 
     with trial({"media_roots": root}):
-        assert mediafix.local_path("/tv/A Show/s01e01.mkv") is None
+        for n in range(mediafix.SEARCH_TRIES):
+            assert mediafix.local_path(f"/tv/A Show/s01e0{n}.mkv") is None
 
         walks = []
         real = os.scandir
         monkeypatch.setattr(os, "scandir", lambda p: walks.append(p) or real(p))
-        assert mediafix.local_path("/tv/A Show/s01e02.mkv") is None
+        assert mediafix.local_path("/tv/A Show/s01e09.mkv") is None
 
     assert walks == []
+
+
+def test_one_deleted_file_does_not_lose_the_library(tmp_path):
+    """The newest file is the one most likely to have moved since the scan."""
+    root = make(tmp_path, "Films/B Film/b.mkv")
+
+    with trial({"media_roots": root}):
+        # The film Plex still has on record is gone from disk.
+        assert mediafix.local_path("/movies/A Film/a.mkv") is None
+        # The next one in the same library still resolves, because the search
+        # settled where the library lives rather than where that file was.
+        assert mediafix.local_path("/movies/B Film/b.mkv") == f"{root}/Films/B Film/b.mkv"
+
+
+def test_a_library_is_found_even_when_the_sampled_file_is_gone(tmp_path):
+    """Settings should say found, because the library is there to be tidied."""
+    root = make(tmp_path, "Films/B Film/b.mkv")
+
+    with trial({"media_roots": root}):
+        rows = mediafix.where_libraries(["/movies/A Film/a.mkv", "/movies/B Film/b.mkv"])
+
+    assert rows[0]["found"] and rows[0]["here"] == f"{root}/Films"
 
 
 def test_a_root_says_what_is_inside_it(tmp_path):
