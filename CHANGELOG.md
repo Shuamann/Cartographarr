@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.41.2 - 2026-10-02
+
+### Fixed
+- The last three routes that held a database session while they waited on Tautulli, Radarr, Sonarr or Seerr now hand
+  it back first: opening a history row, opening a media panel, and restoring a user in Tautulli. None of them can
+  flood the pool the way a page of posters did, but it is the same mistake and it is now absent rather than rare
+
 ## 0.41.1 - 2026-10-01
 
 ### Changed

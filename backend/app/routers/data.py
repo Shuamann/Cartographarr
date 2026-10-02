@@ -173,45 +173,58 @@ def history(
     }
 
 
+def _history_locally(row_id: int, scope: "privacy.Scope | None") -> dict:
+    """The half of a history row this app already knows.
+
+    Its own session, opened and handed back before anything is asked of
+    Tautulli: a session held across a network call is one connection out of a
+    pool of fifteen, and a page that opens several rows at once would hold
+    them all.
+    """
+    from app.models import BannedDevice
+
+    with session_scope() as db:
+        row = db.get(History, row_id)
+        if row is None:
+            raise HTTPException(404, "No such history row")
+        privacy.require_self(scope, row.user_id)
+
+        base = {c.name: getattr(row, c.name) for c in History.__table__.columns}
+
+        # Everything the expanded row links to, so the page does not need a
+        # second round of lookups: who, where, which library, whether banned.
+        user = db.get(User, row.user_id) if row.user_id is not None else None
+        base["user_name"] = (user.friendly_name or user.username) if user else None
+        loc = db.get(IpLocation, row.ip_address) if row.ip_address else None
+        base["place"] = (
+            None
+            if loc is None
+            else {
+                "city": loc.city,
+                "region": loc.region,
+                "country": loc.country,
+                "lat": loc.lat,
+                "lon": loc.lon,
+                "accuracy_km": loc.accuracy_radius,
+                "asn_org": loc.asn_org,
+                "is_hosting": loc.is_hosting,
+                "is_private": loc.is_private,
+            }
+        )
+        library = db.get(Library, row.section_id) if row.section_id is not None else None
+        base["library_name"] = library.name if library else None
+        base["device_banned"] = bool(row.machine_id and db.get(BannedDevice, row.machine_id))
+    return base
+
+
 @router.get("/history/{row_id}")
-async def history_detail(row_id: int, db: Db, scope: ViewerScope) -> dict:
+async def history_detail(row_id: int, scope: ViewerScope) -> dict:
     """Full stream detail for one row.
 
     Codec/bitrate/resolution are fetched live rather than synced: they need a
     per-row get_stream_data call, and nothing pays for rows nobody opens.
     """
-    row = db.get(History, row_id)
-    if row is None:
-        raise HTTPException(404, "No such history row")
-    privacy.require_self(scope, row.user_id)
-
-    base = {c.name: getattr(row, c.name) for c in History.__table__.columns}
-
-    # Everything the expanded row links to, so the page does not need a
-    # second round of lookups: who, where, which library, whether banned.
-    from app.models import BannedDevice
-
-    user = db.get(User, row.user_id) if row.user_id is not None else None
-    base["user_name"] = (user.friendly_name or user.username) if user else None
-    loc = db.get(IpLocation, row.ip_address) if row.ip_address else None
-    base["place"] = (
-        None
-        if loc is None
-        else {
-            "city": loc.city,
-            "region": loc.region,
-            "country": loc.country,
-            "lat": loc.lat,
-            "lon": loc.lon,
-            "accuracy_km": loc.accuracy_radius,
-            "asn_org": loc.asn_org,
-            "is_hosting": loc.is_hosting,
-            "is_private": loc.is_private,
-        }
-    )
-    library = db.get(Library, row.section_id) if row.section_id is not None else None
-    base["library_name"] = library.name if library else None
-    base["device_banned"] = bool(row.machine_id and db.get(BannedDevice, row.machine_id))
+    base = await asyncio.to_thread(_history_locally, row_id, scope)
 
     if not is_configured():
         base["stream"] = None
@@ -270,17 +283,29 @@ def _deep_links(item: MediaItem, settings, show: MediaItem | None = None) -> dic
     return links
 
 
-async def _cached(db: Session, rating_key: int | None) -> MediaItem | None:
-    """A media item, fetched from Tautulli first if it is not cached yet."""
+async def _cached(rating_key: int | None) -> MediaItem | None:
+    """A media item, fetched from Tautulli first if it is not cached yet.
+
+    Detached before it is returned, so what follows can read it without a
+    session open. Everything after this asks Radarr, Sonarr or Seerr, and a
+    session held across those is a connection nobody else can have.
+    """
     if rating_key is None:
         return None
-    item = db.get(MediaItem, rating_key)
+
+    def read() -> MediaItem | None:
+        with session_scope() as db:
+            found = db.get(MediaItem, rating_key)
+            if found is not None:
+                db.expunge(found)
+            return found
+
+    item = await asyncio.to_thread(read)
     if item is None and is_configured():
         from app.services.sync import cache_one
 
         await cache_one(rating_key)
-        db.expire_all()
-        item = db.get(MediaItem, rating_key)
+        item = await asyncio.to_thread(read)
     return item if item is not None and item.title is not None else None
 
 
@@ -464,10 +489,10 @@ def media_search(db: Db, q: str = Query(min_length=1), limit: int = Query(20, le
 
 
 @router.get("/media/{rating_key}")
-async def media_detail(rating_key: int, db: Db) -> dict:
+async def media_detail(rating_key: int) -> dict:
     # Something playing right now can be newer than the last sync, so a
     # missing item is fetched once rather than leaving it without links.
-    item = await _cached(db, rating_key)
+    item = await _cached(rating_key)
     if item is None:
         raise HTTPException(404, "Not cached, or no longer in Plex")
 
@@ -475,9 +500,9 @@ async def media_detail(rating_key: int, db: Db) -> dict:
     # all know shows, not episodes, and need the show's ids.
     show = None
     if item.media_type == "episode":
-        show = await _cached(db, item.grandparent_rating_key)
+        show = await _cached(item.grandparent_rating_key)
     elif item.media_type == "season":
-        show = await _cached(db, item.parent_rating_key)
+        show = await _cached(item.parent_rating_key)
     title_item = show if show is not None else item
     usable_for_title = item.media_type in ("movie", "show") or show is not None
 
@@ -498,11 +523,15 @@ async def media_detail(rating_key: int, db: Db) -> dict:
     out = {c.name: getattr(item, c.name) for c in MediaItem.__table__.columns}
     if item.media_type == "episode" and out.get("media_index") is None:
         # Cached before episode numbers were kept. History has them.
-        play = db.execute(
-            select(History.grandparent_title, History.parent_media_index, History.media_index)
-            .where(History.rating_key == rating_key, History.media_index.is_not(None))
-            .limit(1)
-        ).first()
+        def numbered():
+            with session_scope() as db:
+                return db.execute(
+                    select(History.grandparent_title, History.parent_media_index, History.media_index)
+                    .where(History.rating_key == rating_key, History.media_index.is_not(None))
+                    .limit(1)
+                ).first()
+
+        play = await asyncio.to_thread(numbered)
         if play is not None:
             out.update(grandparent_title=play.grandparent_title, parent_media_index=play.parent_media_index,
                        media_index=play.media_index)
@@ -718,22 +747,25 @@ def users(db: Db, scope: ViewerScope) -> list:
 
 
 @router.post("/users/{user_id}/restore-in-tautulli")
-async def restore_in_tautulli(user_id: int, admin: AdminUser, db: Db) -> dict:
+async def restore_in_tautulli(user_id: int, admin: AdminUser) -> dict:
     """Clear Tautulli's deleted flag, which puts someone back in its user
     list and dropdowns. History Tautulli erased when they were deleted does
     not come back."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, "No such user")
-    if not user.deleted_in_tautulli:
-        raise HTTPException(409, "Tautulli does not have them marked deleted")
-    if not user.username:
-        raise HTTPException(409, "Tautulli has no record of this account left to restore")
+    def look() -> tuple[str, str]:
+        with session_scope() as db:
+            user = db.get(User, user_id)
+            if user is None:
+                raise HTTPException(404, "No such user")
+            if not user.deleted_in_tautulli:
+                raise HTTPException(409, "Tautulli does not have them marked deleted")
+            if not user.username:
+                raise HTTPException(409, "Tautulli has no record of this account left to restore")
+            return user.username, (user.friendly_name or user.username)
 
-    name = user.friendly_name or user.username
+    username, name = await asyncio.to_thread(look)
     client = TautulliClient(current())
     try:
-        await client.call("undelete_user", user_id=user_id, username=user.username)
+        await client.call("undelete_user", user_id=user_id, username=username)
         after = await client.call("get_user", user_id=user_id) or {}
     except Exception as exc:  # noqa: BLE001
         audit.record(admin, "user.restore", f"Tried to restore {name} in Tautulli",
