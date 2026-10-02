@@ -7,13 +7,19 @@ from datetime import UTC, datetime
 from urllib.parse import quote
 from typing import Annotated, Any
 
+import asyncio
+import logging
+import pathlib
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
 from app.auth.deps import AdminUser, CurrentUser
+from app.config import get_settings
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
@@ -22,6 +28,8 @@ from app.integrations import arr, seerr
 from app.services import capabilities
 from app.settings_store import current, is_configured
 from app.tautulli.client import TautulliClient
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -276,41 +284,70 @@ async def _cached(db: Session, rating_key: int | None) -> MediaItem | None:
     return item if item is not None and item.title is not None else None
 
 
+POSTER_FETCHES = asyncio.Semaphore(4)
+"""How many posters may be fetched from Tautulli at once.
+
+A wall of posters asks for a hundred at a time. Four keeps it from being a
+flood that Tautulli answers slowly for everybody, including the pages that are
+not asking for pictures at all."""
+
+
+def _poster_file(rating_key: int, width: int, height: int) -> pathlib.Path:
+    return get_settings().data_dir / "posters" / f"{rating_key}-{width}x{height}.jpg"
+
+
+def _poster_art(rating_key: int) -> str | None:
+    """The artwork path for an item, from the database, in its own session.
+
+    Deliberately not the request's session: what follows is a call across the
+    network to Tautulli, and a session held across it is a connection out of a
+    pool of fifteen. A hundred posters then starve every other page of the
+    database, which is what made the whole app hang while a poster wall
+    loaded.
+    """
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is None or item.title is None:
+            return None
+        art = item.poster_thumb
+        if (
+            item.media_type in ("episode", "season")
+            and item.grandparent_thumb is None
+            and item.parent_thumb is None
+        ):
+            art = _show_poster(db, item)
+        return art
+
+
 @router.get("/media/{rating_key}/image")
-async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 450):
-    """Poster art, proxied through Tautulli.
+async def media_image(rating_key: int, width: int = 300, height: int = 450):
+    """Poster art, proxied through Tautulli and kept on disk.
 
     Plex image URLs need a token, so the browser cannot fetch them directly and
     handing the token to the browser would be worse. Tautulli already has one,
-    and pms_image_proxy resizes on the way through.
+    and pms_image_proxy resizes on the way through. The answer never changes
+    for a given item, so it is written to the data directory and served from
+    there afterwards: a library page full of posters should cost one fetch
+    each, ever, not one fetch a visit.
     """
+    kept = _poster_file(rating_key, width, height)
+    if kept.exists():
+        return FileResponse(kept, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
+
     if not is_configured():
         raise HTTPException(409, "Tautulli is not configured")
-    item = db.get(MediaItem, rating_key)
-    if item is None:
-        # Playing now but newer than the last sync. The poster and the links
+
+    art = await asyncio.to_thread(_poster_art, rating_key)
+    if art is None:
+        # Playing now but newer than the last sync: the poster and the links
         # load at the same moment, so this cannot rely on the links request
         # having cached the item first.
         from app.services.sync import cache_one
 
         await cache_one(rating_key)
-        db.expire_all()
-        item = db.get(MediaItem, rating_key)
-    if item is None or item.title is None:
-        raise HTTPException(404, "No artwork for that item")
-
-    art = item.poster_thumb
-    if (
-        item.media_type in ("episode", "season")
-        and item.grandparent_thumb is None
-        and item.parent_thumb is None
-    ):
-        # Cached before show posters were stored, or listed by the library
-        # scan, which reads files rather than artwork. The show's poster is
-        # nearly always already here, on the show itself or on a sibling
-        # episode that was read in full, and one local lookup beats a Tautulli
-        # call per episode in a grid of them.
-        art = _show_poster(db, item) or await _backfill_poster(item)
+        art = await asyncio.to_thread(_poster_art, rating_key)
+    if not art:
+        art = await _backfill_poster_for(rating_key)
     if not art:
         raise HTTPException(404, "No artwork for that item")
 
@@ -325,22 +362,48 @@ async def media_image(rating_key: int, db: Db, width: int = 300, height: int = 4
         "fallback": "poster",
     }
 
-    async with httpx.AsyncClient(
-        timeout=settings.tautulli_timeout, verify=settings.tautulli_verify_ssl
-    ) as client:
-        try:
-            upstream = await client.get(f"{base}/api/v2", params=params)
-            upstream.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
+    async with POSTER_FETCHES:
+        async with httpx.AsyncClient(
+            timeout=settings.tautulli_timeout, verify=settings.tautulli_verify_ssl
+        ) as client:
+            try:
+                upstream = await client.get(f"{base}/api/v2", params=params)
+                upstream.raise_for_status()
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
 
+    await asyncio.to_thread(_keep_poster, kept, upstream.content)
     return Response(
         content=upstream.content,
         media_type=upstream.headers.get("content-type", "image/jpeg"),
-        # Artwork for a given rating_key does not change, so let the browser
-        # keep it rather than re-proxying on every panel open.
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={"Cache-Control": "public, max-age=604800"},
     )
+
+
+def _keep_poster(where: pathlib.Path, content: bytes) -> None:
+    """Written beside its final name and moved into place, so a half written
+    file is never served to the next request."""
+    try:
+        where.parent.mkdir(parents=True, exist_ok=True)
+        temporary = where.with_suffix(".part")
+        temporary.write_bytes(content)
+        temporary.replace(where)
+    except OSError:
+        # A full or read only disk costs the cache, not the picture.
+        log.debug("could not keep poster %s", where.name)
+
+
+async def _backfill_poster_for(rating_key: int) -> str | None:
+    """One Tautulli lookup for an item whose artwork was never stored."""
+    def item():
+        with session_scope() as db:
+            found = db.get(MediaItem, rating_key)
+            if found is not None:
+                db.expunge(found)
+            return found
+
+    found = await asyncio.to_thread(item)
+    return await _backfill_poster(found) if found is not None else None
 
 
 def _show_poster(db: Session, item: MediaItem) -> str | None:

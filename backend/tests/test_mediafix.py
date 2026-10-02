@@ -179,3 +179,119 @@ def test_viewers_cannot_tidy_anything(client):
     assert client.get("/api/library/file/1/tidy").status_code == 403
     assert client.post("/api/library/file/1/tidy", json={"steps": ["legacy_container"]}).status_code == 403
     assert client.get("/api/library/tidy/jobs").status_code == 403
+
+
+# ---- the language steps ------------------------------------------------------
+
+def settings(monkeypatch, **over):
+    """Settings as the page would have saved them."""
+    import app.settings_store as store
+
+    real = store.current()
+    patched = lambda: real.model_copy(update=over)  # noqa: E731
+    monkeypatch.setattr(store, "current", patched)
+    monkeypatch.setattr(mediafix, "current", patched)
+
+
+MANY = [
+    {"index": 0, "codec_type": "video", "codec_name": "h264"},
+    {"index": 1, "codec_type": "audio", "codec_name": "eac3", "channels": 6, "tags": {"language": "jpn"}},
+    {"index": 2, "codec_type": "audio", "codec_name": "aac", "channels": 2, "tags": {"language": "eng"}},
+    {"index": 3, "codec_type": "audio", "codec_name": "aac", "channels": 2, "tags": {"language": "fra"}},
+    {"index": 4, "codec_type": "subtitle", "codec_name": "srt", "tags": {"language": "eng"}},
+    {"index": 5, "codec_type": "subtitle", "codec_name": "srt", "tags": {"language": "zho"}},
+    {"index": 6, "codec_type": "subtitle", "codec_name": "srt", "tags": {"language": "spa"}},
+]
+
+
+def test_the_preferred_language_goes_first(monkeypatch):
+    """Players take the first track, which is how a film ends up in Japanese
+    for a household that does not read subtitles."""
+    settings(monkeypatch, preferred_audio_language="eng")
+    argv = mediafix.build(MANY, ["default_audio"], "in.mkv", "out.mkv")
+    assert mapped(argv) == ["0:0", "0:2", "0:1", "0:3", "0:4", "0:5", "0:6"]
+    # Said in the disposition too, since some players ignore the order.
+    assert argv[argv.index("-disposition:a:0") + 1] == "default"
+
+
+def test_only_the_wanted_subtitle_languages_survive(monkeypatch):
+    settings(monkeypatch, keep_subtitle_languages="eng, spa ,jpn")
+    argv = mediafix.build(MANY, ["keep_subtitle_languages"], "in.mkv", "out.mkv")
+    assert "0:5" not in mapped(argv)  # Chinese
+    assert "0:4" in mapped(argv) and "0:6" in mapped(argv)
+    # Audio is untouched by a subtitle step.
+    assert all(f"0:{n}" in mapped(argv) for n in (1, 2, 3))
+
+
+def test_spare_dubs_go_but_a_file_is_never_left_silent(monkeypatch):
+    settings(monkeypatch, keep_audio_languages="eng,jpn")
+    argv = mediafix.build(MANY, ["keep_audio_languages"], "in.mkv", "out.mkv")
+    assert "0:3" not in mapped(argv) and "0:1" in mapped(argv) and "0:2" in mapped(argv)
+
+    # Nothing matches: everything is kept rather than leaving no sound at all.
+    settings(monkeypatch, keep_audio_languages="kor")
+    argv = mediafix.build(MANY, ["keep_audio_languages"], "in.mkv", "out.mkv")
+    assert all(f"0:{n}" in mapped(argv) for n in (1, 2, 3))
+
+
+def test_the_added_track_is_numbered_after_the_ones_that_survived(monkeypatch):
+    """Dropping a dub moves the output positions, and the encoder flags are
+    written against those, not against what the file used to have."""
+    settings(monkeypatch, keep_audio_languages="eng")
+    argv = mediafix.build(MANY, ["keep_audio_languages", "no_compatible_audio"], "in.mkv", "out.mkv")
+    # One audio track survives, so the added one is output audio 1.
+    assert "-c:a:1" in argv and argv[argv.index("-c:a:1") + 1] == "ac3"
+    assert "-c:a:3" not in argv
+
+
+def test_the_language_steps_are_offered_only_when_settings_say_so(monkeypatch):
+    tracks = json.dumps([{"codec": "eac3", "channels": 6, "language": "jpn"},
+                         {"codec": "aac", "channels": 2, "language": "eng"}])
+    subs = json.dumps([{"codec": "srt", "language": "eng", "location": "embedded"},
+                       {"codec": "srt", "language": "zho", "location": "embedded"}])
+
+    settings(monkeypatch)
+    assert mediafix.plan(item(audio_tracks=tracks, subtitle_tracks=subs))["steps"] == []
+
+    settings(monkeypatch, preferred_audio_language="eng", keep_subtitle_languages="eng")
+    keys = [s["key"] for s in mediafix.plan(item(audio_tracks=tracks, subtitle_tracks=subs))["steps"]]
+    assert "default_audio" in keys and "keep_subtitle_languages" in keys
+
+
+def test_a_rule_can_ask_for_the_tidying(client, monkeypatch):
+    """The action is the same work as the button, driven by the rules engine,
+    so it answers to the cap and the record only switch like anything else."""
+    import asyncio
+
+    from app.actions import registry
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    settings(monkeypatch, keep_subtitle_languages="eng")
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=42, title="Subtitled", full_title="Subtitled", media_type="movie",
+                         file_path="/nowhere/that/exists.mkv", file_container="mkv",
+                         audio_tracks=json.dumps([{"codec": "aac", "channels": 2, "language": "eng"}]),
+                         subtitle_tracks=json.dumps([
+                             {"codec": "srt", "language": "eng", "location": "embedded"},
+                             {"codec": "srt", "language": "zho", "location": "embedded"},
+                         ])))
+
+    action = registry.get("tidy_file")
+    assert action.triggers == ("file", "issue")
+    # The file cannot be reached from here, which is a refusal rather than a
+    # half done job.
+    try:
+        asyncio.run(action.execute({"subject": "file", "rating_key": 42}, {}))
+        raise AssertionError("should have refused")
+    except LookupError as exc:
+        assert "cannot see" in str(exc) or "ffmpeg" in str(exc)
+
+    # And a file with nothing to do is said so, not queued.
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=43, title="Fine", full_title="Fine", media_type="movie",
+                         file_path="/nowhere/fine.mkv", file_container="mkv",
+                         audio_tracks=json.dumps([{"codec": "aac", "channels": 2, "language": "eng"}]),
+                         subtitle_tracks=json.dumps([])))
+    assert "nothing to tidy" in asyncio.run(action.execute({"subject": "file", "rating_key": 43}, {}))

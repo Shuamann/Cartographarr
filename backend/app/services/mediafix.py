@@ -99,6 +99,11 @@ def _codec(track: dict[str, Any]) -> str:
     return str(track.get("codec") or "").lower()
 
 
+def languages(setting: str) -> list[str]:
+    """A comma separated list of language codes, tidied."""
+    return [part.strip().lower() for part in (setting or "").replace(";", ",").split(",") if part.strip()]
+
+
 def plan(item: Any) -> dict[str, Any]:
     """What tidying this file would do, in words, from what is already known.
 
@@ -146,6 +151,42 @@ def plan(item: Any) -> dict[str, Any]:
             "what": "Add an AC3 track beside the original audio",
             "why": "Nothing here can be played by most televisions, sticks and browsers, so Plex converts the audio "
                    "for them, and some clients convert the picture too. The original track is kept.",
+        })
+
+    # ---- the ones that answer to Settings -----------------------------------
+    #
+    # These only appear when somebody has said which languages they care
+    # about, because there is no sensible default: a house that watches anime
+    # in Japanese and a house that watches it dubbed want opposite things.
+    settings = current()
+    first = (settings.preferred_audio_language or "").strip().lower()
+    spoken = [str(track.get("language") or "").lower() for track in audio]
+    if first and len(audio) > 1 and spoken and spoken[0] != first and first in spoken:
+        steps.append({
+            "key": "default_audio",
+            "what": f"Put the {first} audio first",
+            "why": "Players take the first track unless somebody goes looking, which is how a film ends up playing "
+                   "its commentary or its dubbed track.",
+        })
+
+    keep_subs = languages(settings.keep_subtitle_languages)
+    droppable = [s for s in subs if str(s.get("language") or "").lower() not in keep_subs]
+    if keep_subs and droppable and len(droppable) < len(subs):
+        steps.append({
+            "key": "keep_subtitle_languages",
+            "what": f"Drop {len(droppable)} subtitle track{'s' if len(droppable) != 1 else ''} in other languages",
+            "why": f"Keeping {', '.join(keep_subs)}. Every client reads the whole list before a stream starts, and "
+                   "nobody scrolls past twenty languages to find theirs.",
+        })
+
+    keep_audio = languages(settings.keep_audio_languages)
+    extra_audio = [a for a in audio if str(a.get("language") or "").lower() not in keep_audio]
+    if keep_audio and extra_audio and len(extra_audio) < len(audio):
+        steps.append({
+            "key": "keep_audio_languages",
+            "what": f"Drop {len(extra_audio)} audio track{'s' if len(extra_audio) != 1 else ''} in other languages",
+            "why": f"Keeping {', '.join(keep_audio)}. Spare dubs are often the largest thing in the file after the "
+                   "picture. A file that would be left silent keeps everything.",
         })
 
     if container and container not in MODERN_CONTAINERS:
@@ -214,7 +255,6 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
     wanted = set(steps)
     subs = [s for s in streams if s.get("codec_type") == "subtitle"]
     audio = [s for s in streams if s.get("codec_type") == "audio"]
-    other = [s for s in streams if s.get("codec_type") not in ("subtitle",)]
 
     text_languages = {_language(s) for s in subs if str(s.get("codec_name") or "").lower() not in IMAGE_SUBTITLES}
     keep: list[dict[str, Any]] = []
@@ -229,12 +269,46 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
         seen.add(shape)
         keep.append(stream)
 
+    # Audio: which tracks survive, and which goes first.
+    settings = current()
+    keep_audio_codes = languages(settings.keep_audio_languages)
+    kept_audio = audio
+    if "keep_audio_languages" in wanted and keep_audio_codes:
+        wanted_audio = [a for a in audio if _language(a) in keep_audio_codes]
+        # Never leave a file with nothing to listen to, whatever the setting
+        # says: a rule that silences a film is worse than a spare dub.
+        kept_audio = wanted_audio or audio
+
+    first = (settings.preferred_audio_language or "").strip().lower()
+    if "default_audio" in wanted and first:
+        preferred = [a for a in kept_audio if _language(a) == first]
+        kept_audio = preferred + [a for a in kept_audio if a not in preferred]
+
+    # Subtitles: the language filter runs after the other subtitle steps, so
+    # dropping duplicates and dropping languages compose rather than fight.
+    keep_sub_codes = languages(settings.keep_subtitle_languages)
+    if "keep_subtitle_languages" in wanted and keep_sub_codes:
+        narrowed = [s for s in keep if _language(s) in keep_sub_codes]
+        # All of them in one unwanted language is still a file people watch;
+        # leaving no subtitles at all is the point of the setting, so this one
+        # is allowed to empty the list.
+        keep = narrowed
+
+    rest = [s for s in streams if s.get("codec_type") not in ("subtitle", "audio")]
+
     argv = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-progress", "pipe:1", "-y", "-i", source]
-    for stream in other:
+    for stream in rest:
+        argv += ["-map", f"0:{stream['index']}"]
+    for stream in kept_audio:
         argv += ["-map", f"0:{stream['index']}"]
     for stream in keep:
         argv += ["-map", f"0:{stream['index']}"]
     argv += ["-c", "copy"]
+
+    if "default_audio" in wanted and first and kept_audio:
+        # Said out loud as well as ordered, because some players read the
+        # disposition and ignore the order.
+        argv += ["-disposition:a", "0", "-disposition:a:0", "default"]
 
     if "styled_subtitles" in wanted:
         # Only the text ones can become SRT; a picture subtitle has no text in
@@ -243,14 +317,15 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
             if str(stream.get("codec_name") or "").lower() in STYLED_SUBTITLES:
                 argv += [f"-c:s:{position}", "srt"]
 
-    if "no_compatible_audio" in wanted and audio:
+    if "no_compatible_audio" in wanted and kept_audio:
         # Beside the original, never instead of it: the lossless track is why
         # somebody keeps the file, and six channels of AC3 play everywhere.
-        best = max(audio, key=lambda s: int(s.get("channels") or 0))
+        best = max(kept_audio, key=lambda s: int(s.get("channels") or 0))
         channels = min(int(best.get("channels") or 2), 6)
-        argv += ["-map", f"0:{best['index']}", f"-c:a:{len(audio)}", "ac3",
-                 f"-ac:a:{len(audio)}", str(channels), f"-b:a:{len(audio)}", "640k" if channels > 2 else "192k",
-                 f"-metadata:s:a:{len(audio)}", "title=AC3 (added by Cartographarr)"]
+        position = len(kept_audio)
+        argv += ["-map", f"0:{best['index']}", f"-c:a:{position}", "ac3",
+                 f"-ac:a:{position}", str(channels), f"-b:a:{position}", "640k" if channels > 2 else "192k",
+                 f"-metadata:s:a:{position}", "title=AC3 (added by Cartographarr)"]
 
     argv.append(target)
     return argv

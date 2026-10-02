@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.41.0 - 2026-10-01
+
+### Fixed
+- The whole app could hang while a page full of posters loaded. Each poster was proxied through Tautulli with a
+  database session held open across the call, and there are fifteen connections in the pool, so a hundred posters
+  starved every other page of the database. The image route holds no session now, and nor does live activity, which
+  is polled by three pages at once and calls Tautulli first
+- Posters are kept in the data directory after the first fetch and served from there, so a library page costs one
+  fetch per item ever rather than one a visit. No more than four are fetched at once, and the wall asks for sixty
+  rather than a hundred and twenty
+
+### Added
+- Tidying can answer to Settings: an audio language to put first when a file has several, subtitle languages worth
+  keeping, and audio languages worth keeping. A file that would be left silent keeps everything whatever the setting
+  says
+- Rules can run the tidying. "Tidy the tracks" as a rule action does whatever that file needs, or the steps you name,
+  under the same daily cap and record-only switch as every other rule
+
 ## 0.40.0 - 2026-10-01
 
 ### Added

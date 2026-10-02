@@ -156,6 +156,11 @@ const AREAS: Area[] = [
         keys: ["library_bitrate_threshold_mbps", "access_inactive_days"],
       },
       {
+        title: "Tidying files",
+        note: "What tidying a file's tracks should aim for, and where this container can read the media. Languages are the three letter codes the tracks carry: eng, spa, jpn. Leave a list empty to keep every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do.",
+        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages", "media_path_map"],
+      },
+      {
         title: "Server upload",
         note: "Your server's upload speed. Stalls that happen while the upload is nearly full are blamed on the upload rather than a viewer, and you get a notification (through Apprise, at most every half hour) when remote streams use more than the alert level. Leave at 0 to use the Internet upload speed set in Plex under Remote Access.",
         keys: ["upload_capacity_mbps", "upload_alert_percent"],
@@ -294,6 +299,10 @@ const LABELS: Record<string, string> = {
   ban_message: "Message shown to a banned device",
   upload_capacity_mbps: "Upload capacity (Mbps)",
   library_bitrate_threshold_mbps: "Problem file bitrate (Mbps)",
+  preferred_audio_language: "Audio language to put first",
+  keep_subtitle_languages: "Subtitle languages to keep",
+  keep_audio_languages: "Audio languages to keep",
+  media_path_map: "Where this container sees the media",
   access_inactive_days: "Not watching after (days)",
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes (%)",

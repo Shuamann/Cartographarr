@@ -40,6 +40,21 @@ class Settings(BaseSettings):
     raised surfaces, borders and quieter inks are worked out from them, which
     is the difference between choosing a scheme and filling in a form."""
 
+    preferred_audio_language: str = ""
+    """Three letter code, as the tracks are tagged: eng, spa, jpn. Set it and
+    tidying can put that language first on a file that has several, so a
+    television stops picking the commentary. Empty leaves the order alone."""
+
+    keep_subtitle_languages: str = ""
+    """Subtitle languages worth keeping, comma separated, as three letter
+    codes. Empty keeps every one. Twenty tracks in languages nobody in the
+    house reads is a menu to scroll past, and Plex reads the whole list before
+    a stream starts."""
+
+    keep_audio_languages: str = ""
+    """Audio languages worth keeping, comma separated. Empty keeps every one,
+    and a file that would be left silent keeps everything whatever this says."""
+
     media_path_map: str = ""
     """How the paths Plex reports line up with this container's mounts, as
     `plex=here` pairs separated by commas. Empty, which is the normal case,

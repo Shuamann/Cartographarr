@@ -104,11 +104,19 @@ def list_actions(_: AdminUser) -> list[dict]:
 # ---- live activity ---------------------------------------------------------
 
 @router.get("/activity")
-async def activity_endpoint(db: Db, scope: ViewerScope) -> dict:
-    return await activity(db, scope)
+async def activity_endpoint(scope: ViewerScope) -> dict:
+    # No session dependency: activity opens one once Tautulli has answered.
+    return await activity(None, scope)
 
 
-async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
+async def activity(db: Session | None = None, scope: "privacy.Scope | None" = None) -> dict:
+    """What is playing, as Tautulli sees it, with what this app knows added.
+
+    The database session is opened after the call to Tautulli, not before. A
+    session held across a network call is one connection out of a small pool,
+    and this is polled by three pages at once: a slow Tautulli would otherwise
+    take the whole app down with it rather than just this panel.
+    """
     if not is_configured():
         return {"stream_count": 0, "sessions": [], "error": "Tautulli is not configured"}
 
@@ -119,6 +127,14 @@ async def activity(db: Session, scope: "privacy.Scope | None" = None) -> dict:
         return {"stream_count": 0, "sessions": [], "error": redact(exc)}
     finally:
         await client.aclose()
+
+    if db is None:
+        with session_scope() as opened:
+            return await _place_live(opened, data, scope)
+    return await _place_live(db, data, scope)
+
+
+async def _place_live(db: Session, data: dict, scope: "privacy.Scope | None") -> dict:
 
     sessions = [_trim(s) for s in data.get("sessions") or []]
 

@@ -334,7 +334,7 @@ async def browse_library(
     media_type: str | None = "movie",
     problem: str | None = None,
     search: str | None = None,
-    limit: int = Query(120, ge=1, le=500),
+    limit: int = Query(60, ge=1, le=500),
 ) -> dict:
     """The library as something to look through, sorted by what is wrong."""
     import asyncio

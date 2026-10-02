@@ -449,6 +449,17 @@ What is offered comes from the file's own tracks:
 - An AC3 track added beside audio nothing can play, never instead of it
 - An old container repackaged to mkv, streams copied across
 
+Three of the steps answer to Settings, because there is no sensible default:
+an **audio language to put first** when a file has several, **subtitle
+languages to keep**, and **audio languages to keep**. Languages are the three
+letter codes the tracks carry (eng, spa, jpn). A file that would be left with
+no sound keeps everything whatever the setting says.
+
+Rules can do the same work: **Tidy the tracks** is a rule action, so "every
+file with styled subtitles" or "anything reported for bad audio" can be
+handled without pressing anything. It starts as record only like every rule,
+and answers to the same daily cap.
+
 To use it, mount the media in the container. The shares want to be where Plex
 already reports them (`/movies`, `/tv`), in which case there is nothing to
 configure; where they differ, set **media_path_map** in Settings as

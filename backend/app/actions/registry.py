@@ -11,6 +11,7 @@ deeper.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -526,5 +527,67 @@ register(
         execute=_resolve_issue,
         param_schema={"note": {"type": "string", "label": "Why it is being closed"}},
         triggers=("issue", "file", "replacement"),
+    )
+)
+
+
+# ---- tidying a file's tracks on a rule ----------------------------------------
+#
+# The same work as the button on a file card, driven by a rule instead of a
+# person: convert styled subtitles, drop the languages nobody here reads, put
+# the right audio first. It rewrites somebody's only copy, so it answers to the
+# rule's daily cap, it starts as record only like every rule, and the job
+# itself checks the result against the original before replacing anything.
+
+
+async def _tidy_file(session: Session, params: Params) -> str:
+    from app.services import mediafix
+
+    rating_key = session.get("rating_key")
+    if not rating_key:
+        raise LookupError("Nothing to tidy: this is not about a file")
+
+    asked = [part.strip() for part in str(params.get("steps") or "").replace(";", ",").split(",") if part.strip()]
+    with_item = _item(int(rating_key))
+    offered = [step["key"] for step in mediafix.plan(with_item)["steps"]]
+    steps = [key for key in (asked or offered) if key in offered]
+    if not steps:
+        return "nothing to tidy about this file"
+
+    job = await asyncio.to_thread(mediafix.queue, int(rating_key), steps, AUTHOR)
+    mediafix.start_worker()
+    return f"queued tidying ({', '.join(steps)}), job {job}"
+
+
+def _item(rating_key: int):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is None:
+            raise LookupError("That file is not in the library any more")
+        db.expunge(item)
+        return item
+
+
+register(
+    Action(
+        name="tidy_file",
+        label="Tidy the tracks",
+        description=(
+            "Runs the same tidying as the button on a file card: styled subtitles to SRT, duplicate and unwanted "
+            "language tracks dropped, the preferred audio put first, an AC3 track added where nothing can play what "
+            "is there. Leave the steps blank to do whatever that file needs. Nothing re-encodes the picture, and the "
+            "result is checked against the original before it replaces anything."
+        ),
+        execute=_tidy_file,
+        param_schema={
+            "steps": {
+                "type": "string",
+                "label": "Which steps, comma separated (blank for whatever the file needs)",
+            }
+        },
+        triggers=("file", "issue"),
     )
 )

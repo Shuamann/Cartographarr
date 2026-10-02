@@ -1866,7 +1866,7 @@ const MARKS: Record<string, { label: string; tone: string; why: string }> = {
   unwatched: { label: "Unwatched", tone: "pill", why: "Nobody has played it in this window" },
 };
 
-function poster(ratingKey: number, width = 150): string {
+function poster(ratingKey: number, width = 200): string {
   return `/api/media/${ratingKey}/image?width=${width}&height=${Math.round(width * 1.5)}`;
 }
 
@@ -1890,7 +1890,7 @@ function Browse({ days }: { days: number }) {
     localStorage.setItem(`browse.${key}`, value);
   }
 
-  const query = new URLSearchParams({ days: String(days), sort, limit: "120" });
+  const query = new URLSearchParams({ days: String(days), sort, limit: "60" });
   if (perHour) query.set("min_gb_per_hour", String(perHour));
   if (kind) query.set("media_type", kind);
   if (problem) query.set("problem", problem);
