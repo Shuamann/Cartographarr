@@ -393,6 +393,159 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     }
 
 
+BROWSE_SORTS = {
+    "per_hour": "Biggest per hour",
+    "bitrate": "Highest bitrate",
+    "size": "Largest file",
+    "stalls": "Most stalls",
+    "transcoded": "Most transcoded",
+    "plays": "Most watched",
+    "quiet": "Least watched",
+    "problems": "Most wrong with it",
+    "title": "Title",
+}
+
+
+def browse(
+    db: Session,
+    days: int,
+    sort: str = "per_hour",
+    min_gb_per_hour: float = 0.0,
+    min_bitrate_kbps: int = 0,
+    resolution: str | None = None,
+    section_id: int | None = None,
+    language: str | None = None,
+    media_type: str | None = None,
+    problem: str | None = None,
+    search: str | None = None,
+    limit: int = 120,
+) -> dict[str, Any]:
+    """The library as something to look through, with what is wrong on each.
+
+    One list behind both the table and the poster wall. Everything a tile shows
+    comes from what has already been read: the tracks, the plays, the stalls,
+    the live streams. Nothing here asks Plex anything.
+
+    Sorted by size per hour unless asked otherwise, because that is the one
+    measure that compares a three hour film with a forty minute cartoon.
+    """
+    from app.services.library_scan import in_library
+    from app.services.stores import labels, name_for
+    from app.settings_store import current
+
+    # The filters that are columns are asked of the database; the ones that
+    # need a track list parsed are left to the loop below. Browsing the films
+    # should not read the episodes.
+    where = [MediaItem.file_size.is_not(None), MediaItem.file_size > 0, in_library()]
+    if media_type:
+        where.append(MediaItem.media_type == media_type)
+    if section_id is not None:
+        where.append(MediaItem.section_id == section_id)
+    if resolution:
+        where.append(func.lower(MediaItem.video_resolution) == resolution.lower())
+    if min_bitrate_kbps:
+        where.append(MediaItem.file_bitrate >= min_bitrate_kbps)
+    if search:
+        where.append(func.lower(MediaItem.full_title).like(f"%{search.lower()}%"))
+    rows = db.execute(select(MediaItem).where(*where)).scalars().all()
+    plays = play_stats(db, days)
+    stalls = stall_stats(db, days)
+    seen = observed_trouble(db, days)
+    named = labels()
+    sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
+    threshold = int(current().library_bitrate_threshold_mbps * 1000)
+
+    out = []
+    for item in rows:
+        hours = (item.duration or 0) / 3_600_000
+        per_hour = ((item.file_size or 0) / 1e9 / hours) if hours > 0 else 0.0
+        if min_gb_per_hour and per_hour < min_gb_per_hour:
+            continue
+        languages = sorted({
+            str(track.get("language") or "").lower()
+            for track in _tracks(item.audio_tracks)
+            if track.get("language")
+        })
+        if language and language.lower() not in languages:
+            continue
+        stat = plays.get(item.rating_key, {})
+        stall = stalls.get(item.rating_key, {})
+        happened = seen.get(item.rating_key) or Counter()
+        total_plays = int(stat.get("plays") or 0)
+        remote = int(stat.get("remote") or 0)
+        remote_transcodes = int(stat.get("remote_transcodes") or 0)
+        tracks = issues_cached(item.rating_key, item.file_checked_at, item.audio_tracks,
+                               item.subtitle_tracks, item.file_container)
+
+        # The markers a tile can show at a glance. Each one is something the
+        # app can already prove, not a guess from the file name.
+        marks = []
+        if int(stall.get("stalls") or 0):
+            marks.append("stalls")
+        if remote >= 2 and remote_transcodes / remote >= 0.5:
+            marks.append("transcoded")
+        if item.file_bitrate and item.file_bitrate >= threshold and remote:
+            marks.append("heavy")
+        if "no_compatible_audio" in tracks or happened.get("audio_codec") or happened.get("audio_channels"):
+            marks.append("audio")
+        if {"image_subtitles_only", "styled_subtitles", "subtitle_clutter"} & set(tracks) or happened.get("subtitle_burn"):
+            marks.append("subtitles")
+        if "legacy_container" in tracks:
+            marks.append("container")
+        if total_plays == 0:
+            marks.append("unwatched")
+        if problem and problem not in marks:
+            continue
+
+        out.append({
+            "rating_key": item.rating_key,
+            "title": _title(item),
+            "year": item.year,
+            "media_type": item.media_type,
+            "video_resolution": item.video_resolution,
+            "file_bitrate": item.file_bitrate,
+            "file_size": item.file_size,
+            "file_container": item.file_container,
+            "gb_per_hour": round(per_hour, 2),
+            "hours": round(hours, 2),
+            "languages": languages,
+            "section": sections.get(item.section_id),
+            "section_id": item.section_id,
+            "store": name_for(item.file_path, named),
+            "plays": total_plays,
+            "remote_plays": remote,
+            "last_play": stat.get("last_play"),
+            "stalls": int(stall.get("stalls") or 0),
+            "transcode_percent": round(remote_transcodes / remote * 100) if remote else 0,
+            "marks": marks,
+        })
+
+    order = {
+        "per_hour": lambda r: -r["gb_per_hour"],
+        "bitrate": lambda r: -(r["file_bitrate"] or 0),
+        "size": lambda r: -(r["file_size"] or 0),
+        "stalls": lambda r: -r["stalls"],
+        "transcoded": lambda r: -r["transcode_percent"],
+        "plays": lambda r: -r["plays"],
+        "quiet": lambda r: (r["plays"], -(r["file_size"] or 0)),
+        "problems": lambda r: -len(r["marks"]),
+        "title": lambda r: r["title"].lower(),
+    }.get(sort, lambda r: -r["gb_per_hour"])
+    out.sort(key=order)
+
+    return {
+        "items": out[:limit],
+        "total": len(out),
+        "size": sum(r["file_size"] or 0 for r in out),
+        "sort": sort if sort in BROWSE_SORTS else "per_hour",
+        "sorts": [{"key": key, "label": label} for key, label in BROWSE_SORTS.items()],
+        "sections": [{"section_id": key, "name": name} for key, name in sorted(sections.items()) if name],
+        "languages": sorted({lang for row in out for lang in row["languages"]}),
+        "resolutions": sorted({str(row["video_resolution"] or "").lower() for row in out if row["video_resolution"]}),
+        "marks": sorted({mark for row in out for mark in row["marks"]}),
+    }
+
+
 def oversized(
     db: Session,
     days: int,
@@ -404,75 +557,15 @@ def oversized(
     media_type: str | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
-    """Files that are large for what they are, biggest first.
-
-    Bitrate alone is awkward to judge: 20 Mbps is ordinary for two hours of
-    4K and absurd for a 45 minute cartoon. Size per hour is the same number
-    said in a way that compares, and it is what somebody deciding "could this
-    be half the size without looking worse" actually wants.
-
-    Everything is filtered rather than scored, because the question is a
-    shortlist to act on, not a ranking to admire.
-    """
-    from app.services.library_scan import in_library
-    from app.services.stores import labels, name_for
-
-    rows = db.execute(
-        select(MediaItem).where(
-            MediaItem.file_size.is_not(None), MediaItem.file_size > 0,
-            MediaItem.duration.is_not(None), MediaItem.duration > 0,
-            in_library(),
-        )
-    ).scalars().all()
-    plays = play_stats(db, days)
-    named = labels()
-    sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
-
-    out = []
-    for item in rows:
-        hours = (item.duration or 0) / 3_600_000
-        if hours <= 0:
-            continue
-        per_hour = (item.file_size or 0) / 1e9 / hours
-        if min_gb_per_hour and per_hour < min_gb_per_hour:
-            continue
-        if min_bitrate_kbps and (item.file_bitrate or 0) < min_bitrate_kbps:
-            continue
-        if resolution and str(item.video_resolution or "").lower() != resolution.lower():
-            continue
-        if section_id is not None and item.section_id != section_id:
-            continue
-        if media_type and item.media_type != media_type:
-            continue
-        languages = sorted({
-            str(track.get("language") or "").lower()
-            for track in _tracks(item.audio_tracks)
-            if track.get("language")
-        })
-        if language and language.lower() not in languages:
-            continue
-        stats = plays.get(item.rating_key, {})
-        out.append({
-            **describe_file(item),
-            "gb_per_hour": round(per_hour, 2),
-            "hours": round(hours, 2),
-            "languages": languages,
-            "section": sections.get(item.section_id),
-            "section_id": item.section_id,
-            "store": name_for(item.file_path, named),
-            "plays": int(stats.get("plays") or 0),
-            "last_play": stats.get("last_play"),
-        })
-
-    out.sort(key=lambda r: -r["gb_per_hour"])
-    return {
-        "items": out[:limit],
-        "total": len(out),
-        "size": sum(r["file_size"] or 0 for r in out),
-        "sections": [{"section_id": key, "name": name} for key, name in sorted(sections.items()) if name],
-        "languages": sorted({lang for row in out for lang in row["languages"]}),
-        "resolutions": sorted({str(row["video_resolution"] or "").lower() for row in out if row["video_resolution"]}),
-    }
+    """Biggest per hour first. The same list as browse, named for the question
+    the Big for what they are page asks."""
+    answer = browse(
+        db, days, sort="per_hour", min_gb_per_hour=min_gb_per_hour, min_bitrate_kbps=min_bitrate_kbps,
+        resolution=resolution, section_id=section_id, language=language, media_type=media_type, limit=limit,
+    )
+    # That page only lists things with a length to divide by.
+    answer["items"] = [row for row in answer["items"] if row["gb_per_hour"] > 0]
+    return answer
 
 
 def four_k(db: Session, days: int) -> list[dict[str, Any]]:

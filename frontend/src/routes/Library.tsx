@@ -106,8 +106,8 @@ export type FileDetail = FileInfo & {
 
 const SECTIONS = [
   { id: "overview", title: "Overview" },
+  { id: "browse", title: "Browse" },
   { id: "attention", title: "Files worth attention" },
-  { id: "big", title: "Big for what they are" },
   { id: "transcodes", title: "Why streams transcode" },
   { id: "four-k", title: "4K copies" },
   { id: "storage", title: "Storage" },
@@ -208,8 +208,8 @@ export default function Library() {
           )}
         </header>
         {section === "overview" && <OverviewSection onOpen={setSection} />}
+        {section === "browse" && <Browse days={days} />}
         {section === "attention" && <Attention days={days} />}
-        {section === "big" && <BigFiles days={days} />}
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
@@ -1816,56 +1816,96 @@ function OldStalls() {
 }
 
 
-/* Files that are large for what they are.
+/* The library as a wall of posters, sorted by whatever is wrong today.
  *
- * Bitrate alone does not compare: 20 Mbps is ordinary for two hours of 4K and
- * absurd for a 45 minute cartoon. Size per hour is the same number said in a
- * way that can be sorted, and it answers the question actually being asked,
- * which is "could this be half the size without looking worse".
+ * Everything on a tile is something the app can already prove: it stalled for
+ * somebody, it was transcoded for most of the people watching remotely, its
+ * audio had to be converted, nobody has ever played it. Press one and the
+ * whole file card opens, with the same actions as anywhere else.
  */
-type BigFile = FileInfo & {
+type Tile = {
+  rating_key: number;
+  title: string;
+  year: number | null;
+  media_type: string | null;
+  video_resolution: string | null;
+  file_bitrate: number | null;
+  file_size: number | null;
   gb_per_hour: number;
   hours: number;
   languages: string[];
   section: string | null;
-  section_id: number | null;
   store: string;
   plays: number;
+  remote_plays: number;
   last_play: number | null;
+  stalls: number;
+  transcode_percent: number;
+  marks: string[];
 };
 
-type BigList = {
-  items: BigFile[];
+type BrowseList = {
+  items: Tile[];
   total: number;
   size: number;
+  sort: string;
+  sorts: { key: string; label: string }[];
   sections: { section_id: number; name: string }[];
   languages: string[];
   resolutions: string[];
+  marks: string[];
 };
 
-const PER_HOUR = [0, 3, 4, 5, 6, 8, 10];
+const MARKS: Record<string, { label: string; tone: string; why: string }> = {
+  stalls: { label: "Stalled", tone: "pill bad", why: "Somebody's stream stopped to buffer on this" },
+  transcoded: { label: "Transcoded", tone: "pill warn", why: "Converted for most of the people watching remotely" },
+  heavy: { label: "Heavy", tone: "pill warn", why: "Above your problem bitrate, and watched from outside the house" },
+  audio: { label: "Audio", tone: "pill", why: "Audio no common device can play, or that had to be converted" },
+  subtitles: { label: "Subtitles", tone: "pill", why: "Picture or styled subtitles, or a pile of duplicates" },
+  container: { label: "Container", tone: "pill", why: "An old container" },
+  unwatched: { label: "Unwatched", tone: "pill", why: "Nobody has played it in this window" },
+};
 
-function BigFiles({ days }: { days: number }) {
-  const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("big.perHour") ?? 5));
-  const [resolution, setResolution] = useState(() => localStorage.getItem("big.resolution") ?? "");
-  const [sectionId, setSectionId] = useState(() => localStorage.getItem("big.section") ?? "");
-  const [language, setLanguage] = useState(() => localStorage.getItem("big.language") ?? "");
-  const [kind, setKind] = useState(() => localStorage.getItem("big.kind") ?? "movie");
+function poster(ratingKey: number, width = 150): string {
+  return `/api/media/${ratingKey}/image?width=${width}&height=${Math.round(width * 1.5)}`;
+}
+
+function Browse({ days }: { days: number }) {
+  const [sort, setSort] = useState(() => localStorage.getItem("browse.sort") ?? "per_hour");
+  const [kind, setKind] = useState(() => localStorage.getItem("browse.kind") ?? "movie");
+  const [problem, setProblem] = useState(() => localStorage.getItem("browse.problem") ?? "");
+  const [resolution, setResolution] = useState(() => localStorage.getItem("browse.resolution") ?? "");
+  const [sectionId, setSectionId] = useState(() => localStorage.getItem("browse.section") ?? "");
+  const [language, setLanguage] = useState(() => localStorage.getItem("browse.language") ?? "");
+  const [search, setSearch] = useState("");
+  const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("browse.perHour") ?? 0));
+  const [asTiles, setAsTiles] = useState(() => localStorage.getItem("browse.tiles") !== "off");
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<number | null>(null);
 
   function remember(key: string, value: string, set: (v: string) => void) {
     set(value);
-    localStorage.setItem(`big.${key}`, value);
+    localStorage.setItem(`browse.${key}`, value);
   }
 
-  const query = new URLSearchParams({ days: String(days), min_gb_per_hour: String(perHour) });
+  const query = new URLSearchParams({ days: String(days), sort, limit: "120" });
+  if (perHour) query.set("min_gb_per_hour", String(perHour));
+  if (kind) query.set("media_type", kind);
+  if (problem) query.set("problem", problem);
   if (resolution) query.set("resolution", resolution);
   if (sectionId) query.set("section_id", sectionId);
   if (language) query.set("language", language);
-  if (kind) query.set("media_type", kind);
-  const data = useApi<BigList>(`/library/big?${query}`, [days, perHour, resolution, sectionId, language, kind]);
+  if (search.trim()) query.set("search", search.trim());
+  const data = useApi<BrowseList>(`/library/browse?${query}`, [days, sort, kind, problem, resolution, sectionId, language, search, perHour]);
+
+  function choose(key: number, on: boolean) {
+    const next = new Set(chosen);
+    if (on) next.add(key);
+    else next.delete(key);
+    setChosen(next);
+  }
 
   async function tag() {
     const keys = [...chosen];
@@ -1889,28 +1929,33 @@ function BigFiles({ days }: { days: number }) {
     }
   }
 
-  function choose(key: number, on: boolean) {
-    const next = new Set(chosen);
-    if (on) next.add(key);
-    else next.delete(key);
-    setChosen(next);
-  }
-
   if (data.error) return <p className="note bad-note">{data.error}</p>;
 
   return (
     <>
       <p className="muted">
-        Size per hour, biggest first, so a long film and a short cartoon can be compared. Everything here plays
-        perfectly well; the question is whether it needs to be this big.
+        Everything in the library, with what is wrong on each. Sort by the trouble you are chasing today; press a
+        poster for the whole file, its findings and what can be done about it.
       </p>
+
       <div className="row wrap big-filters">
         <label>
-          At least
-          <select value={perHour} onChange={(e) => { setPerHour(Number(e.target.value)); localStorage.setItem("big.perHour", e.target.value); }}>
-            {PER_HOUR.map((n) => (
-              <option key={n} value={n}>
-                {n === 0 ? "any size" : `${n} GB an hour`}
+          Sort by
+          <select value={sort} onChange={(e) => remember("sort", e.target.value, setSort)}>
+            {(data.data?.sorts ?? []).map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Showing
+          <select value={problem} onChange={(e) => remember("problem", e.target.value, setProblem)}>
+            <option value="">Everything</option>
+            {(data.data?.marks ?? []).map((m) => (
+              <option key={m} value={m}>
+                {MARKS[m]?.label ?? m}
               </option>
             ))}
           </select>
@@ -1918,9 +1963,9 @@ function BigFiles({ days }: { days: number }) {
         <label>
           Kind
           <select value={kind} onChange={(e) => remember("kind", e.target.value, setKind)}>
-            <option value="">Anything</option>
             <option value="movie">Films</option>
             <option value="episode">Episodes</option>
+            <option value="">Both</option>
           </select>
         </label>
         <label>
@@ -1938,9 +1983,9 @@ function BigFiles({ days }: { days: number }) {
           Library
           <select value={sectionId} onChange={(e) => remember("section", e.target.value, setSectionId)}>
             <option value="">All</option>
-            {(data.data?.sections ?? []).map((s) => (
-              <option key={s.section_id} value={s.section_id}>
-                {s.name}
+            {(data.data?.sections ?? []).map((x) => (
+              <option key={x.section_id} value={x.section_id}>
+                {x.name}
               </option>
             ))}
           </select>
@@ -1956,15 +2001,50 @@ function BigFiles({ days }: { days: number }) {
             ))}
           </select>
         </label>
+        <label>
+          At least
+          <select
+            value={perHour}
+            onChange={(e) => {
+              setPerHour(Number(e.target.value));
+              localStorage.setItem("browse.perHour", e.target.value);
+            }}
+          >
+            {[0, 3, 4, 5, 6, 8, 10].map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "any size" : `${n} GB an hour`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Search
+          <input value={search} placeholder="Title" onChange={(e) => setSearch(e.target.value)} />
+        </label>
+        <div className="segmented">
+          {([["posters", true], ["list", false]] as [string, boolean][]).map(([label, tiles]) => (
+            <button
+              key={label}
+              className={asTiles === tiles ? "seg on" : "seg"}
+              onClick={() => {
+                setAsTiles(tiles);
+                localStorage.setItem("browse.tiles", tiles ? "on" : "off");
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {!data.data && <Loading label="Measuring the library" />}
+      {!data.data && <Loading label="Reading the library" />}
       {data.data && (
         <p className="note">
-          {data.data.total.toLocaleString()} {data.data.total === 1 ? "file" : "files"}, {size(data.data.size)} in
-          total. {data.data.items.length < data.data.total ? `Showing the biggest ${data.data.items.length}.` : ""}
+          {data.data.total.toLocaleString()} {data.data.total === 1 ? "title" : "titles"}, {size(data.data.size)}.
+          {data.data.items.length < data.data.total ? ` Showing the first ${data.data.items.length}.` : ""}
         </p>
       )}
+
       {message && <p className={message.ok ? "note" : "note bad-note"}>{message.text}</p>}
       {chosen.size > 0 && (
         <div className="row wrap">
@@ -1977,33 +2057,119 @@ function BigFiles({ days }: { days: number }) {
         </div>
       )}
 
-      <div className="file-list">
-        {(data.data?.items ?? []).map((f) => (
-          <div key={f.rating_key} className="big-row">
-            <label className="check big-pick">
-              <input type="checkbox" checked={chosen.has(f.rating_key)} onChange={(e) => choose(f.rating_key, e.target.checked)} />
-            </label>
-            <FileRow
-              file={f}
-              days={days}
-              badges={[
-                <span key="per" className="pill">
-                  {f.gb_per_hour} GB an hour
-                </span>,
-                <span key="store" className="pill">
-                  {f.section ?? f.store}
-                </span>,
-                ...(f.languages.length ? [<span key="lang" className="pill">{f.languages.join(", ")}</span>] : []),
-              ]}
-              stats={[mbps(f.file_bitrate), size(f.file_size), `${f.hours.toFixed(1)} h`, f.plays ? `${f.plays} plays` : "never played"]}
+      {!asTiles && (
+        <div className="file-list">
+          {(data.data?.items ?? []).map((row) => (
+            <div key={row.rating_key} className="big-row">
+              <label className="check big-pick">
+                <input
+                  type="checkbox"
+                  checked={chosen.has(row.rating_key)}
+                  onChange={(e) => choose(row.rating_key, e.target.checked)}
+                />
+              </label>
+              <div className="min0">
+                <button className="linkish" onClick={() => setOpen(row.rating_key)}>
+                  <strong>{row.title}</strong>
+                </button>
+                <p className="row wrap poster-marks">
+                  {row.gb_per_hour > 0 && <span className="pill">{row.gb_per_hour} GB an hour</span>}
+                  {row.video_resolution && <span className="pill">{row.video_resolution}</span>}
+                  <span className="pill">{row.section ?? row.store}</span>
+                  {row.languages.length > 0 && <span className="pill">{row.languages.join(", ")}</span>}
+                  {row.marks.map((mark) => (
+                    <span key={mark} className={MARKS[mark]?.tone ?? "pill"} title={MARKS[mark]?.why}>
+                      {MARKS[mark]?.label ?? mark}
+                    </span>
+                  ))}
+                </p>
+                <p className="muted small">
+                  {[mbps(row.file_bitrate), size(row.file_size), row.hours ? `${row.hours.toFixed(1)} h` : null,
+                    row.plays ? `${row.plays} plays` : "never played",
+                    row.stalls ? `${row.stalls} stalls` : null,
+                    row.transcode_percent ? `${row.transcode_percent}% transcoded remotely` : null]
+                    .filter(Boolean)
+                    .join(" \u00b7 ")}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="poster-wall" hidden={!asTiles}>
+        {(data.data?.items ?? []).map((tile) => (
+          <button
+            key={tile.rating_key}
+            className={chosen.has(tile.rating_key) ? "poster-tile picked" : "poster-tile"}
+            onClick={(e) => {
+              // Tick with a modifier, open with a plain press: a wall is for
+              // looking through, and a shortlist is the occasional thing.
+              if (e.ctrlKey || e.metaKey || e.shiftKey) choose(tile.rating_key, !chosen.has(tile.rating_key));
+              else setOpen(tile.rating_key);
+            }}
+            title="Press to open. Ctrl or shift and press to add it to a shortlist for tagging."
+          >
+            <img
+              src={poster(tile.rating_key)}
+              alt=""
+              loading="lazy"
+              onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
             />
-          </div>
+            <span className="poster-name clamp">{tile.title}</span>
+            <span className="muted small">
+              {[tile.video_resolution, tile.gb_per_hour ? `${tile.gb_per_hour} GB/h` : null, size(tile.file_size)]
+                .filter(Boolean)
+                .join(" \u00b7 ")}
+            </span>
+            <span className="row wrap poster-marks">
+              {tile.marks.map((mark) => (
+                <span key={mark} className={MARKS[mark]?.tone ?? "pill"} title={MARKS[mark]?.why}>
+                  {MARKS[mark]?.label ?? mark}
+                </span>
+              ))}
+            </span>
+          </button>
         ))}
       </div>
+      {data.data && data.data.items.length === 0 && <p className="muted">Nothing matches those filters.</p>}
+
+      {open !== null && <FileDialog ratingKey={open} days={days} onClose={() => setOpen(null)} />}
     </>
   );
 }
 
+/* The whole file card, over the wall, so nothing has to be navigated to. */
+function FileDialog({ ratingKey, days, onClose }: { ratingKey: number; days: number; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const file = useApi<FileDetail>(`/library/file/${ratingKey}?days=${days}`, [ratingKey, days]);
+
+  useEffect(() => {
+    ref.current?.showModal();
+  }, []);
+
+  return (
+    <dialog ref={ref} className="dialog wide" onClose={onClose} aria-label="File">
+      <div className="row-between dialog-head">
+        <h2 className="min0 clip">{file.data?.title ?? "Reading"}</h2>
+        <button className="icon-btn" onClick={() => ref.current?.close()} aria-label="Close">
+          &times;
+        </button>
+      </div>
+      {file.error && <p className="note bad-note">{file.error}</p>}
+      {!file.data && !file.error && <Loading label="Reading the file" />}
+      {file.data && <FileCardView f={file.data} days={days} />}
+    </dialog>
+  );
+}
+
+/* Files that are large for what they are.
+ *
+ * Bitrate alone does not compare: 20 Mbps is ordinary for two hours of 4K and
+ * absurd for a 45 minute cartoon. Size per hour is the same number said in a
+ * way that can be sorted, and it answers the question actually being asked,
+ * which is "could this be half the size without looking worse".
+ */
 type Kept = { rating_key: number; title: string; reason: string | null; kept_by: string | null; kept_at: string | null };
 type Lens = "trouble" | "messy" | "room";
 

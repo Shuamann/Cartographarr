@@ -321,6 +321,37 @@ async def big_files(
     return await asyncio.to_thread(look)
 
 
+@router.get("/browse")
+async def browse_library(
+    _: AdminUser,
+    days: int = Query(90, ge=1, le=3650),
+    sort: str = "per_hour",
+    min_gb_per_hour: float = Query(0, ge=0, le=100),
+    min_bitrate_kbps: int = Query(0, ge=0, le=500_000),
+    resolution: str | None = None,
+    section_id: int | None = None,
+    language: str | None = None,
+    media_type: str | None = "movie",
+    problem: str | None = None,
+    search: str | None = None,
+    limit: int = Query(120, ge=1, le=500),
+) -> dict:
+    """The library as something to look through, sorted by what is wrong."""
+    import asyncio
+
+    from app.services import library
+
+    def look():
+        with session_scope() as db:
+            return library.browse(
+                db, days, sort=sort, min_gb_per_hour=min_gb_per_hour, min_bitrate_kbps=min_bitrate_kbps,
+                resolution=resolution, section_id=section_id, language=language, media_type=media_type,
+                problem=problem, search=search, limit=limit,
+            )
+
+    return await asyncio.to_thread(look)
+
+
 TAG_CAP = 100
 """Most that one press may tag. A filter that matches two thousand files is a
 filter to narrow, not a button to press."""

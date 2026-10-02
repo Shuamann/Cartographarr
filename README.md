@@ -413,17 +413,24 @@ says Seerr was not updated.
 When a replacement for a file finishes importing, whatever was reported about
 that file is closed with a note saying what replaced it.
 
-## Big for what they are
+## Browse
 
-**Library, Big for what they are** sorts every file by size per hour. Bitrate
-alone cannot be compared across a three hour film and a forty minute cartoon;
-size per hour can, and it is the number behind "could this be half the size
-without looking worse".
+**Library, Browse** is the whole library as a wall of posters, sorted by
+whatever is wrong today: biggest per hour, highest bitrate, most stalls, most
+transcoded, most watched, least watched, or most wrong with it. Size per hour
+is there because bitrate alone cannot be compared across a three hour film and
+a forty minute cartoon.
 
-Narrow it by size per hour, resolution, library, audio language, and films
-against episodes. Tick what you want and tag it in Radarr or Sonarr, a hundred
-at a time, to work through later. Nothing is downloaded and nothing is deleted
-by tagging.
+Each poster carries what the app can prove about that file: it stalled for
+somebody, it was transcoded for most remote viewers, its audio had to be
+converted, nobody has played it. Press one and the whole file card opens, with
+its findings, the replacement search and the track tidying.
+
+Narrow by problem, size per hour, resolution, library, audio language, films
+against episodes, or a title search. Switch to the list for ticks and bulk
+tagging in Radarr or Sonarr, a hundred at a time; on the wall, hold ctrl or
+shift while pressing to add to the same shortlist. Nothing is downloaded and
+nothing is deleted by tagging.
 
 ## Tidying a file's tracks
 

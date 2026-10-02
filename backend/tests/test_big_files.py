@@ -107,3 +107,65 @@ def test_viewers_cannot_browse_or_tag(client):
     as_viewer(client, "all")
     assert client.get("/api/library/big").status_code == 403
     assert client.post("/api/library/big/tag", json={"keys": [1]}).status_code == 403
+
+
+# ---- browsing the library ----------------------------------------------------
+
+def test_browse_sorts_by_what_is_asked(client):
+    claim(client)
+    seed()
+    def titles(sort):
+        return [r["title"] for r in client.get(f"/api/library/browse?sort={sort}&media_type=&limit=50").json()["items"]]
+
+    assert titles("per_hour")[0] == "Enormous Cartoon"
+    assert titles("size")[0] == "Big 4K"
+    assert titles("title")[0] == "Anime Episode"
+
+
+def test_a_tile_carries_what_can_be_proved(client):
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import History, StreamEvent
+
+    claim(client)
+    seed()
+    now = datetime.now(UTC)
+    with session_scope() as db:
+        # Watched remotely twice, transcoded both times, and it stalled once.
+        for row in (1, 2):
+            db.add(History(row_id=row, reference_id=row, rating_key=2, user_id=7, location="wan",
+                           transcode_decision="transcode", started=int(now.timestamp()) - row * 600,
+                           media_type="movie"))
+        db.add(StreamEvent(kind="buffering", user_id=7, rating_key=2, session_key="s", seconds=9,
+                           started_at=now.replace(tzinfo=None) - timedelta(hours=1),
+                           ended_at=now.replace(tzinfo=None) - timedelta(hours=1)))
+
+    tiles = {t["title"]: t for t in client.get("/api/library/browse?media_type=movie&limit=50").json()["items"]}
+    watched = tiles["Long Film"]
+    assert watched["stalls"] == 1 and watched["transcode_percent"] == 100
+    assert "stalls" in watched["marks"] and "transcoded" in watched["marks"]
+    assert "unwatched" not in watched["marks"]
+    # Nothing has ever played the others.
+    assert "unwatched" in tiles["Tidy Film"]["marks"]
+
+
+def test_browse_can_be_narrowed_to_one_problem(client):
+    claim(client)
+    seed()
+    answer = client.get("/api/library/browse?media_type=movie&problem=unwatched&limit=50").json()
+    assert answer["total"] == 4 and all("unwatched" in t["marks"] for t in answer["items"])
+
+
+def test_browse_searches_by_title(client):
+    claim(client)
+    seed()
+    answer = client.get("/api/library/browse?media_type=&search=cartoon&limit=50").json()
+    assert [t["title"] for t in answer["items"]] == ["Enormous Cartoon"]
+
+
+def test_viewers_cannot_browse(client):
+    from tests.test_privacy import as_viewer
+
+    as_viewer(client, "all")
+    assert client.get("/api/library/browse").status_code == 403

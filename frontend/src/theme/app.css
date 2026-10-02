@@ -737,6 +737,66 @@ code {
   stroke: none;
 }
 
+/* The poster wall: the library as something to look through. */
+.poster-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+/* display: grid above would otherwise beat the browser's own rule for the
+   hidden attribute, and the wall would show under the list. */
+.poster-wall[hidden] {
+  display: none;
+}
+
+.poster-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.poster-tile:hover,
+.poster-tile:focus-visible {
+  border-color: var(--accent);
+}
+
+/* On the shortlist, which a modifier press puts it on. */
+.poster-tile.picked {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.poster-tile img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--surface-3);
+}
+
+.poster-name {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.poster-marks {
+  gap: 3px;
+}
+
+.poster-marks .pill {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+}
+
 /* The release picker: a tile each, because the decision needs all of a
    release at once rather than a row to scan across. */
 .release-filters {

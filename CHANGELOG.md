@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.40.0 - 2026-10-01
+
+### Added
+- Browse: the library as a wall of posters, sorted by whatever is wrong today. Biggest per hour, highest bitrate,
+  most stalls, most transcoded, most watched, least watched, or most wrong with it. Each poster carries what the app
+  can prove about that file, and pressing one opens the whole card, findings, replacement and tidying included, so
+  nothing has to be navigated to
+- The same page switches to a list, which keeps the ticks and the bulk tagging in Radarr or Sonarr. Big for what
+  they are is folded into it: it was this page with one sort and one filter
+
+### Fixed
+- Store names were read from the database once per file rather than once per page, because an empty set of names
+  read as "no names yet, go and look". On a library of thirty thousand that was thirty thousand queries, and four
+  seconds of every library page
+
 ## 0.39.0 - 2026-10-01
 
 ### Changed

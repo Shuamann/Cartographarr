@@ -43,12 +43,20 @@ def labels() -> dict[str, str]:
 
 
 def name_for(path: str | None, named: dict[str, str] | None = None, depth: int | None = None) -> str:
-    """What to call the storage a file is on."""
+    """What to call the storage a file is on.
+
+    `named` is read from the database when it is not passed. An empty mapping
+    is an answer, not a missing one: a server where nobody has renamed a mount
+    has no names, and treating that as "go and look again" meant a query per
+    file, thirty thousand of them, on a page that lists the library.
+    """
     depth = depth or current().library_store_depth
     root = root_of(path, depth)
     if root is None:
         return UNKNOWN
-    return (named or labels()).get(root) or root
+    if named is None:
+        named = labels()
+    return named.get(root) or root
 
 
 def summary(days: int = 30) -> dict[str, Any]:
