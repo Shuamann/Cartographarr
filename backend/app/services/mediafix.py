@@ -85,11 +85,19 @@ page listing two hundred. Thrown away whenever the settings it was derived from
 change, so a wrong guess is never kept past the fix."""
 
 
+_missed: set[str] = set()
+"""Libraries already searched for and not found.
+
+A search walks the roots, so it must happen once rather than once a file. It is
+thrown away with the rest of the memory whenever the settings change."""
+
+
 def _memory() -> dict[str, str]:
     global _found, _found_for
     now = (tuple(roots()), tuple(path_map()))
     if now != _found_for:
         _found, _found_for = {}, now
+        _missed.clear()
     return _found
 
 
@@ -126,12 +134,101 @@ def _guesses(file_path: str) -> list[str]:
     return [c for c in [*first, *rest] if not (c in seen or seen.add(c))]
 
 
+SEARCH_WIDTH = 400
+"""Directories examined at one level under a root. A share with more than this
+many folders at its top is not a media root, it is a mistake."""
+
+SEARCH_DEPTH = 2
+"""How far below a root a library may sit. /media/Films is one, and
+/media/HotArchive/Films is two, which covers a share mounted whole."""
+
+
+def _search(library: str, tail: str) -> str | None:
+    """Look under the roots for a directory that holds this file.
+
+    Plex reports the path its own container sees, and that container maps its
+    shares however it likes: a library Plex calls /movies can be /media/Films
+    here, sharing no name with anything. So when the names do not line up, the
+    question asked is not "is there a directory called movies" but "which
+    directory under these roots has this film in it", which has one answer and
+    does not care what anything is called.
+
+    Walked once per library and remembered, hit or miss.
+    """
+    import os
+
+    if library in _missed:
+        return None
+
+    for root in roots():
+        frontier = [root]
+        for _ in range(SEARCH_DEPTH):
+            below: list[str] = []
+            for here in frontier:
+                try:
+                    with os.scandir(here) as entries:
+                        children = [
+                            entry.path.replace("\\", "/")
+                            for entry in entries
+                            if not entry.name.startswith(".") and entry.is_dir()
+                        ]
+                except OSError:
+                    continue
+                for child in children[:SEARCH_WIDTH]:
+                    if os.path.exists(f"{child}/{tail}"):
+                        _memory()[library] = child
+                        return f"{child}/{tail}"
+                    below.append(child)
+            frontier = below
+
+    _missed.add(library)
+    return None
+
+
+def root_status() -> list[dict[str, Any]]:
+    """Whether each mounted directory is there, and what is inside it.
+
+    The one thing a person setting a mount cannot see from outside. A root that
+    is empty, missing or unreadable is a different problem from a root whose
+    names do not match, and saying which is most of the help.
+    """
+    import os
+
+    rows = []
+    for root in roots():
+        names: list[str] = []
+        problem = None
+        try:
+            with os.scandir(root) as entries:
+                for entry in entries:
+                    if entry.name.startswith("."):
+                        continue
+                    try:
+                        if entry.is_dir():
+                            names.append(entry.name)
+                    except OSError:
+                        continue
+                    if len(names) >= 30:
+                        break
+        except OSError as err:
+            problem = err.strerror or str(err)
+        rows.append({
+            "path": root,
+            "exists": os.path.isdir(root),
+            "contains": sorted(names, key=str.lower),
+            "error": problem,
+        })
+    return rows
+
+
 def local_path(file_path: str | None) -> str | None:
     """Where this container can read that file, or None if it cannot.
 
     In order: wherever this library was last found, anything media_path_map
     says, the path exactly as Plex gives it, then that path hung under each
-    media root with and without its library name. The first that exists wins.
+    media root with and without its library name. Failing all of that, the
+    roots are walked looking for a directory that holds the file, because a
+    library's name here need not be its name in Plex. The first hit wins.
     """
     import os
 
@@ -146,7 +243,7 @@ def local_path(file_path: str | None) -> str | None:
                 if home and home != library:
                     _memory()[library] = home
             return candidate
-    return None
+    return _search(library, tail)
 
 
 def where_libraries(paths: list[str]) -> list[dict[str, Any]]:

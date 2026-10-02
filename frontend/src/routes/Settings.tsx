@@ -829,8 +829,10 @@ function SettingsForm() {
               <MediaPaths
                 roots={String(draft.media_roots ?? byKey.get("media_roots")?.value ?? "")}
                 map={String(draft.media_path_map ?? byKey.get("media_path_map")?.value ?? "")}
+                dirty={dirty}
                 onRoots={(value) => setDraft({ ...draft, media_roots: value })}
                 onMap={(value) => setDraft({ ...draft, media_path_map: value })}
+                onSave={save}
               />
             )}
             {section.title === "Problem files" && (
@@ -1317,6 +1319,7 @@ type TidyStatusRow = {
   tools: { ready: boolean; ffmpeg: { version: string | null } };
   path_map: [string, string][];
   roots: string[];
+  root_status: { path: string; exists: boolean; contains: string[]; error: string | null }[];
 };
 
 /* Where the media is, asked as two questions rather than as one text box.
@@ -1330,17 +1333,22 @@ type TidyStatusRow = {
 function MediaPaths({
   roots,
   map,
+  dirty,
   onRoots,
   onMap,
+  onSave,
 }: {
   roots: string;
   map: string;
+  dirty: boolean;
   onRoots: (value: string) => void;
   onMap: (value: string) => void;
+  onSave: () => Promise<void>;
 }) {
   const status = useApi<TidyStatusRow>("/library/tidy/status");
   // Held here as well as in the draft so that emptying a row leaves the box on
   // screen instead of taking it out from under the cursor.
+  const [checking, setChecking] = useState(false);
   const [rows, setRows] = useState<string[]>(() => {
     const given = roots.split(",").map((x) => x.trim()).filter(Boolean);
     return given.length > 0 ? given : [""];
@@ -1400,14 +1408,42 @@ function MediaPaths({
             </button>
           </div>
         ))}
+        {/* What is in each mount. A root that is empty or unreadable is a
+            different problem from one whose names do not match Plex, and this
+            is the only place that difference shows. */}
+        {(s?.root_status ?? []).map((root) => (
+          <p key={root.path} className="muted small root-contents">
+            <code>{root.path}</code>{" "}
+            {root.error
+              ? `cannot be read: ${root.error}`
+              : !root.exists
+                ? "is not mounted in this container"
+                : root.contains.length === 0
+                  ? "is empty"
+                  : `holds ${root.contains.join(", ")}`}
+          </p>
+        ))}
         <div className="row wrap">
           <button className="btn" onClick={() => setRows([...rows, ""])}>
             Add another directory
           </button>
-          <button className="btn" onClick={status.reload} disabled={status.loading}>
-            {status.loading ? "Looking" : "Check again"}
+          {/* Checking the value the server still has helps nobody, so this
+              saves first when there is anything to save. */}
+          <button
+            className="btn"
+            disabled={status.loading || checking}
+            onClick={async () => {
+              setChecking(true);
+              try {
+                if (dirty) await onSave();
+                status.reload();
+              } finally {
+                setChecking(false);
+              }
+            }}
+          >
+            {status.loading || checking ? "Looking" : dirty ? "Save and check" : "Check again"}
           </button>
-          <span className="muted small">Save, then check again.</span>
         </div>
       </div>
 

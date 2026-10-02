@@ -108,8 +108,14 @@ Then under **Settings, Library and files**, add `/media` to the mounted
 directories and press **Check again**. The table underneath lists every library
 Plex reports and says where it was found: a library Plex calls `/movies` is
 looked for at `/media/movies` and at `/media` itself, and whichever answers is
-remembered. A library that stays missing gets its path set in the last column.
-Add a second directory for libraries kept on another share.
+remembered. If the names do not line up, which they often do not because Plex
+maps its own container paths, the roots are walked two levels down looking for
+the directory that actually holds the file. A library that stays missing after
+that gets its path set in the last column. Add a second directory for libraries
+kept on another share, a remote mount included.
+
+The panel also says what is inside each directory you give it, so a mount the
+container cannot read looks different from one whose names simply do not match.
 
 Every path box there lists what the container can see: click it for the
 directories at that path, type to filter them, Tab to complete as far as the

@@ -435,6 +435,9 @@ async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> di
     answer["tools"] = await asyncio.to_thread(mediafix.tools)
     answer["path_map"] = mediafix.path_map()
     answer["roots"] = mediafix.roots()
+    # What is actually inside each mount, which is the one thing nobody can see
+    # from outside the container and the first thing worth knowing.
+    answer["root_status"] = await asyncio.to_thread(mediafix.root_status)
     return answer
 
 

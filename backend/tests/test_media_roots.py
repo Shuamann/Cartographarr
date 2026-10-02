@@ -148,3 +148,49 @@ def test_a_half_typed_path_lists_the_directory_it_is_inside(client, tmp_path):
 
 def test_listing_is_admin_only(client):
     assert client.get("/api/library/tidy/directories").status_code in (401, 403)
+
+
+# ---- when the names do not line up ------------------------------------------
+
+def test_a_library_is_found_by_its_files_when_the_name_does_not_match(tmp_path):
+    """Plex maps its own container paths, so /movies here can be Films there."""
+    root = make(tmp_path, "Films/A Film/a.mkv")
+    with trial({"media_roots": root}):
+        assert mediafix.local_path("/movies/A Film/a.mkv") == f"{root}/Films/A Film/a.mkv"
+
+
+def test_the_search_reaches_a_library_one_level_further_down(tmp_path):
+    root = make(tmp_path, "Archive/Films/A Film/a.mkv")
+    with trial({"media_roots": root}):
+        assert mediafix.local_path("/movies/A Film/a.mkv") == f"{root}/Archive/Films/A Film/a.mkv"
+
+
+def test_a_library_really_absent_is_searched_for_once(tmp_path, monkeypatch):
+    """A walk per file would be a walk per row on a page listing two hundred."""
+    root = make(tmp_path, "Films/A Film/a.mkv")
+    import os
+
+    with trial({"media_roots": root}):
+        assert mediafix.local_path("/tv/A Show/s01e01.mkv") is None
+
+        walks = []
+        real = os.scandir
+        monkeypatch.setattr(os, "scandir", lambda p: walks.append(p) or real(p))
+        assert mediafix.local_path("/tv/A Show/s01e02.mkv") is None
+
+    assert walks == []
+
+
+def test_a_root_says_what_is_inside_it(tmp_path):
+    """The one thing nobody can see from outside the container."""
+    share = tmp_path / "share"
+    (share / "Films").mkdir(parents=True)
+    (share / "Shows").mkdir()
+    root = str(share).replace("\\", "/")
+
+    with trial({"media_roots": f"{root}, /nowhere-at-all"}):
+        here, missing = mediafix.root_status()
+
+    assert here["path"] == root and here["exists"]
+    assert here["contains"] == ["Films", "Shows"]
+    assert not missing["exists"] and missing["contains"] == []

@@ -4617,3 +4617,13 @@ label.locked .pill {
   text-overflow: ellipsis;
   opacity: 0.8;
 }
+
+.root-contents {
+  margin: 0;
+  word-break: break-word;
+}
+
+.root-contents code {
+  font-size: 12px;
+  color: var(--ink);
+}

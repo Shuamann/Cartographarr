@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.45.0 - 2026-10-02
+
+### Fixed
+- Media roots only matched on names, which meant they found nothing when Plex's own container maps its shares to
+  different names, as it usually does: a library Plex calls /movies is often /media/Films here, sharing no name with
+  anything. When the names do not line up the roots are now walked instead, looking for the directory that holds the
+  file itself, which has one answer and does not care what anything is called. Two levels down, so a share mounted
+  whole still works. Walked once per library and remembered, hit or miss, so it never costs a walk a file
+
+### Added
+- Settings, Library and files now says what is inside each mounted directory, or that it is empty, not mounted, or
+  cannot be read. A root with the wrong names in it and a root the container cannot open look identical from
+  outside, and that is the one thing nobody can check without being inside the container
+
+### Changed
+- The button that rechecks the mounts saves first when there is anything to save, and says so. It used to check
+  whatever the server still had and ask you to remember to save, which is a thing to forget
+
 ## 0.44.0 - 2026-10-02
 
 ### Added
