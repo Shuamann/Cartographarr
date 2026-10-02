@@ -655,6 +655,7 @@ type TidyJob = {
   progress: number;
   detail: string | null;
   saved_bytes: number | null;
+  asked_by: string | null;
   steps: string[];
 };
 
@@ -881,6 +882,11 @@ function TidyJobs({ scope }: { scope: "active" | "history" }) {
           <div key={job.id} className="mini">
             <div className="min0">
               <strong>{job.title ?? `Item ${job.rating_key}`}</strong>
+              {job.status === "running" && (
+                <div className="download-progress" title={`${job.progress}%`}>
+                  <span style={{ width: `${Math.max(2, Math.min(100, job.progress))}%` }} />
+                </div>
+              )}
               <p className="muted small">
                 {job.status === "running"
                   ? `${job.progress}% - ${job.detail ?? "working"}`
@@ -888,6 +894,9 @@ function TidyJobs({ scope }: { scope: "active" | "history" }) {
                     ? "Waiting its turn"
                     : `${job.status}: ${job.detail ?? ""}`}
                 {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
+                {/* Who asked, because a rule acting on its own is the case
+                    somebody will want to go and look at. */}
+                {job.asked_by ? ` \u00b7 asked by ${job.asked_by}` : ""}
               </p>
             </div>
             {(job.status === "running" || job.status === "queued") && (
@@ -1342,10 +1351,15 @@ const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
  */
 function RemediationQueue() {
   const list = useApi<Replacement[]>("/library/replacements");
+  // Counted here as well as inside TidyJobs, because a tab saying Active 0
+  // above two running jobs is worse than no count at all.
+  const tidy = useApi<TidyJob[]>("/library/tidy/jobs?limit=40");
   const [tab, setTab] = useState<"active" | "history">("active");
   const rows = list.data ?? [];
   const current = rows.filter((r) => ACTIVE_STATUSES.includes(r.status));
   const past = rows.filter((r) => !ACTIVE_STATUSES.includes(r.status));
+  const jobs = tidy.data ?? [];
+  const running = jobs.filter((j) => j.status === "running" || j.status === "queued");
   useEffect(() => {
     if (current.length === 0) return;
     const timer = setInterval(list.reload, 15000);
@@ -1353,8 +1367,9 @@ function RemediationQueue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current.length]);
   if (list.error) return <p className="note bad-note">{list.error}</p>;
-  if (!list.data) return <Loading label="Reading replacements" />;
+  if (!list.data) return <Loading label="Reading the queue" />;
   const shown = tab === "active" ? current : past;
+  const nothing = shown.length === 0 && (tab === "active" ? running.length : jobs.length - running.length) === 0;
   return (
     <>
       <div className="row-between">
@@ -1365,21 +1380,21 @@ function RemediationQueue() {
         </p>
         <div className="segmented">
           <button className={tab === "active" ? "seg on" : "seg"} onClick={() => setTab("active")}>
-            Active {current.length}
+            Active {current.length + running.length}
           </button>
           <button className={tab === "history" ? "seg on" : "seg"} onClick={() => setTab("history")}>
-            History {past.length}
+            History {past.length + jobs.length - running.length}
           </button>
         </div>
       </div>
 
       <TidyJobs scope={tab} />
       {shown.length > 0 && <h3 className="section-head">{tab === "active" ? "Replacing files" : "Replaced"}</h3>}
-      {shown.length === 0 && (
+      {nothing && (
         <p className="muted">
           {tab === "active"
-            ? "Nothing being replaced. Open a file in any list and choose Find a replacement, or Tidy its tracks."
-            : "Nothing replaced yet."}
+            ? "Nothing in progress. Open a file in any list and choose Tidy its tracks, or Find a replacement."
+            : "Nothing finished yet."}
         </p>
       )}
       <div className="mini-list">

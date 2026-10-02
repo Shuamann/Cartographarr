@@ -575,11 +575,20 @@ def tidy_jobs(_: AdminUser, db: Db, limit: int = Query(20, ge=1, le=200)) -> lis
 
     from app.models import MediaJob
 
+    def keys(job: MediaJob) -> list[str]:
+        """The step keys, whichever shape the job was stored in.
+
+        Jobs from before track picking held a bare list; newer ones hold the
+        list beside the tracks chosen on the file itself.
+        """
+        asked = json_module.loads(job.steps or "[]")
+        return asked.get("steps", []) if isinstance(asked, dict) else asked
+
     rows = db.execute(select(MediaJob).order_by(MediaJob.id.desc()).limit(limit)).scalars().all()
     return [
         {
             **{c.name: getattr(job, c.name) for c in MediaJob.__table__.columns},
-            "steps": json_module.loads(job.steps or "[]"),
+            "steps": keys(job),
         }
         for job in rows
     ]

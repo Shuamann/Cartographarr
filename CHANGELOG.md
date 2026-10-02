@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.46.1 - 2026-10-02
+
+### Changed
+- The Remediation queue's tab counts count tidying jobs as well as replacements, so Active no longer reads 0 above
+  two running jobs, and a running job gets a progress bar and the name of whoever asked for it, since a rule acting
+  on its own is the case worth going to look at
+
+### Fixed
+- The tidying jobs list reported its steps in whichever shape the job was stored in, a bare list for jobs from
+  before track picking and an object for ones after. It reports the step keys either way now
+
 ## 0.46.0 - 2026-10-02
 
 ### Added
