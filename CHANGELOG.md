@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.38.0 - 2026-10-01
+
+### Added
+- Big for what they are, a new Library page: every file sorted by size per hour, so a three hour film and a forty
+  minute cartoon can be compared. Bitrate alone cannot do that. Narrow it by size per hour, resolution, library,
+  audio language and films against episodes, and tag what is left in Radarr or Sonarr to work through later
+- Tagging is capped at a hundred at a time: a filter matching two thousand files is a filter to narrow, not a
+  button to press
+
 ## 0.37.0 - 2026-10-01
 
 ### Added

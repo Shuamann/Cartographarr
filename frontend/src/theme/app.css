@@ -737,6 +737,32 @@ code {
   stroke: none;
 }
 
+/* Big for what they are: the filter row, and a tick beside each file. */
+.big-filters {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.big-filters label {
+  gap: 4px;
+}
+
+.big-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.big-row > .file-row,
+.big-row > div:last-child {
+  flex: 1;
+}
+
+.big-pick {
+  padding-top: 14px;
+}
+
 /* Tidying: the steps on a file card, and what is running.
    .mini spreads its children apart, which is wrong for a checkbox and its
    label, so this row is packed from the left instead. */

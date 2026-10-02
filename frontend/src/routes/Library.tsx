@@ -107,6 +107,7 @@ export type FileDetail = FileInfo & {
 const SECTIONS = [
   { id: "overview", title: "Overview" },
   { id: "attention", title: "Files worth attention" },
+  { id: "big", title: "Big for what they are" },
   { id: "transcodes", title: "Why streams transcode" },
   { id: "four-k", title: "4K copies" },
   { id: "storage", title: "Storage" },
@@ -208,6 +209,7 @@ export default function Library() {
         </header>
         {section === "overview" && <OverviewSection onOpen={setSection} />}
         {section === "attention" && <Attention days={days} />}
+        {section === "big" && <BigFiles days={days} />}
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
@@ -1768,6 +1770,194 @@ function OldStalls() {
   );
 }
 
+
+/* Files that are large for what they are.
+ *
+ * Bitrate alone does not compare: 20 Mbps is ordinary for two hours of 4K and
+ * absurd for a 45 minute cartoon. Size per hour is the same number said in a
+ * way that can be sorted, and it answers the question actually being asked,
+ * which is "could this be half the size without looking worse".
+ */
+type BigFile = FileInfo & {
+  gb_per_hour: number;
+  hours: number;
+  languages: string[];
+  section: string | null;
+  section_id: number | null;
+  store: string;
+  plays: number;
+  last_play: number | null;
+};
+
+type BigList = {
+  items: BigFile[];
+  total: number;
+  size: number;
+  sections: { section_id: number; name: string }[];
+  languages: string[];
+  resolutions: string[];
+};
+
+const PER_HOUR = [0, 3, 4, 5, 6, 8, 10];
+
+function BigFiles({ days }: { days: number }) {
+  const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("big.perHour") ?? 5));
+  const [resolution, setResolution] = useState(() => localStorage.getItem("big.resolution") ?? "");
+  const [sectionId, setSectionId] = useState(() => localStorage.getItem("big.section") ?? "");
+  const [language, setLanguage] = useState(() => localStorage.getItem("big.language") ?? "");
+  const [kind, setKind] = useState(() => localStorage.getItem("big.kind") ?? "movie");
+  const [chosen, setChosen] = useState<Set<number>>(new Set());
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function remember(key: string, value: string, set: (v: string) => void) {
+    set(value);
+    localStorage.setItem(`big.${key}`, value);
+  }
+
+  const query = new URLSearchParams({ days: String(days), min_gb_per_hour: String(perHour) });
+  if (resolution) query.set("resolution", resolution);
+  if (sectionId) query.set("section_id", sectionId);
+  if (language) query.set("language", language);
+  if (kind) query.set("media_type", kind);
+  const data = useApi<BigList>(`/library/big?${query}`, [days, perHour, resolution, sectionId, language, kind]);
+
+  async function tag() {
+    const keys = [...chosen];
+    if (!confirm(`Tag ${keys.length} ${keys.length === 1 ? "title" : "titles"} in Radarr or Sonarr for replacement?\n\nNothing is downloaded and nothing is deleted. The tag is a shortlist you can work through later.`)) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await api.post<{ tagged: number; failed: { rating_key: number; why: string }[] }>(
+        "/library/big/tag",
+        { keys },
+      );
+      setMessage({
+        text: `Tagged ${r.tagged}.${r.failed.length ? ` ${r.failed.length} could not be: ${r.failed[0].why}` : ""}`,
+        ok: r.failed.length === 0,
+      });
+      setChosen(new Set());
+    } catch (err) {
+      setMessage({ text: (err as Error).message, ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function choose(key: number, on: boolean) {
+    const next = new Set(chosen);
+    if (on) next.add(key);
+    else next.delete(key);
+    setChosen(next);
+  }
+
+  if (data.error) return <p className="note bad-note">{data.error}</p>;
+
+  return (
+    <>
+      <p className="muted">
+        Size per hour, biggest first, so a long film and a short cartoon can be compared. Everything here plays
+        perfectly well; the question is whether it needs to be this big.
+      </p>
+      <div className="row wrap big-filters">
+        <label>
+          At least
+          <select value={perHour} onChange={(e) => { setPerHour(Number(e.target.value)); localStorage.setItem("big.perHour", e.target.value); }}>
+            {PER_HOUR.map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "any size" : `${n} GB an hour`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Kind
+          <select value={kind} onChange={(e) => remember("kind", e.target.value, setKind)}>
+            <option value="">Anything</option>
+            <option value="movie">Films</option>
+            <option value="episode">Episodes</option>
+          </select>
+        </label>
+        <label>
+          Resolution
+          <select value={resolution} onChange={(e) => remember("resolution", e.target.value, setResolution)}>
+            <option value="">Any</option>
+            {(data.data?.resolutions ?? []).map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Library
+          <select value={sectionId} onChange={(e) => remember("section", e.target.value, setSectionId)}>
+            <option value="">All</option>
+            {(data.data?.sections ?? []).map((s) => (
+              <option key={s.section_id} value={s.section_id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Audio language
+          <select value={language} onChange={(e) => remember("language", e.target.value, setLanguage)}>
+            <option value="">Any</option>
+            {(data.data?.languages ?? []).map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {!data.data && <Loading label="Measuring the library" />}
+      {data.data && (
+        <p className="note">
+          {data.data.total.toLocaleString()} {data.data.total === 1 ? "file" : "files"}, {size(data.data.size)} in
+          total. {data.data.items.length < data.data.total ? `Showing the biggest ${data.data.items.length}.` : ""}
+        </p>
+      )}
+      {message && <p className={message.ok ? "note" : "note bad-note"}>{message.text}</p>}
+      {chosen.size > 0 && (
+        <div className="row wrap">
+          <button className="btn" disabled={busy} onClick={tag}>
+            {busy ? "Tagging..." : `Tag ${chosen.size} in Radarr or Sonarr`}
+          </button>
+          <button className="tab" onClick={() => setChosen(new Set())}>
+            Clear
+          </button>
+        </div>
+      )}
+
+      <div className="file-list">
+        {(data.data?.items ?? []).map((f) => (
+          <div key={f.rating_key} className="big-row">
+            <label className="check big-pick">
+              <input type="checkbox" checked={chosen.has(f.rating_key)} onChange={(e) => choose(f.rating_key, e.target.checked)} />
+            </label>
+            <FileRow
+              file={f}
+              days={days}
+              badges={[
+                <span key="per" className="pill">
+                  {f.gb_per_hour} GB an hour
+                </span>,
+                <span key="store" className="pill">
+                  {f.section ?? f.store}
+                </span>,
+                ...(f.languages.length ? [<span key="lang" className="pill">{f.languages.join(", ")}</span>] : []),
+              ]}
+              stats={[mbps(f.file_bitrate), size(f.file_size), `${f.hours.toFixed(1)} h`, f.plays ? `${f.plays} plays` : "never played"]}
+            />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 type Kept = { rating_key: number; title: string; reason: string | null; kept_by: string | null; kept_at: string | null };
 type Lens = "trouble" | "messy" | "room";

@@ -290,6 +290,72 @@ async def bitrate_advice(_: AdminUser, days: int = Query(90, ge=7, le=3650)) -> 
     return await asyncio.to_thread(streams.bitrate_advice, days)
 
 
+# ---- files that are large for what they are ---------------------------------
+
+
+@router.get("/big")
+async def big_files(
+    _: AdminUser,
+    days: int = Query(90, ge=1, le=3650),
+    min_gb_per_hour: float = Query(0, ge=0, le=100),
+    min_bitrate_kbps: int = Query(0, ge=0, le=500_000),
+    resolution: str | None = None,
+    section_id: int | None = None,
+    language: str | None = None,
+    media_type: str | None = None,
+    limit: int = Query(200, ge=1, le=1000),
+) -> dict:
+    """Biggest per hour first, with what it would take to narrow the list."""
+    import asyncio
+
+    from app.services import library
+
+    def look():
+        with session_scope() as db:
+            return library.oversized(
+                db, days, min_gb_per_hour=min_gb_per_hour, min_bitrate_kbps=min_bitrate_kbps,
+                resolution=resolution, section_id=section_id, language=language,
+                media_type=media_type, limit=limit,
+            )
+
+    return await asyncio.to_thread(look)
+
+
+TAG_CAP = 100
+"""Most that one press may tag. A filter that matches two thousand files is a
+filter to narrow, not a button to press."""
+
+
+@router.post("/big/tag")
+async def tag_big_files(admin: AdminUser, keys: list[int] = Body(..., embed=True)) -> dict:
+    """Tag these in Radarr or Sonarr, to pick replacements by hand later.
+
+    Nothing is downloaded and nothing is deleted: the tag is a shortlist that
+    survives leaving this page.
+    """
+    from app.integrations.base import describe_failure
+
+    if not keys:
+        raise HTTPException(400, "Nothing chosen")
+    if len(keys) > TAG_CAP:
+        raise HTTPException(400, f"That is {len(keys)} files. Narrow the filters, or tag {TAG_CAP} at a time.")
+
+    tagged, failed = [], []
+    for key in keys:
+        try:
+            target, service = await _arr_target(key)
+            found, _episode = await service.locate(target["external"], target["season"], target["episode"])
+            await service.tag(found["id"])
+            tagged.append(key)
+        except HTTPException as exc:
+            failed.append({"rating_key": key, "why": str(exc.detail)})
+        except Exception as exc:  # noqa: BLE001 - one title missing must not stop the rest
+            failed.append({"rating_key": key, "why": describe_failure(exc)})
+
+    audit.record(admin, "library.tag.bulk", f"Tagged {len(tagged)} large files for replacement")
+    return {"tagged": len(tagged), "failed": failed}
+
+
 # ---- tidying a file's tracks -------------------------------------------------
 
 

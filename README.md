@@ -409,6 +409,18 @@ says Seerr was not updated.
 When a replacement for a file finishes importing, whatever was reported about
 that file is closed with a note saying what replaced it.
 
+## Big for what they are
+
+**Library, Big for what they are** sorts every file by size per hour. Bitrate
+alone cannot be compared across a three hour film and a forty minute cartoon;
+size per hour can, and it is the number behind "could this be half the size
+without looking worse".
+
+Narrow it by size per hour, resolution, library, audio language, and films
+against episodes. Tick what you want and tag it in Radarr or Sonarr, a hundred
+at a time, to work through later. Nothing is downloaded and nothing is deleted
+by tagging.
+
 ## Tidying a file's tracks
 
 Most of what the Library finds wrong with a file is not the picture: styled

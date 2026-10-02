@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import History, MediaItem, StreamEvent, StreamSession, User
+from app.models import History, Library, MediaItem, StreamEvent, StreamSession, User
 from app.plays import plays as count_plays
 from app.plays import plays_when as count_plays_when
 
@@ -390,6 +390,88 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
         "counts": [{"issue": k, "label": ISSUES[k], "files": counts.get(k, 0)} for k in ISSUES],
         "files": rows,
         "total": len(flagged),
+    }
+
+
+def oversized(
+    db: Session,
+    days: int,
+    min_gb_per_hour: float = 0.0,
+    min_bitrate_kbps: int = 0,
+    resolution: str | None = None,
+    section_id: int | None = None,
+    language: str | None = None,
+    media_type: str | None = None,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Files that are large for what they are, biggest first.
+
+    Bitrate alone is awkward to judge: 20 Mbps is ordinary for two hours of
+    4K and absurd for a 45 minute cartoon. Size per hour is the same number
+    said in a way that compares, and it is what somebody deciding "could this
+    be half the size without looking worse" actually wants.
+
+    Everything is filtered rather than scored, because the question is a
+    shortlist to act on, not a ranking to admire.
+    """
+    from app.services.library_scan import in_library
+    from app.services.stores import labels, name_for
+
+    rows = db.execute(
+        select(MediaItem).where(
+            MediaItem.file_size.is_not(None), MediaItem.file_size > 0,
+            MediaItem.duration.is_not(None), MediaItem.duration > 0,
+            in_library(),
+        )
+    ).scalars().all()
+    plays = play_stats(db, days)
+    named = labels()
+    sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
+
+    out = []
+    for item in rows:
+        hours = (item.duration or 0) / 3_600_000
+        if hours <= 0:
+            continue
+        per_hour = (item.file_size or 0) / 1e9 / hours
+        if min_gb_per_hour and per_hour < min_gb_per_hour:
+            continue
+        if min_bitrate_kbps and (item.file_bitrate or 0) < min_bitrate_kbps:
+            continue
+        if resolution and str(item.video_resolution or "").lower() != resolution.lower():
+            continue
+        if section_id is not None and item.section_id != section_id:
+            continue
+        if media_type and item.media_type != media_type:
+            continue
+        languages = sorted({
+            str(track.get("language") or "").lower()
+            for track in _tracks(item.audio_tracks)
+            if track.get("language")
+        })
+        if language and language.lower() not in languages:
+            continue
+        stats = plays.get(item.rating_key, {})
+        out.append({
+            **describe_file(item),
+            "gb_per_hour": round(per_hour, 2),
+            "hours": round(hours, 2),
+            "languages": languages,
+            "section": sections.get(item.section_id),
+            "section_id": item.section_id,
+            "store": name_for(item.file_path, named),
+            "plays": int(stats.get("plays") or 0),
+            "last_play": stats.get("last_play"),
+        })
+
+    out.sort(key=lambda r: -r["gb_per_hour"])
+    return {
+        "items": out[:limit],
+        "total": len(out),
+        "size": sum(r["file_size"] or 0 for r in out),
+        "sections": [{"section_id": key, "name": name} for key, name in sorted(sections.items()) if name],
+        "languages": sorted({lang for row in out for lang in row["languages"]}),
+        "resolutions": sorted({str(row["video_resolution"] or "").lower() for row in out if row["video_resolution"]}),
     }
 
 
