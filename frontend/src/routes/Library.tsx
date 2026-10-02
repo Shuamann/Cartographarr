@@ -623,6 +623,7 @@ type TidyTrack = {
 
 type Tidy = {
   steps: { key: string; what: string; why: string }[];
+  file_path: string | null;
   audio: TidyTrack[];
   subtitles: TidyTrack[];
   local_path: string | null;
@@ -714,10 +715,13 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     }
   }
 
+  const root = (t.file_path ?? "").replace(/\\/g, "/").split("/").filter(Boolean)[0];
   const blocked = !t.tools.ready
-    ? "ffmpeg is not in this container, so this build cannot tidy anything."
+    ? "ffmpeg is not in this image, so this build cannot tidy anything."
     : !t.local_path
-      ? "This container cannot see the file. Mount the share where Plex has it, or set the path map in Settings."
+      ? `This container cannot open ${t.file_path ?? "the file"}. Add ${
+          root ? `-v /mnt/user/${root}:/${root}` : "the share"
+        } to the container, or map the path under Settings, Behaviour, Tidying files.`
       : null;
 
   return (

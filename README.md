@@ -77,6 +77,18 @@ cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-
 
 Set `TZ` to your own time zone. Rules that use a time of day go by it.
 
+To tidy a file's tracks, the container also needs to read the media, at the
+paths Plex reports. Add one `-v` per share, with the same name inside:
+
+```bash
+-v /mnt/user/movies:/movies -v /mnt/user/tv:/tv -v /mnt/user/kidsmovies:/kidsmovies
+```
+
+**Settings, Behaviour, Tidying files** says whether this worked: it checks a
+sample of the paths Plex reports against what the container can actually open,
+and names the shares that are missing. Where the names cannot match, map them
+there instead. Everything else in the app works without these mounts.
+
 `GIT_COMMIT` tells the app which commit it was built from, so Settings, About
 can say how many commits behind it is. Leave it out and it compares version
 numbers instead.

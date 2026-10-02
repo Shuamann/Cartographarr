@@ -643,6 +643,7 @@ function SettingsForm() {
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Syncing" && <SyncNow />}
+            {section.title === "Tidying files" && <TidyStatus />}
             {section.title === "Library and access review" && (
               <BitrateAdvice
                 onUse={(mbps) => setDraft({ ...draft, library_bitrate_threshold_mbps: mbps })}
@@ -999,6 +1000,46 @@ function BitrateAdvice({ onUse }: { onUse: (mbps: number) => void }) {
         {a.clean_streams > 0
           ? ` Read from ${a.clean_streams + a.stalled_streams} remote streams over ${a.days} days.`
           : ""}
+      </span>
+    </div>
+  );
+}
+
+/* Whether tidying can work here, answered by trying rather than by telling
+ * somebody what to read. Two things have to be true: ffmpeg in the image, and
+ * the media readable at the paths Plex reports.
+ */
+type TidyStatusRow = {
+  checked: number;
+  visible: number;
+  missing_roots: string[];
+  example: string | null;
+  tools: { ready: boolean; ffmpeg: { version: string | null } };
+  path_map: [string, string][];
+};
+
+function TidyStatus() {
+  const status = useApi<TidyStatusRow>("/library/tidy/status");
+  if (status.error || !status.data) return null;
+  const s = status.data;
+  const all = s.checked > 0 && s.visible === s.checked;
+
+  return (
+    <div className="row sync-now">
+      <span className={all && s.tools.ready ? "pill ok" : "pill warn"}>
+        {all && s.tools.ready ? "ready" : "not ready"}
+      </span>
+      <span className="muted small">
+        {s.tools.ready
+          ? `ffmpeg is here. `
+          : "ffmpeg is not in this image, so nothing can be tidied. "}
+        {s.checked === 0
+          ? "No file paths known yet; the library scan fills these in."
+          : all
+            ? `All ${s.checked} files checked can be opened from inside this container.`
+            : `${s.visible} of ${s.checked} files checked can be opened. Mount ${
+                s.missing_roots.join(", ") || "the shares"
+              } in the container at those paths, or map them below. For example ${s.example ?? ""}`}
       </span>
     </div>
   );

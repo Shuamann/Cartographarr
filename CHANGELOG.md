@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.42.1 - 2026-10-02
+
+### Added
+- Settings, Behaviour, Tidying files now says whether tidying can work at all: whether ffmpeg is in the image, and
+  how many of the paths Plex reports this container can actually open, naming the shares that are missing. Answered
+  by trying rather than by telling somebody what to read
+
+### Changed
+- A file that cannot be reached now says which path failed and the exact mount that would fix it, rather than
+  "set the path map in Settings" without saying where that is. The README shows the mounts in the run command too
+
 ## 0.42.0 - 2026-10-02
 
 ### Added

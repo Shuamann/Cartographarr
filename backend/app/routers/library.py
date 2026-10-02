@@ -390,6 +390,45 @@ async def tag_big_files(admin: AdminUser, keys: list[int] = Body(..., embed=True
 # ---- tidying a file's tracks -------------------------------------------------
 
 
+@router.get("/tidy/status")
+async def tidy_status(_: AdminUser, sample: int = Query(40, ge=1, le=500)) -> dict:
+    """Whether this container can actually tidy anything, and why not.
+
+    Answers the two questions by looking rather than by explaining: is ffmpeg
+    here, and can the paths Plex reports be opened from inside this container.
+    """
+    import asyncio
+
+    from app.models import MediaItem
+    from app.services import mediafix
+
+    def look():
+        with session_scope() as db:
+            paths = [
+                row[0]
+                for row in db.execute(
+                    select(MediaItem.file_path)
+                    .where(MediaItem.file_path.is_not(None))
+                    .order_by(MediaItem.rating_key.desc())
+                    .limit(sample)
+                ).all()
+            ]
+        seen = [path for path in paths if mediafix.local_path(path)]
+        missing = [path for path in paths if path not in set(seen)]
+        roots = sorted({"/" + str(path).replace("\\", "/").strip("/").split("/")[0] for path in missing})
+        return {
+            "checked": len(paths),
+            "visible": len(seen),
+            "missing_roots": roots[:10],
+            "example": missing[0] if missing else None,
+        }
+
+    answer = await asyncio.to_thread(look)
+    answer["tools"] = await asyncio.to_thread(mediafix.tools)
+    answer["path_map"] = mediafix.path_map()
+    return answer
+
+
 @router.get("/file/{rating_key}/tidy")
 async def tidy_plan(rating_key: int, _: AdminUser) -> dict:
     """What tidying this file would do, and whether this container can."""
