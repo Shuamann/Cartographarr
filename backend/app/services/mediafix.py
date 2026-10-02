@@ -201,6 +201,18 @@ def plan(item: Any) -> dict[str, Any]:
         "rating_key": getattr(item, "rating_key", None),
         "title": getattr(item, "full_title", None) or getattr(item, "title", None),
         "file_path": getattr(item, "file_path", None),
+        # Numbered within their own kind, which is how they are chosen and how
+        # ffmpeg is told about them: the first audio track, the third subtitle.
+        "audio": [
+            {"position": n, "codec": track.get("codec"), "channels": track.get("channels"),
+             "language": track.get("language"), "title": track.get("title")}
+            for n, track in enumerate(audio)
+        ],
+        "subtitles": [
+            {"position": n, "codec": track.get("codec"), "language": track.get("language"),
+             "forced": bool(track.get("forced")), "title": track.get("title")}
+            for n, track in enumerate(subs)
+        ],
         "steps": steps,
         # Everything here is a stream copy except one audio encode, so the cost
         # is reading and writing the file once.
@@ -213,6 +225,14 @@ def plan(item: Any) -> dict[str, Any]:
 # Built from ffprobe's own stream list rather than the database's summary,
 # because mapping streams needs their real indexes, and a file can have been
 # replaced since it was last read.
+
+
+CHOSEN = "chosen_tracks"
+"""The step for a choice made on the file itself rather than by a rule.
+
+Everything else here is a judgement the app can defend from what it read: this
+one is a person looking at seven subtitle tracks and saying which three they
+want. It carries the positions they ticked, counted within each kind."""
 
 
 def probe(path: str) -> list[dict[str, Any]]:
@@ -245,7 +265,8 @@ def _forced(stream: dict[str, Any]) -> bool:
     return bool((stream.get("disposition") or {}).get("forced"))
 
 
-def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: str) -> list[str]:
+def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: str,
+          chosen: dict[str, Any] | None = None) -> list[str]:
     """The ffmpeg command for these steps against these streams.
 
     Video and audio are copied across untouched. Only subtitles are dropped or
@@ -253,8 +274,21 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
     mention is carried over as it was, because this is tidying, not a rebuild.
     """
     wanted = set(steps)
+    chosen = chosen or {}
     subs = [s for s in streams if s.get("codec_type") == "subtitle"]
     audio = [s for s in streams if s.get("codec_type") == "audio"]
+
+    # A choice made on the file wins over anything worked out from settings:
+    # somebody is looking at the actual track list.
+    if CHOSEN in wanted:
+        keep_audio_at = chosen.get("audio")
+        keep_subs_at = chosen.get("subtitles")
+        if keep_audio_at is not None:
+            picked = [a for n, a in enumerate(audio) if n in set(keep_audio_at)]
+            # Never leave a file with nothing to listen to.
+            audio = picked or audio
+        if keep_subs_at is not None:
+            subs = [s for n, s in enumerate(subs) if n in set(keep_subs_at)]
 
     text_languages = {_language(s) for s in subs if str(s.get("codec_name") or "").lower() not in IMAGE_SUBTITLES}
     keep: list[dict[str, Any]] = []
@@ -278,6 +312,11 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
         # Never leave a file with nothing to listen to, whatever the setting
         # says: a rule that silences a film is worse than a spare dub.
         kept_audio = wanted_audio or audio
+
+    first_at = chosen.get("default_audio") if CHOSEN in wanted else None
+    if first_at is not None and 0 <= first_at < len(kept_audio):
+        head = kept_audio[first_at]
+        kept_audio = [head] + [a for a in kept_audio if a is not head]
 
     first = (settings.preferred_audio_language or "").strip().lower()
     if "default_audio" in wanted and first:
@@ -305,7 +344,7 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
         argv += ["-map", f"0:{stream['index']}"]
     argv += ["-c", "copy"]
 
-    if "default_audio" in wanted and first and kept_audio:
+    if (first_at is not None or ("default_audio" in wanted and first)) and kept_audio:
         # Said out loud as well as ordered, because some players read the
         # disposition and ignore the order.
         argv += ["-disposition:a", "0", "-disposition:a:0", "default"]
@@ -353,7 +392,8 @@ _running: asyncio.Task | None = None
 _current: dict[str, Any] = {}
 
 
-def queue(rating_key: int, steps: list[str], asked_by: str | None) -> int:
+def queue(rating_key: int, steps: list[str], asked_by: str | None,
+          chosen: dict[str, Any] | None = None) -> int:
     """Write the job down. Returns its id."""
     from datetime import UTC, datetime
 
@@ -373,11 +413,15 @@ def queue(rating_key: int, steps: list[str], asked_by: str | None) -> int:
             raise LookupError("ffmpeg is not installed in this container")
         known = {step["key"] for step in plan(item)["steps"]}
         wanted = [step for step in steps if step in known]
+        if chosen:
+            # A choice from the page is its own step, and does not have to be
+            # one the plan thought of.
+            wanted = [*wanted, CHOSEN]
         if not wanted:
             raise ValueError("Nothing to do to this file")
         job = MediaJob(
             rating_key=rating_key, title=item.full_title or item.title, path=here,
-            steps=json.dumps(wanted), status="queued", progress=0,
+            steps=json.dumps({"steps": wanted, "chosen": chosen or {}}), status="queued", progress=0,
             asked_by=asked_by, created_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db.add(job)
@@ -463,7 +507,10 @@ async def _run(job_id: int) -> None:
 
     with session_scope() as db:
         job = db.get(MediaJob, job_id)
-        source, steps = job.path, json.loads(job.steps or "[]")
+        source, asked = job.path, json.loads(job.steps or "[]")
+    # Older jobs stored a bare list of steps; newer ones carry the choice too.
+    steps = asked.get("steps", []) if isinstance(asked, dict) else asked
+    chosen = asked.get("chosen", {}) if isinstance(asked, dict) else {}
 
     if not source or not os.path.exists(source):
         await asyncio.to_thread(_finish, job_id, "failed", "The file is not where it was")
@@ -478,7 +525,7 @@ async def _run(job_id: int) -> None:
     folder = os.path.dirname(source)
     handle, target = tempfile.mkstemp(prefix=".cartographarr-", suffix=".mkv", dir=folder)
     os.close(handle)
-    argv = build(streams, steps, source, target)
+    argv = build(streams, steps, source, target, chosen)
     await asyncio.to_thread(_say, job_id, 0, "Reading the file")
 
     process = await asyncio.create_subprocess_exec(

@@ -295,3 +295,30 @@ def test_a_rule_can_ask_for_the_tidying(client, monkeypatch):
                          audio_tracks=json.dumps([{"codec": "aac", "channels": 2, "language": "eng"}]),
                          subtitle_tracks=json.dumps([])))
     assert "nothing to tidy" in asyncio.run(action.execute({"subject": "file", "rating_key": 43}, {}))
+
+
+# ---- choosing tracks on the file itself --------------------------------------
+
+def test_a_choice_made_on_the_file_keeps_exactly_what_was_ticked():
+    """Seven subtitle tracks in seven languages are not duplicates and not
+    picture-only, so no rule offers to touch them. Somebody looking at the
+    list can still say which three they want."""
+    argv = mediafix.build(MANY, [mediafix.CHOSEN], "in.mkv", "out.mkv",
+                          {"audio": [0, 1], "subtitles": [0]})
+    # Audio 0 and 1 of three, subtitle 0 of three.
+    assert mapped(argv) == ["0:0", "0:1", "0:2", "0:4"]
+
+
+def test_a_chosen_first_track_leads_whatever_the_settings_say(monkeypatch):
+    settings(monkeypatch, preferred_audio_language="jpn")
+    argv = mediafix.build(MANY, [mediafix.CHOSEN], "in.mkv", "out.mkv",
+                          {"audio": [0, 1, 2], "default_audio": 1})
+    # The second audio track leads, and is said to be the default.
+    assert mapped(argv)[:4] == ["0:0", "0:2", "0:1", "0:3"]
+    assert argv[argv.index("-disposition:a:0") + 1] == "default"
+
+
+def test_unticking_every_audio_track_is_refused_quietly():
+    argv = mediafix.build(MANY, [mediafix.CHOSEN], "in.mkv", "out.mkv", {"audio": [], "subtitles": []})
+    assert all(f"0:{n}" in mapped(argv) for n in (1, 2, 3)), "a file is never left silent"
+    assert not any(f"0:{n}" in mapped(argv) for n in (4, 5, 6)), "but it may be left without subtitles"

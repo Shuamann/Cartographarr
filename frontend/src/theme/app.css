@@ -895,6 +895,30 @@ code {
   padding-top: 14px;
 }
 
+/* Choosing tracks on the file itself: two columns, one row per track. */
+.track-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 10px 0;
+}
+
+/* Fifty six subtitle tracks is a real file, not a silly one. The column
+   scrolls rather than pushing everything else off the page. */
+.track-picks .min0 {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.track-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Tidying: the steps on a file card, and what is running.
    .mini spreads its children apart, which is wrong for a checkbox and its
    label, so this row is packed from the left instead. */

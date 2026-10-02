@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.42.0 - 2026-10-02
+
+### Added
+- Tidy the tracks now lists the file's own tracks: untick any subtitle or audio track to drop it, and choose which
+  audio track plays first. A choice made here wins over anything worked out from Settings, because somebody is
+  looking at the actual list. Seven subtitle tracks in seven languages are neither duplicates nor picture-only, so
+  no rule offered to touch them before this
+- All, none, and first language only, because a file with fifty six subtitle tracks is a real file and fifty six
+  clicks is not an interface. A file is still never left with no sound: unticking every audio track keeps them all
+
 ## 0.41.2 - 2026-10-02
 
 ### Fixed

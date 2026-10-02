@@ -612,11 +612,34 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
  * converted or dropped, an audio track everything can play is added beside the
  * original, an old container is repackaged.
  */
+type TidyTrack = {
+  position: number;
+  codec: string | null;
+  channels?: number | null;
+  language: string | null;
+  forced?: boolean;
+  title?: string | null;
+};
+
 type Tidy = {
   steps: { key: string; what: string; why: string }[];
+  audio: TidyTrack[];
+  subtitles: TidyTrack[];
   local_path: string | null;
   tools: { ready: boolean };
 };
+
+function trackName(track: TidyTrack): string {
+  return [
+    (track.codec ?? "?").toUpperCase(),
+    track.channels ? `${track.channels} ch` : null,
+    track.language ?? "no language",
+    track.forced ? "forced" : null,
+    track.title,
+  ]
+    .filter(Boolean)
+    .join(" \u00b7 ");
+}
 
 type TidyJob = {
   id: number;
@@ -634,10 +657,21 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
   const [chosen, setChosen] = useState<Set<string> | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Which tracks survive, and which one plays first. Null until somebody
+  // touches them, so a file nobody has edited sends no choice at all.
+  const [keepAudio, setKeepAudio] = useState<Set<number> | null>(null);
+  const [keepSubs, setKeepSubs] = useState<Set<number> | null>(null);
+  const [first, setFirst] = useState<number | null>(null);
 
-  if (plan.error || !plan.data || plan.data.steps.length === 0) return null;
+  if (plan.error || !plan.data) return null;
   const t = plan.data;
+  const tracks = t.audio.length + t.subtitles.length;
+  if (t.steps.length === 0 && tracks === 0) return null;
   const picked = chosen ?? new Set(t.steps.map((s) => s.key));
+  const audioKept = keepAudio ?? new Set(t.audio.map((a) => a.position));
+  const subsKept = keepSubs ?? new Set(t.subtitles.map((x) => x.position));
+  const edited =
+    keepAudio !== null || keepSubs !== null || first !== null;
 
   function pick(key: string, on: boolean) {
     const next = new Set(picked);
@@ -646,12 +680,32 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     setChosen(next);
   }
 
+  function keep(which: "audio" | "subtitles", position: number, on: boolean) {
+    const from = which === "audio" ? audioKept : subsKept;
+    const next = new Set(from);
+    if (on) next.add(position);
+    else next.delete(position);
+    (which === "audio" ? setKeepAudio : setKeepSubs)(next);
+  }
+
   async function start() {
-    if (!confirm(`Tidy ${title}?\n\nThe file is read and written once, the result is checked against the original for length and picture, and only then does it replace it. The picture is never re-encoded.`)) return;
+    const dropped =
+      t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
+    const warning = dropped > 0 ? `\n\n${dropped} track${dropped === 1 ? "" : "s"} will be dropped.` : "";
+    if (!confirm(`Tidy ${title}?${warning}\n\nThe file is read and written once, the result is checked against the original for length and picture, and only then does it replace it. The picture is never re-encoded.`)) return;
     setBusy(true);
     setMessage(null);
     try {
-      await api.post(`/library/file/${ratingKey}/tidy`, { steps: [...picked] });
+      await api.post(`/library/file/${ratingKey}/tidy`, {
+        steps: [...picked],
+        chosen: edited
+          ? {
+              audio: [...audioKept],
+              subtitles: [...subsKept],
+              ...(first !== null ? { default_audio: first } : {}),
+            }
+          : {},
+      });
       setMessage({ text: "Queued. It runs one file at a time; progress is at the top of this page.", ok: true });
     } catch (err) {
       setMessage({ text: (err as Error).message, ok: false });
@@ -687,11 +741,101 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
           </label>
         ))}
       </div>
+      {tracks > 0 && (
+        <div className="track-picks">
+          {t.audio.length > 0 && (
+            <div className="min0">
+              <div className="row-between">
+                <p className="muted small">Audio: untick to drop, choose one to play first</p>
+                <span className="row">
+                  <button className="tab" onClick={() => setKeepAudio(new Set(t.audio.map((a) => a.position)))}>
+                    all
+                  </button>
+                  <button className="tab" onClick={() => setKeepAudio(new Set())}>
+                    none
+                  </button>
+                </span>
+              </div>
+              {t.audio.map((track) => (
+                <div key={track.position} className="track-row">
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={audioKept.has(track.position)}
+                      disabled={Boolean(blocked)}
+                      onChange={(e) => keep("audio", track.position, e.target.checked)}
+                    />
+                    <span>{trackName(track)}</span>
+                  </label>
+                  <label className="check" title="Players take the first track unless somebody goes looking">
+                    <input
+                      type="radio"
+                      name={`first-${ratingKey}`}
+                      checked={first === track.position}
+                      disabled={Boolean(blocked) || !audioKept.has(track.position)}
+                      onChange={() => setFirst(track.position)}
+                    />
+                    <span className="muted small">first</span>
+                  </label>
+                </div>
+              ))}
+              {t.audio.length > 1 && audioKept.size === 0 && (
+                <p className="muted small">Everything is kept: a file is never left with no sound.</p>
+              )}
+            </div>
+          )}
+          {t.subtitles.length > 0 && (
+            <div className="min0">
+              <div className="row-between">
+                <p className="muted small">Subtitles: untick to drop</p>
+                <span className="row">
+                  <button className="tab" onClick={() => setKeepSubs(new Set(t.subtitles.map((x) => x.position)))}>
+                    all
+                  </button>
+                  <button className="tab" onClick={() => setKeepSubs(new Set())}>
+                    none
+                  </button>
+                  {/* The commonest wish by far, and fifty six clicks otherwise. */}
+                  <button
+                    className="tab"
+                    title="Keep only tracks in the language you watch in"
+                    onClick={() =>
+                      setKeepSubs(
+                        new Set(
+                          t.subtitles
+                            .filter((x) => (x.language ?? "").toLowerCase() === (t.subtitles[0]?.language ?? "eng").toLowerCase())
+                            .map((x) => x.position),
+                        ),
+                      )
+                    }
+                  >
+                    first language only
+                  </button>
+                </span>
+              </div>
+              {t.subtitles.map((track) => (
+                <div key={track.position} className="track-row">
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={subsKept.has(track.position)}
+                      disabled={Boolean(blocked)}
+                      onChange={(e) => keep("subtitles", track.position, e.target.checked)}
+                    />
+                    <span>{trackName(track)}</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {blocked ? (
         <p className="muted small">{blocked}</p>
       ) : (
         <div className="row wrap">
-          <button className="btn" disabled={busy || picked.size === 0} onClick={start}>
+          <button className="btn" disabled={busy || (picked.size === 0 && !edited)} onClick={start}>
             {busy ? "Queueing..." : "Tidy it"}
           </button>
           <span className="muted small">

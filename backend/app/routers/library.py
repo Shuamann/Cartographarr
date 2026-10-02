@@ -415,15 +415,26 @@ async def tidy_plan(rating_key: int, _: AdminUser) -> dict:
 
 
 @router.post("/file/{rating_key}/tidy")
-async def tidy_file(rating_key: int, admin: AdminUser, steps: list[str] = Body(..., embed=True)) -> dict:
-    """Queue the tidying. One file is worked on at a time."""
+async def tidy_file(
+    rating_key: int,
+    admin: AdminUser,
+    steps: list[str] = Body(default_factory=list, embed=True),
+    chosen: dict = Body(default_factory=dict, embed=True),
+) -> dict:
+    """Queue the tidying. One file is worked on at a time.
+
+    `chosen` is a choice made on the file itself: which audio and subtitle
+    tracks to keep, counted within their own kind, and which audio track goes
+    first. It wins over anything worked out from Settings, because somebody is
+    looking at the actual track list.
+    """
     import asyncio
 
     from app import audit
     from app.services import mediafix
 
     try:
-        job_id = await asyncio.to_thread(mediafix.queue, rating_key, steps, admin.username)
+        job_id = await asyncio.to_thread(mediafix.queue, rating_key, steps, admin.username, chosen or None)
     except LookupError as exc:
         raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:

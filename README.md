@@ -449,6 +449,13 @@ What is offered comes from the file's own tracks:
 - An AC3 track added beside audio nothing can play, never instead of it
 - An old container repackaged to mkv, streams copied across
 
+The panel also lists the file's own tracks. Untick a subtitle or audio track
+to drop it, and choose which audio track plays first; all, none and first
+language only are there for files carrying fifty subtitle tracks. A choice
+made here wins over anything worked out from Settings, since somebody is
+looking at the real list. Unticking every audio track keeps them all: a file
+is never left with no sound.
+
 Three of the steps answer to Settings, because there is no sensible default:
 an **audio language to put first** when a file has several, **subtitle
 languages to keep**, and **audio languages to keep**. Languages are the three
