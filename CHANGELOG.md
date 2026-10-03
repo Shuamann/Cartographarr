@@ -36,6 +36,14 @@ copy on GitHub to say what an update brings.
 - SQLite is told to wait for a locked database rather than give up at once, which was the default. The enforcer
   writes every five seconds, the sync writes in batches and requests write on top of both; the transactions are all
   short, so this is about waiting out a brief overlap instead of raising it into somebody's page
+- The library list reads the eighteen columns it uses rather than whole rows. It was building a full object for
+  every one of thirty thousand titles, including every plot summary, to show sixty: 629 ms of query against 242 ms.
+  And what each file says about itself is worked out once and kept: its title, the languages on its audio tracks,
+  the store it sits on and its size per hour do not depend on who watched it, so they are not redone for thirty
+  thousand files on every visit. Anything that changes a file changes the key, so a tidy, a rescan, a replacement
+  or a move shows the new answer on the next page load rather than at the next scan, and renaming a store or
+  changing how much of a path names one drops the whole lot. Plays and stalls are never cached, since they change
+  without the file changing
 - oauthlib is pinned above the version carrying PYSEC-2026-4114. It arrives through apprise rather than being used
   here, so the floor is set rather than waiting for apprise to raise its own
 

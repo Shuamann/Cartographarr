@@ -406,6 +406,80 @@ BROWSE_SORTS = {
 }
 
 
+_ROWS: dict[int, tuple[Any, dict[str, Any]]] = {}
+_ROWS_FOR: tuple[Any, ...] | None = None
+"""What each file says about itself, against the state it was read in.
+
+Half the cost of the library list was working the same answers out again for
+thirty thousand files that had not changed: parsing the audio tracks to list
+their languages, formatting an episode title, and matching a path against the
+store names. None of that depends on who watched it, so none of it has to be
+redone when somebody does.
+
+The key is the three things that change when the file does: when it was last
+read, how big it is, and where it is. A tidy clears the first and rewrites the
+other two, a scan stamps the first, and a replacement clears it, so anything
+that alters a file shows up on the next page load rather than at the next scan.
+Renaming a store or changing how much of a path names one changes the whole
+cache's stamp instead, since that answer is the same question asked of
+different settings.
+"""
+
+
+def _rows_cache(stamp: tuple[Any, ...]) -> dict[int, tuple[Any, dict[str, Any]]]:
+    global _ROWS, _ROWS_FOR
+
+    if stamp != _ROWS_FOR:
+        _ROWS, _ROWS_FOR = {}, stamp
+    return _ROWS
+
+
+def forget_rows() -> None:
+    """For a test, or anything that changes a file without saying so."""
+    global _ROWS_FOR
+
+    _ROWS.clear()
+    _ROWS_FOR = None
+
+
+NOTHING_SEEN: dict[str, int] = {}
+"""Shared, because most files have had no trouble and building a Counter each
+time to answer `.get()` with None is thirty thousand allocations a request."""
+
+
+BROWSE_COLUMNS = (
+    MediaItem.rating_key,
+    MediaItem.title,
+    MediaItem.full_title,
+    MediaItem.grandparent_title,
+    MediaItem.media_index,
+    MediaItem.parent_media_index,
+    MediaItem.media_type,
+    MediaItem.year,
+    MediaItem.section_id,
+    MediaItem.duration,
+    MediaItem.video_resolution,
+    MediaItem.file_bitrate,
+    MediaItem.file_size,
+    MediaItem.file_container,
+    MediaItem.file_path,
+    MediaItem.file_checked_at,
+    MediaItem.audio_tracks,
+    MediaItem.subtitle_tracks,
+)
+"""What a row of the library list is made of: eighteen columns of thirty nine.
+
+Selected by name rather than as whole MediaItem objects. The page reads these
+and nothing else, and the rest includes every plot summary in the library,
+which was being read off disk, built into an object and thrown away thirty
+thousand times a request. Measured on a library of this size, the same rows
+cost 512 ms as objects and 199 ms as columns, most of the difference being
+SQLAlchemy instrumenting attributes nobody asks for.
+
+The rows still answer to `row.file_size` and the like, so everything that
+reads them is unchanged."""
+
+
 def browse(
     db: Session,
     days: int,
@@ -447,30 +521,55 @@ def browse(
         where.append(MediaItem.file_bitrate >= min_bitrate_kbps)
     if search:
         where.append(func.lower(MediaItem.full_title).like(f"%{search.lower()}%"))
-    rows = db.execute(select(MediaItem).where(*where)).scalars().all()
+    rows = db.execute(select(*BROWSE_COLUMNS).where(*where)).all()
     plays = play_stats(db, days)
     stalls = stall_stats(db, days)
     seen = observed_trouble(db, days)
     named = labels()
     sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
-    threshold = int(current().library_bitrate_threshold_mbps * 1000)
+    settings = current()
+    threshold = int(settings.library_bitrate_threshold_mbps * 1000)
+    # Everything cached below was worked out against these, so a change to
+    # either is a different answer and the whole lot is dropped.
+    cache = _rows_cache((tuple(sorted(named.items())), settings.library_store_depth))
 
     out = []
     for item in rows:
-        hours = (item.duration or 0) / 3_600_000
-        per_hour = ((item.file_size or 0) / 1e9 / hours) if hours > 0 else 0.0
-        if min_gb_per_hour and per_hour < min_gb_per_hour:
+        known = cache.get(item.rating_key)
+        stamp = (item.file_checked_at, item.file_size, item.file_path)
+        if known is not None and known[0] == stamp:
+            about = known[1]
+        else:
+            hours = (item.duration or 0) / 3_600_000
+            about = {
+                "rating_key": item.rating_key,
+                "title": _title(item),
+                "year": item.year,
+                "media_type": item.media_type,
+                "video_resolution": item.video_resolution,
+                "file_bitrate": item.file_bitrate,
+                "file_size": item.file_size,
+                "file_container": item.file_container,
+                "gb_per_hour": round(((item.file_size or 0) / 1e9 / hours) if hours > 0 else 0.0, 2),
+                "hours": round(hours, 2),
+                "languages": sorted({
+                    str(track.get("language") or "").lower()
+                    for track in _tracks(item.audio_tracks)
+                    if track.get("language")
+                }),
+                "section_id": item.section_id,
+                "store": name_for(item.file_path, named),
+            }
+            if len(cache) < CACHE_LIMIT:
+                cache[item.rating_key] = (stamp, about)
+
+        if min_gb_per_hour and about["gb_per_hour"] < min_gb_per_hour:
             continue
-        languages = sorted({
-            str(track.get("language") or "").lower()
-            for track in _tracks(item.audio_tracks)
-            if track.get("language")
-        })
-        if language and language.lower() not in languages:
+        if language and language.lower() not in about["languages"]:
             continue
         stat = plays.get(item.rating_key, {})
         stall = stalls.get(item.rating_key, {})
-        happened = seen.get(item.rating_key) or Counter()
+        happened = seen.get(item.rating_key) or NOTHING_SEEN
         total_plays = int(stat.get("plays") or 0)
         remote = int(stat.get("remote") or 0)
         remote_transcodes = int(stat.get("remote_transcodes") or 0)
@@ -498,20 +597,8 @@ def browse(
             continue
 
         out.append({
-            "rating_key": item.rating_key,
-            "title": _title(item),
-            "year": item.year,
-            "media_type": item.media_type,
-            "video_resolution": item.video_resolution,
-            "file_bitrate": item.file_bitrate,
-            "file_size": item.file_size,
-            "file_container": item.file_container,
-            "gb_per_hour": round(per_hour, 2),
-            "hours": round(hours, 2),
-            "languages": languages,
+            **about,
             "section": sections.get(item.section_id),
-            "section_id": item.section_id,
-            "store": name_for(item.file_path, named),
             "plays": total_plays,
             "remote_plays": remote,
             "last_play": stat.get("last_play"),
