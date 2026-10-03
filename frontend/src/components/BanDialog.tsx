@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { BAN_LENGTHS, ban } from "../lib/bans";
+import { BAN_LENGTHS, ban, banAddress } from "../lib/bans";
 
-export type BanRequest = { machineId: string; label: string; resolve: (banned: boolean) => void };
+/* A device or an address: the same two questions either way, so one dialog. */
+export type BanRequest = {
+  kind: "device" | "address";
+  id: string;
+  label: string;
+  resolve: (banned: boolean) => void;
+};
 
 /* Ban one device: a reason for the Log and how long. Used by every Ban button
  * (People, stream cards, the map), which used to ask with a browser prompt
@@ -39,7 +45,8 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
     setBusy(true);
     setError(null);
     try {
-      await ban(request.machineId, reason, hours);
+      if (request.kind === "address") await banAddress(request.id, reason, hours);
+      else await ban(request.id, reason, hours);
       finish(true);
     } catch (err) {
       setError((err as Error).message);
@@ -54,8 +61,9 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
         <form onSubmit={submit}>
           <h2 id="ban-dialog-title">Ban {request.label}?</h2>
           <p className="muted small">
-            Any stream from this device is stopped, or only recorded if the ban list is set to record only on the Rules
-            page. You can unban it from People or the ban list.
+            {request.kind === "address"
+              ? "Any stream from this address is stopped. A range works too, typed as 203.0.113.0/24. You can unban it from the ban list on the Rules page."
+              : "Any stream from this device is stopped, or only recorded if the ban list is set to record only on the Rules page. You can unban it from People or the ban list."}
           </p>
           <label>
             Reason, for the Log
@@ -77,7 +85,7 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
               Cancel
             </button>
             <button type="submit" className="btn danger" disabled={busy}>
-              {busy ? "Banning…" : "Ban device"}
+              {busy ? "Banning\u2026" : request.kind === "address" ? "Ban address" : "Ban device"}
             </button>
           </div>
         </form>

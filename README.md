@@ -193,6 +193,22 @@ The ban list runs as a built-in rule ahead of all the others, with its own
 record only switch, and shows up in the Log like any rule. The message a
 banned device sees is in Settings.
 
+A ban is tried on every poll rather than once a cooldown, because a stop that
+does not land, from a client that is paused or buffering or simply ignoring it,
+should be tried again in seconds rather than a minute. Only the Log entries
+wait, so a device that keeps coming back cannot fill it.
+
+## Banning an address
+
+**Ban address** on a stream card does the same thing to the connection rather
+than the box. That is what you want when a device comes back under a new
+identifier, or when the household rather than one machine in it is the thing to
+stop. A plain address or a range typed as `203.0.113.0/24`, and the Rules page
+has the list with its own box to add one.
+
+The two lists are separate and both run ahead of everything else, so the Log
+says which of them stopped a stream.
+
 If you banned devices before the ban list existed, each one became its own
 rule. The Rules page spots those and offers to move them in.
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import CountryList from "../components/CountryList";
 import ModeSwitch from "../components/ModeSwitch";
 import MultiSelect from "../components/MultiSelect";
-import { BAN_LENGTHS as LENGTHS, ban, banEnds, setBanReason, useBans } from "../lib/bans";
+import { BAN_LENGTHS as LENGTHS, ban, banEnds, setBanReason, useAddressBans, useBans } from "../lib/bans";
 import { useNav } from "../lib/nav";
 import {
   api,
@@ -194,6 +194,7 @@ export default function RulesRoute({
         )}
 
         <BanListCard onRulesChanged={rules.reload} />
+        <AddressBanCard />
 
         <CountryList />
 
@@ -259,6 +260,91 @@ export default function RulesRoute({
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* The address list, beside the device one.
+ *
+ * A separate card rather than a section of the device list, because they
+ * answer different questions: a device ban follows one machine wherever it
+ * goes, an address ban follows the connection whatever arrives over it. The
+ * Log says which of them stopped a stream.
+ */
+function AddressBanCard() {
+  const bans = useAddressBans();
+  const nav = useNav();
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState("");
+
+  async function add() {
+    const address = adding.trim();
+    if (!address) return;
+    if (await nav.blockAddress?.(address, address)) setAdding("");
+  }
+
+  return (
+    <div className="rule system-rule">
+      <div className="min0">
+        <div className="row">
+          <h2>Banned addresses</h2>
+          <span className="pill">built in, runs first</span>
+          <span className={bans.list.length ? "pill banned" : "pill"}>{bans.list.length} banned</span>
+        </div>
+        <p className="small">
+          <span className="muted">When </span>the address is on the ban list
+          <span className="muted"> then </span>stop the stream, with the ban message from Settings.
+        </p>
+        <p className="muted small">
+          For a device that comes back under a new identifier, or a whole household rather than one box in it. A range
+          works too, typed as 203.0.113.0/24. Ban one here or from a stream card.
+        </p>
+        {open && nav.isAdmin && (
+          <div className="row pad-s">
+            <input
+              value={adding}
+              spellCheck={false}
+              placeholder="203.0.113.4 or 203.0.113.0/24"
+              onChange={(e) => setAdding(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+            />
+            <button className="btn" disabled={!adding.trim()} onClick={add}>
+              Ban
+            </button>
+          </div>
+        )}
+        {open && (
+          <div className="mini-list">
+            {bans.list.length === 0 && <p className="muted pad-s">No addresses are banned.</p>}
+            {bans.list.map((b) => (
+              <div key={b.address} className="mini">
+                <div className="min0">
+                  <button className="linkish" onClick={() => nav.openAddress?.(b.address)}>
+                    {b.address}
+                  </button>
+                  <p className="muted small">
+                    {[b.label, b.user_name, b.reason, b.banned_by ? `by ${b.banned_by}` : null,
+                      banEnds(b) ? `until ${banEnds(b)}` : null]
+                      .filter(Boolean)
+                      .join(" \u00b7 ")}
+                    {` \u00b7 ${b.attempts} attempt${b.attempts === 1 ? "" : "s"} since`}
+                  </p>
+                </div>
+                {nav.unbanAddress && (
+                  <button className="tab" onClick={() => nav.unbanAddress?.(b.address)}>
+                    Unban
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="row">
+        <button className="tab" onClick={() => setOpen((v) => !v)}>
+          {open ? "Hide" : "Show"}
+        </button>
       </div>
     </div>
   );

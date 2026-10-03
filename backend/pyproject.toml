@@ -1,6 +1,6 @@
 [project]
 name = "cartographarr"
-version = "0.46.1"
+version = "0.47.0"
 description = "Tautulli geo-intelligence and Plex access control"
 requires-python = ">=3.12"
 

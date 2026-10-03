@@ -628,6 +628,120 @@ def unban_device(machine_id: str, admin: AdminUser) -> dict:
     return {"machine_id": machine_id, "banned": False}
 
 
+# ---- banned addresses ------------------------------------------------------
+#
+# A device ban follows one machine. An address ban follows the connection,
+# which is what is wanted when a device comes back under a new identifier, or
+# when the household rather than the box is the thing being stopped.
+
+
+def _network(value: str) -> str:
+    """The address as typed, once it is known to be an address or a range."""
+    import ipaddress
+
+    text = value.strip()
+    if not text:
+        raise HTTPException(400, "Which address?")
+    try:
+        # strict=False so 203.0.113.4/24 is read as the network it names
+        # rather than refused for having host bits set.
+        ipaddress.ip_network(text, strict=False)
+    except ValueError:
+        raise HTTPException(400, f"{text} is not an address or a range. Try 203.0.113.4 or 203.0.113.0/24.") from None
+    return text
+
+
+@router.get("/address-bans")
+def list_address_bans(db: Db, scope: ViewerScope) -> list[dict]:
+    """Banned addresses, with how often they have tried to stream since."""
+    privacy.forbid_private(scope)
+    from app.models import BannedAddress
+
+    bans = db.execute(select(BannedAddress).order_by(desc(BannedAddress.banned_at))).scalars().all()
+    if not bans:
+        return []
+    listed = [b.address for b in bans]
+    attempts = {
+        address: (count, last)
+        for address, count, last in db.execute(
+            select(EnforcementLog.ip_address, func.count(), func.max(EnforcementLog.acted_at))
+            .where(EnforcementLog.ip_address.in_(listed), EnforcementLog.rule_name == enforcer.ADDRESS_RULE_NAME)
+            .group_by(EnforcementLog.ip_address)
+        ).all()
+    }
+    names = {
+        u.user_id: u.friendly_name or u.username
+        for u in db.execute(select(User).where(User.user_id.in_([b.user_id for b in bans if b.user_id]))).scalars()
+    }
+    return [
+        {
+            **{c.name: getattr(b, c.name) for c in BannedAddress.__table__.columns},
+            "user_name": names.get(b.user_id),
+            # Counted on the address as logged, so a range shows the attempts
+            # made from exactly that range rather than from everything in it.
+            "attempts": attempts.get(b.address, (0, None))[0],
+            "last_attempt": attempts.get(b.address, (0, None))[1],
+        }
+        for b in bans
+    ]
+
+
+@router.post("/address-bans")
+def ban_address(
+    admin: AdminUser,
+    address: str = Body(..., embed=True),
+    reason: str = Body("", embed=True),
+    hours: float | None = Body(None, embed=True),
+) -> dict:
+    from app.models import BannedAddress
+
+    address = _network(address)
+    if hours is not None and not 0 < hours <= 24 * 366:
+        raise HTTPException(400, "A timed ban can last up to a year. Leave the length empty for a permanent ban.")
+    expires = datetime.now(UTC) + timedelta(hours=hours) if hours else None
+    with session_scope() as db:
+        if db.get(BannedAddress, address) is not None:
+            raise HTTPException(409, "That address is already banned")
+        # Where it was and whose it was, copied now so the list still reads
+        # sensibly once the address has moved on.
+        seen = db.execute(
+            select(History.user_id).where(History.ip_address == address).order_by(desc(History.started)).limit(1)
+        ).scalar_one_or_none()
+        place = db.get(IpLocation, address)
+        label = ", ".join(x for x in [getattr(place, "city", None), getattr(place, "country", None)] if x) or None
+        db.add(
+            BannedAddress(
+                address=address,
+                label=label,
+                user_id=seen,
+                reason=reason.strip() or None,
+                banned_by=admin.username,
+                banned_at=datetime.now(UTC),
+                expires_at=expires,
+            )
+        )
+    audit.record(
+        admin, "address.ban",
+        f"Banned {address}" + (f" for {_duration(hours)}" if hours else "") + (f": {reason.strip()}" if reason.strip() else ""),
+        target=address,
+        detail={"reason": reason.strip() or None},
+    )
+    return {"address": address, "banned": True}
+
+
+@router.delete("/address-bans/{address:path}")
+def unban_address(address: str, admin: AdminUser) -> dict:
+    from app.models import BannedAddress
+
+    with session_scope() as db:
+        ban = db.get(BannedAddress, address)
+        if ban is None:
+            raise HTTPException(404, "That address is not banned")
+        db.delete(ban)
+    audit.record(admin, "address.unban", f"Unbanned {address}", target=address)
+    return {"address": address, "banned": False}
+
+
 # ---- blocked countries -----------------------------------------------------
 
 MODES = ("flag", "warn", "stop")

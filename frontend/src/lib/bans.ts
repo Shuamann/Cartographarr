@@ -41,6 +41,49 @@ export async function ban(machineId: string, reason: string, hours?: number | nu
   window.dispatchEvent(new Event(CHANGED));
 }
 
+/* A ban on the connection rather than the box.
+ *
+ * Which you want depends on what is coming back: a device ban follows one
+ * machine and survives it moving house, an address ban catches the same
+ * household however many identifiers it arrives under. They are separate
+ * lists, and the Log says which one stopped a stream.
+ */
+export type AddressBan = {
+  address: string;
+  label: string | null;
+  user_id: number | null;
+  user_name: string | null;
+  reason: string | null;
+  banned_by: string | null;
+  banned_at: string | null;
+  attempts: number;
+  last_attempt: string | null;
+  expires_at: string | null;
+};
+
+export function useAddressBans() {
+  const { isAdmin } = useNav();
+  const bans = useApi<AddressBan[]>(isAdmin ? "/address-bans" : null, [isAdmin]);
+  useEffect(() => {
+    const reload = () => bans.reload();
+    window.addEventListener(CHANGED, reload);
+    return () => window.removeEventListener(CHANGED, reload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const addresses = useMemo(() => new Set((bans.data ?? []).map((b) => b.address)), [bans.data]);
+  return { list: bans.data ?? [], addresses, loading: bans.loading, error: bans.error };
+}
+
+export async function banAddress(address: string, reason: string, hours?: number | null): Promise<void> {
+  await api.post("/address-bans", { address, reason, hours: hours || null });
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+export async function unbanAddress(address: string): Promise<void> {
+  await api.del(`/address-bans/${encodeURIComponent(address)}`);
+  window.dispatchEvent(new Event(CHANGED));
+}
+
 /* How long a ban can last. Zero is permanent. */
 export const BAN_LENGTHS = [
   { hours: 0, label: "Permanently" },

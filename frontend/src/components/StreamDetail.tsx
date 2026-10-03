@@ -3,7 +3,7 @@ import { useState } from "react";
 import BrandIcon from "./BrandIcon";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
-import { useBans } from "../lib/bans";
+import { useAddressBans, useBans } from "../lib/bans";
 import { useIsAvailable } from "./Gated";
 
 /* Everything about one live stream, and everything you can do to it.
@@ -40,6 +40,7 @@ export default function StreamDetail({
 }) {
   const nav = useNav();
   const bans = useBans();
+  const addressBans = useAddressBans();
   const banned = Boolean(session.machine_id && bans.ids.has(session.machine_id));
   const [stopping, setStopping] = useState(false);
   const [fullSummary, setFullSummary] = useState(false);
@@ -244,6 +245,21 @@ export default function StreamDetail({
                 }
               >
                 Unban device
+              </button>
+            )}
+            {/* The connection rather than the box, for a device that comes
+                back under a new identifier. */}
+            {nav.blockAddress && session.ip_address && !addressBans.addresses.has(session.ip_address as string) && (
+              <button
+                className="btn danger"
+                onClick={() => nav.blockAddress?.(session.ip_address as string, session.ip_address as string)}
+              >
+                Ban address
+              </button>
+            )}
+            {nav.unbanAddress && session.ip_address && addressBans.addresses.has(session.ip_address as string) && (
+              <button className="btn" onClick={() => nav.unbanAddress?.(session.ip_address as string)}>
+                Unban address
               </button>
             )}
           </div>

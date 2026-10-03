@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 
 from app.actions import registry
 from app.db import session_scope
-from app.models import BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
+from app.models import BannedAddress, BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
 from app.plays import plays as count_plays
 from app.services import conditions, tracker
 from app.settings_store import current, is_configured, locked_keys
@@ -466,6 +466,7 @@ def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
 
 
 BAN_RULE_NAME = "Banned devices"
+ADDRESS_RULE_NAME = "Banned addresses"
 COUNTRY_RULE_NAME = "Blocked countries"
 
 
@@ -521,6 +522,47 @@ def ban_rule() -> Rule | None:
                 "type": "group",
                 "op": "and",
                 "items": [{"type": "condition", "field": "device", "op": "any", "value": ids}],
+            }
+        ),
+        actions=json.dumps([{"name": "terminate", "params": {"message": settings.ban_message}}]),
+    )
+
+
+def address_ban_rule() -> Rule | None:
+    """The banned address list as a rule, or None when nothing is banned.
+
+    The same shape as the device list, down to going through the ordinary
+    matching and logging path, using the `ip` field's CIDR matching so a plain
+    address and a range are the same kind of entry.
+
+    It is a separate rule rather than another condition on the device one so
+    that the log says which list stopped a stream. Finding out that a device
+    ban was not the thing that caught something is worth a line of code.
+    """
+    now = datetime.now(UTC)
+    with session_scope() as db:
+        addresses = [
+            address
+            for (address,) in db.execute(
+                select(BannedAddress.address).where(
+                    (BannedAddress.expires_at.is_(None)) | (BannedAddress.expires_at > now)
+                )
+            ).all()
+        ]
+    if not addresses:
+        return None
+    settings = current()
+    return Rule(
+        id=-100,
+        name=ADDRESS_RULE_NAME,
+        enabled=True,
+        action="terminate",
+        message=settings.ban_message,
+        conditions=json.dumps(
+            {
+                "type": "group",
+                "op": "and",
+                "items": [{"type": "condition", "field": "ip", "op": "in", "value": addresses}],
             }
         ),
         actions=json.dumps([{"name": "terminate", "params": {"message": settings.ban_message}}]),
@@ -600,7 +642,7 @@ def country_rules() -> list[Rule]:
 
 
 def expire_bans() -> int:
-    """Remove bans whose time is up, each with a Log entry."""
+    """Remove bans whose time is up, device and address alike, each logged."""
     from app import audit
 
     now = datetime.now(UTC)
@@ -609,10 +651,15 @@ def expire_bans() -> int:
         for ban in db.execute(
             select(BannedDevice).where(BannedDevice.expires_at.is_not(None), BannedDevice.expires_at <= now)
         ).scalars():
-            ended.append((ban.machine_id, ban.label or ban.machine_id[:12]))
+            ended.append(("device.ban_expired", ban.machine_id, ban.label or ban.machine_id[:12]))
             db.delete(ban)
-    for machine_id, label in ended:
-        audit.record(None, "device.ban_expired", f"Ban on {label} ended", target=machine_id, actor="Cartographarr")
+        for ban in db.execute(
+            select(BannedAddress).where(BannedAddress.expires_at.is_not(None), BannedAddress.expires_at <= now)
+        ).scalars():
+            ended.append(("address.ban_expired", ban.address, ban.address))
+            db.delete(ban)
+    for event, target, label in ended:
+        audit.record(None, event, f"Ban on {label} ended", target=target, actor="Cartographarr")
     return len(ended)
 
 
@@ -640,10 +687,11 @@ async def run_once() -> dict[str, Any]:
         for rule in rules:
             db.expunge(rule)
     # A ban wins over anything else that would match, then the country list,
-    # then saved rules: a place can stop a stream, but a banned device is the
-    # stronger statement.
+    # then saved rules: a place can stop a stream, but a banned device or
+    # address is the stronger statement.
     banned = ban_rule()
-    first = ([banned] if banned is not None else []) + country_rules()
+    by_address = address_ban_rule()
+    first = [r for r in (banned, by_address) if r is not None] + country_rules()
     rules = first + rules
     if not rules:
         return {"checked": len(sessions), "matched": 0, "acted": 0}
@@ -677,11 +725,20 @@ async def run_once() -> dict[str, Any]:
             if (rule.id, key, dry_run) in _done:
                 break
 
+            # The cooldown is there so a stubborn client cannot fill the log,
+            # which is the right answer for a rule that fires now and then. It
+            # is the wrong answer for a ban: a stop that does not land, because
+            # the client is paused or buffering or simply ignored it, should be
+            # tried again on the next poll rather than a minute later. So the
+            # built-in stops keep acting and only their logging waits.
+            relentless = rule.id <= 0 and rule.action == "terminate"
             cooldown_key = (rule.id, key)
             last = _recent.get(cooldown_key)
-            if last is not None and now - last < settings.enforce_cooldown_seconds:
+            quiet = last is not None and now - last < settings.enforce_cooldown_seconds
+            if quiet and not relentless:
                 break
-            _recent[cooldown_key] = now
+            if not quiet:
+                _recent[cooldown_key] = now
             steps = rule_actions(rule)
             specs = [(step, registry.get(str(step.get("name")))) for step in steps]
             unknown = [str(step.get("name")) for step, spec in specs if spec is None]
@@ -710,7 +767,8 @@ async def run_once() -> dict[str, Any]:
                 except Exception as exc:  # noqa: BLE001 - one failure mustn't stop the sweep
                     results.append(f"{spec.name} failed: {redact(exc)}")
                     log.warning("action %s failed: %s", spec.name, exc)
-            _record(rule, session, False, "; ".join(results))
+            if not quiet:
+                _record(rule, session, False, "; ".join(results))
             if not any(spec.name == "terminate" for _, spec in specs):
                 _done.add((rule.id, key, False))
             break  # first matching rule wins; don't double-act on one session

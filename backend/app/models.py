@@ -442,6 +442,34 @@ class BannedDevice(Base):
     expires_at: Mapped[datetime | None] = mapped_column()
 
 
+class BannedAddress(Base):
+    """An address, or a range of them, that may not stream.
+
+    A device ban follows one machine. An address ban follows the connection,
+    which is what you want when a device comes back under a new identifier,
+    or when a whole household is the thing being stopped rather than one box
+    in it. Stored as typed: a plain address or a CIDR, matched as a network
+    either way.
+
+    Same shape as BannedDevice on purpose, down to the expiry, because the
+    enforcer treats both as built-in rules and nothing else should have to
+    know which kind it is looking at.
+    """
+
+    __tablename__ = "banned_addresses"
+
+    address: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """An IP address or a CIDR range, as it was typed."""
+    label: Mapped[str | None] = mapped_column(String(255))
+    """Where it was when banned, copied at ban time so the list still reads
+    sensibly after the address moves on or its history ages out."""
+    user_id: Mapped[int | None] = mapped_column(Integer)
+    reason: Mapped[str | None] = mapped_column(Text)
+    banned_by: Mapped[str | None] = mapped_column(String(64))
+    banned_at: Mapped[datetime | None] = mapped_column()
+    expires_at: Mapped[datetime | None] = mapped_column()
+
+
 class EnforcementLog(Base):
     """What the enforcer did, or would have done in dry run."""
 

@@ -42,7 +42,7 @@ import Sharing from "./routes/Sharing";
 import type { LiveSession } from "./lib/api";
 import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext } from "./lib/nav";
-import { unban } from "./lib/bans";
+import { unban, unbanAddress } from "./lib/bans";
 
 import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
 
@@ -172,7 +172,22 @@ function SignedIn({
   // The Ban dialog, open while a request waits for its answer.
   const [banRequest, setBanRequest] = useState<BanRequest | null>(null);
   function banMachine(machineId: string, label: string): Promise<boolean> {
-    return new Promise((resolve) => setBanRequest({ machineId, label, resolve }));
+    return new Promise((resolve) => setBanRequest({ kind: "device", id: machineId, label, resolve }));
+  }
+
+  function banIpAddress(address: string, label: string): Promise<boolean> {
+    return new Promise((resolve) => setBanRequest({ kind: "address", id: address, label, resolve }));
+  }
+
+  async function unbanIpAddress(address: string): Promise<boolean> {
+    if (!window.confirm(`Unban ${address}? Streams from it will be allowed again.`)) return false;
+    try {
+      await unbanAddress(address);
+      return true;
+    } catch (err) {
+      window.alert((err as Error).message);
+      return false;
+    }
   }
 
   async function unbanMachine(machineId: string, label: string): Promise<boolean> {
@@ -213,6 +228,8 @@ function SignedIn({
           showPlace,
           blockDevice: isAdmin ? banMachine : undefined,
           unbanDevice: isAdmin ? unbanMachine : undefined,
+          blockAddress: isAdmin ? banIpAddress : undefined,
+          unbanAddress: isAdmin ? unbanIpAddress : undefined,
           filterTo,
           openPeople,
           goTo: setTab,

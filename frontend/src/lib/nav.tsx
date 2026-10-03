@@ -20,6 +20,8 @@ export type Nav = {
   /* Ask, then add to the ban list. Resolves true if it was banned. */
   blockDevice?: (machineId: string, label: string) => Promise<boolean>;
   unbanDevice?: (machineId: string, label: string) => Promise<boolean>;
+  blockAddress?: (address: string, label: string) => Promise<boolean>;
+  unbanAddress?: (address: string) => Promise<boolean>;
   /* Open Map or History with the filters narrowed, for example to one user. */
   filterTo?: (tab: "Map" | "History", patch: Partial<FilterState>) => void;
   /* Open the map at a place, with the filters narrowed (to one user, say),

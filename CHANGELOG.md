@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.47.0 - 2026-10-02
+
+### Added
+- Banned addresses, beside banned devices. A device ban follows one machine; an address ban follows the connection,
+  which is what is wanted when a device comes back under a new identifier, or when the household rather than one box
+  in it is the thing to stop. A plain address or a range typed as 203.0.113.0/24, banned from a stream card or from
+  the Rules page, with its own built-in rule so the Log says which list stopped a stream
+
+### Fixed
+- A banned device could keep playing for minutes. Every rule waits out the cooldown after it acts, which is right for
+  a rule that fires now and then and wrong for a ban: a stop that does not land, because the client is paused or
+  buffering or simply ignored it, waited a full minute before being tried again. The built-in stops now try on every
+  poll, five seconds apart by default, and only their logging waits
+
 ## 0.46.1 - 2026-10-02
 
 ### Changed
