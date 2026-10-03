@@ -552,12 +552,16 @@ def address_ban_rule() -> Rule | None:
     if not addresses:
         return None
     settings = current()
+    # Its own wording where one is set, the device one where it is not: the
+    # two usually want the same sentence and nobody should have to type it out
+    # twice to get that.
+    message = settings.address_ban_message.strip() or settings.ban_message
     return Rule(
         id=-100,
         name=ADDRESS_RULE_NAME,
         enabled=True,
         action="terminate",
-        message=settings.ban_message,
+        message=message,
         conditions=json.dumps(
             {
                 "type": "group",
@@ -565,7 +569,7 @@ def address_ban_rule() -> Rule | None:
                 "items": [{"type": "condition", "field": "ip", "op": "in", "value": addresses}],
             }
         ),
-        actions=json.dumps([{"name": "terminate", "params": {"message": settings.ban_message}}]),
+        actions=json.dumps([{"name": "terminate", "params": {"message": message}}]),
     )
 
 

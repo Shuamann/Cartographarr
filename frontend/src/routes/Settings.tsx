@@ -166,7 +166,12 @@ const AREAS: Area[] = [
       {
         title: "Rules",
         note: "Whether rules run at all, and how long a rule waits before acting on the same stream again. Each rule, and the ban list, has its own record only switch on the Rules page.",
-        keys: ["enforce_enabled", "enforce_cooldown_seconds", "automation_daily_cap", "automation_download_cap", "ban_message"],
+        keys: ["enforce_enabled", "enforce_cooldown_seconds", "automation_daily_cap", "automation_download_cap"],
+      },
+      {
+        title: "What a stopped viewer sees",
+        note: "Plex puts your words in the middle of a sentence it writes itself: \"<account> asked to stop your playback from this server: <your message>\". Each list has its own, because a banned device, a banned address and a blocked country are three different things to be told. Leave the address one empty to use the device wording for both.",
+        keys: ["ban_message", "address_ban_message", "geo_block_message"],
       },
       {
         title: "Server upload",
@@ -272,6 +277,42 @@ type Page = {
 
 const NAV_GROUPS = ["Connections", "Cartographarr"] as const;
 
+/* Everything about a setting that somebody might type looking for it: the
+ * name on screen, the key it is stored under, the words around it, and the
+ * page and section it lives on. "upload" should find the upload capacity
+ * whether you know it as that, as upload_capacity_mbps, or only that it was
+ * somewhere near the alert level.
+ */
+function wordsOf(section: Section): string {
+  const parts: (string | undefined)[] = [section.title, section.note];
+  for (const key of section.keys) parts.push(key, LABELS[key]);
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
+/* A page is a match when its name says so, or when one of its sections is a
+ * match on its own.
+ *
+ * Asking whether the page as a whole contains every word is not the same
+ * question and gives a worse answer: "ban message" would find a page with
+ * "ban" in one section and "message" in another, land you on it, and show you
+ * neither. Pages without sections are matched on their name and their keys,
+ * since their contents are built by hand.
+ */
+function pageHits(page: Page, query: string): boolean {
+  const name = [page.title, page.blurb].filter(Boolean).join(" ").toLowerCase();
+  if (hits(name, query)) return true;
+  if (page.sections?.some((s) => hits(wordsOf(s), query))) return true;
+  const keys = (page.keys ?? []).flatMap((k) => [k, LABELS[k] ?? ""]).join(" ").toLowerCase();
+  return !page.sections && hits(keys, query);
+}
+
+/* Every word typed has to appear somewhere, in any order, so "upload warn"
+ * finds the alert level without needing the phrase exactly. */
+function hits(words: string, query: string): boolean {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return terms.every((term) => words.includes(term));
+}
+
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 const PAGES: Page[] = [
@@ -336,7 +377,9 @@ const LABELS: Record<string, string> = {
   enforce_dry_run: "Dry run",
   enforce_cooldown_seconds: "Cooldown per rule",
   activity_poll_seconds: "Check activity every",
-  ban_message: "Message shown to a banned device",
+  ban_message: "A banned device",
+  address_ban_message: "A banned address",
+  geo_block_message: "A blocked country",
   upload_capacity_mbps: "Upload capacity",
   library_bitrate_threshold_mbps: "Problem file bitrate",
   preferred_audio_language: "Audio language to put first",
@@ -517,7 +560,17 @@ function guessUrl(url: URL, target: { port: number; slug: string; path?: string 
   return `${url.protocol}//${[target.slug, ...rest].join(".")}${suffix}`;
 }
 
-export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
+export default function SettingsRoute({
+  isAdmin,
+  jumpTo,
+  onJumped,
+}: {
+  isAdmin: boolean;
+  /* A page id, when something elsewhere in the app sent the person here
+   * rather than telling them where to go and leaving them to find it. */
+  jumpTo?: string | null;
+  onJumped?: () => void;
+}) {
   if (!isAdmin) {
     return (
       <div className="pad">
@@ -528,12 +581,12 @@ export default function SettingsRoute({ isAdmin }: { isAdmin: boolean }) {
   }
   return (
     <div className="scroll settings-scroll">
-      <SettingsForm />
+      <SettingsForm jumpTo={jumpTo} onJumped={onJumped} />
     </div>
   );
 }
 
-function SettingsForm() {
+function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?: () => void }) {
   const settings = useApi<Setting[]>("/settings");
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
@@ -552,6 +605,17 @@ function SettingsForm() {
       return PAGES[0].id;
     }
   });
+  const [query, setQuery] = useState("");
+
+  // Cleared as soon as it is used, so coming back to Settings later lands
+  // where you left it rather than where you were once sent.
+  useEffect(() => {
+    if (!jumpTo) return;
+    open(jumpTo);
+    onJumped?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo]);
+
   function open(id: string) {
     setPage(id);
     try {
@@ -772,17 +836,42 @@ function SettingsForm() {
 
   if (settings.error) return <p className="note bad-note pad">{settings.error}</p>;
 
-  const current = PAGES.find((x) => x.id === page) ?? PAGES[0];
+  const searching = query.trim().length > 0;
+  const found = searching ? PAGES.filter((x) => pageHits(x, query)) : PAGES;
+  // Searching onto a page with no matches would show an empty page and look
+  // broken, so the first page that does have one is opened instead.
+  const current =
+    (searching && !found.some((x) => x.id === page) ? found[0] : PAGES.find((x) => x.id === page)) ?? PAGES[0];
+  // Only the sections that match, unless the page's own name is what matched:
+  // typing a page name asks for that page, not for one section of it. Its
+  // blurb is not enough, or searching "upload" on a page whose blurb mentions
+  // upload would hand back every section it has.
+  const wholePage = searching && hits(current.title.toLowerCase(), query);
+  const shownSections = (current.sections ?? []).filter(
+    (s) => !searching || wholePage || hits(wordsOf(s), query),
+  );
   const unsaved = (p: Page) => (p.keys ?? []).some((k) => k in draft);
 
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="Settings sections">
         <h1>Settings</h1>
+        <div className="settings-search">
+          <input
+            type="search"
+            value={query}
+            spellCheck={false}
+            placeholder="Search settings"
+            aria-label="Search settings"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+          />
+        </div>
+        {searching && found.length === 0 && <p className="muted small pad-s">Nothing matches.</p>}
         {NAV_GROUPS.map((group) => (
           <div key={group} className="settings-nav-group">
-            <span className="settings-nav-label">{group}</span>
-            {PAGES.filter((x) => x.group === group).map((x) => (
+            {found.some((x) => x.group === group) && <span className="settings-nav-label">{group}</span>}
+            {found.filter((x) => x.group === group).map((x) => (
               <button
                 key={x.id}
                 className={x.id === current.id ? "settings-nav-item on" : "settings-nav-item"}
@@ -808,7 +897,11 @@ function SettingsForm() {
 
         {current.id === "about" && <About />}
 
-        {current.sections?.map((section) => (
+        {searching && shownSections.length === 0 && (current.sections?.length ?? 0) > 0 && (
+          <p className="muted">Nothing on this page matches. The pages that do match are listed on the left.</p>
+        )}
+
+        {shownSections.map((section) => (
           <section key={section.title} className="card-section">
             <div className="row-between">
               <h3 className="section-title">

@@ -31,6 +31,10 @@ export type Nav = {
   openPeople?: (filter?: PeopleFilter) => void;
   /* Switch to a tab, for links to places with no record of their own. */
   goTo?: (tab: Tab) => void;
+  /* Open Settings at a page, by its id: "plex-and-tautulli", "media-apps",
+   * "library-and-files" and so on. Telling somebody to go to Settings and
+   * leaving them to find the right page is half an answer. */
+  openSettings?: (page?: string) => void;
 };
 
 export const NavContext = createContext<Nav>({ isAdmin: false });

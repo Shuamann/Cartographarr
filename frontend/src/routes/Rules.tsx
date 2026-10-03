@@ -18,6 +18,7 @@ import {
   type RuleStep,
   type Setting,
 } from "../lib/api";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 type Draft = {
   id?: number;
@@ -171,7 +172,10 @@ export default function RulesRoute({
         </p>
 
         {!enforcing && (
-          <p className="note warn-note">Rules are switched off in Settings, so none of these run.</p>
+          <p className="note warn-note">
+            <SettingsLink page={SETTINGS_PAGES.liveAndRules}>Rules are switched off in Settings</SettingsLink>, so
+            none of these run.
+          </p>
         )}
         {locked && (
           <p className="note warn-note">

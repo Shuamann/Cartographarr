@@ -171,6 +171,13 @@ function SignedIn({
   // Rules page with one-device rules.
   // The Ban dialog, open while a request waits for its answer.
   const [banRequest, setBanRequest] = useState<BanRequest | null>(null);
+  // The Settings page to land on, cleared by Settings once it has.
+  const [settingsPage, setSettingsPage] = useState<string | null>(null);
+
+  function openSettings(page?: string) {
+    setSettingsPage(page ?? null);
+    setTab("Settings");
+  }
   function banMachine(machineId: string, label: string): Promise<boolean> {
     return new Promise((resolve) => setBanRequest({ kind: "device", id: machineId, label, resolve }));
   }
@@ -233,6 +240,7 @@ function SignedIn({
           filterTo,
           openPeople,
           goTo: setTab,
+          openSettings: isAdmin ? openSettings : undefined,
         }}
       >
       <div className="app">
@@ -309,7 +317,9 @@ function SignedIn({
             {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}
             {active === "Sharing" && <Sharing />}
-            {active === "Settings" && <Settings isAdmin={isAdmin} />}
+            {active === "Settings" && (
+              <Settings isAdmin={isAdmin} jumpTo={settingsPage} onJumped={() => setSettingsPage(null)} />
+            )}
             </Suspense>
           </ErrorBoundary>
         </main>

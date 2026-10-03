@@ -23,6 +23,7 @@ import {
 import { useNav } from "../lib/nav";
 import type { PeopleFilter } from "../lib/tabs";
 import { coveredBy, useAddressBans, useBans } from "../lib/bans";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Users and their devices, in one place.
  *
@@ -1272,7 +1273,12 @@ function Access({ username }: { username: string | null }) {
   if (shares.error) return <p className="note bad-note">{shares.error}</p>;
   if (!shares.data) return <p className="muted">Asking Plex…</p>;
   if (!shares.data.configured) {
-    return <p className="note warn-note">Add a Plex token in Settings to see and change which libraries are shared.</p>;
+    return (
+      <p className="note warn-note">
+        <SettingsLink page={SETTINGS_PAGES.plex}>Add a Plex token in Settings</SettingsLink> to see and change which
+        libraries are shared.
+      </p>
+    );
   }
   const share = shares.data.users.find((x) => x.username === username);
   if (!share || !username) {

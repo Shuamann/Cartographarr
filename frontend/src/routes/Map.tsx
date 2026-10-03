@@ -20,6 +20,7 @@ import { useNav } from "../lib/nav";
 import { useBans } from "../lib/bans";
 import TimeScrubber from "../components/TimeScrubber";
 import type { HistoryPage, LocationDetail } from "../lib/api";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 type Summary = { plays: number; users: number; devices: number; ips: number; seconds: number };
 type Place = MapPoint["properties"];
@@ -357,7 +358,12 @@ export default function MapRoute({
         {!geoipReady && (
           <div className="map-banner">
             {nav.isAdmin
-              ? "No location database installed, so there's nothing to place yet. Add a MaxMind key in Settings."
+              ? (
+                  <>
+                    No location database installed, so there&apos;s nothing to place yet.{" "}
+                    <SettingsLink page={SETTINGS_PAGES.map}>Add a MaxMind key in Settings</SettingsLink>.
+                  </>
+                )
               : "Locations are not set up on this server yet, so there is nothing to place. Ask an admin."}
           </div>
         )}

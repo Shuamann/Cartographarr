@@ -3,6 +3,7 @@ import Loading from "../components/Loading";
 import { api, useApi } from "../lib/api";
 import { FileCardView, type FileDetail } from "./Library";
 import { useNav } from "../lib/nav";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Issues: what people reported, next to what this server knows.
  *
@@ -154,7 +155,13 @@ export default function Issues() {
             ? "You have not reported anything. If something looks or sounds wrong, report it here, or from a play in your History."
             : d.seerr_configured
               ? `Nothing reported${status === "open" ? " and still open" : ""}. Reports made in Seerr appear here within five minutes.`
-              : "Seerr is not set up, so there is nothing to read. Add it under Settings, Media apps and reports will appear here."}
+              : (
+                  <>
+                    Seerr is not set up, so there is nothing to read. Add it under{" "}
+                    <SettingsLink page={SETTINGS_PAGES.mediaApps}>Settings, Media apps</SettingsLink> and reports will
+                    appear here.
+                  </>
+                )}
         </p>
       )}
 

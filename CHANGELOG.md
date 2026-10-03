@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.50.0 - 2026-10-03
+
+### Added
+- A search box in Settings. It narrows the page list and the sections on the page at once, matching the name on
+  screen, the key underneath it and the words around it, so the upload capacity is found by "upload", by
+  "upload_capacity_mbps", or by "warn upload" when all you remember is that it was near the alert level
+- Each built-in list has its own message now: a banned device, a banned address and a blocked country are three
+  different things to tell somebody. Leave the address one empty to use the device wording for both. The country
+  message had never been reachable in the interface at all
+- Sentences that name a page of Settings are now the way there. "Connect Seerr in Settings", "Add a MaxMind key in
+  Settings", "Rules are switched off in Settings" and the rest open that page rather than leaving you to find it
+
 ## 0.49.1 - 2026-10-03
 
 ### Changed

@@ -4727,3 +4727,20 @@ label.locked .pill {
 .push-right {
   margin-left: auto;
 }
+
+/* ---- searching settings ------------------------------------------------- */
+
+.settings-search {
+  margin: 0 0 14px;
+}
+
+.settings-search input {
+  margin-top: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+/* A group with nothing left in it should not leave its heading behind. */
+.settings-nav-group:empty {
+  display: none;
+}

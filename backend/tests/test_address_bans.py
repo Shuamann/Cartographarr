@@ -9,11 +9,13 @@ address must not take out the neighbour, and a range must mean exactly the
 range that was typed.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 
 from app.db import session_scope
 from app.models import BannedAddress
 from app.services import enforcer
+from app.settings_store import trial
 from tests.test_auth import claim
 
 SESSION = {
@@ -116,3 +118,22 @@ def test_a_range_wider_than_a_household_is_refused(client):
 
     # The widest allowed is still allowed.
     assert client.post("/api/address-bans", json={"address": "203.0.0.0/16"}).status_code == 200
+
+
+# ---- what the viewer is told ------------------------------------------------
+
+def test_an_address_ban_borrows_the_device_wording_by_default(client):
+    """The two usually want the same sentence; nobody should type it twice."""
+    ban("203.0.113.9")
+    with trial({"ban_message": "Not from here.", "address_ban_message": ""}):
+        rule = enforcer.address_ban_rule()
+    assert rule.message == "Not from here."
+    assert json.loads(rule.actions)[0]["params"]["message"] == "Not from here."
+
+
+def test_it_can_be_told_something_of_its_own(client):
+    ban("203.0.113.9")
+    with trial({"ban_message": "Not this box.", "address_ban_message": "Not this house."}):
+        rule = enforcer.address_ban_rule()
+    assert rule.message == "Not this house."
+    assert json.loads(rule.actions)[0]["params"]["message"] == "Not this house."

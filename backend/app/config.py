@@ -182,6 +182,13 @@ class Settings(BaseSettings):
 
     ban_record_only: bool | None = None
 
+    address_ban_message: str = ""
+    """Shown when a stream is stopped for its address rather than its device.
+
+    Empty, which is the default, uses ban_message, because the two usually
+    want the same wording. Set it where they do not: a device ban is aimed at
+    one box and a household can reasonably be told something else."""
+
     geo_block_message: str = "Streaming is not permitted from this location. Contact the server owner."
     """Shown to a viewer whose country is set to warn or stop."""
 

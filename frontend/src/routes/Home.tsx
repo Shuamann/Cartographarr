@@ -4,6 +4,7 @@ import Loading from "../components/Loading";
 import { useApi, type Activity } from "../lib/api";
 import { useNav } from "../lib/nav";
 import type { Tab } from "../lib/tabs";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Home: where to go next.
  *
@@ -119,12 +120,23 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
             {d.links.length === 0 && (
               <p className="muted small home-hint">
                 {nav.isAdmin
-                  ? "Nothing to link to yet. Set up Plex and the services you use in Settings, and they appear here."
+                  ? (
+                      <>
+                        Nothing to link to yet.{" "}
+                        <SettingsLink page={SETTINGS_PAGES.plex}>
+                          Set up Plex and the services you use in Settings
+                        </SettingsLink>
+                        , and they appear here.
+                      </>
+                    )
                   : "No links set up yet. Ask an admin."}
               </p>
             )}
             {nav.isAdmin && d.links.length > 0 && (
-              <p className="muted small home-hint">Rename these or add your own under Settings, Home page.</p>
+              <p className="muted small home-hint">
+                Rename these or add your own under{" "}
+                <SettingsLink page={SETTINGS_PAGES.home}>Settings, Home page</SettingsLink>.
+              </p>
             )}
           </div>
         </div>

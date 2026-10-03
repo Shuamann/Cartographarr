@@ -4,6 +4,7 @@ import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
 import { api, useApi } from "../lib/api";
 import { useNav } from "../lib/nav";
+import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Library health: files judged by how they are actually watched.
  *
@@ -408,7 +409,12 @@ function Requests() {
   if (data.error) return <p className="note bad-note">{data.error}</p>;
   if (!data.data) return <Loading label="Asking Seerr for requests" slowHint="Seerr is read a page of 100 requests at a time." />;
   if (!data.data.configured)
-    return <p className="note warn-note">Connect Seerr in Settings to see requests that were never watched.</p>;
+    return (
+      <p className="note warn-note">
+        <SettingsLink page={SETTINGS_PAGES.mediaApps}>Connect Seerr in Settings</SettingsLink> to see requests that
+        were never watched.
+      </p>
+    );
   const rows = data.data.requests;
   return (
     <>
@@ -721,10 +727,15 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     }
   }
 
-  const blocked = !t.tools.ready
+  const blocked: React.ReactNode = !t.tools.ready
     ? "ffmpeg is not in this image, so this build cannot tidy anything."
     : !t.local_path
-      ? `This container cannot open ${t.file_path ?? "the file"}. Mount the share that holds it, then say where it landed under Settings, Library and files.`
+      ? (
+          <>
+            This container cannot open {t.file_path ?? "the file"}. Mount the share that holds it, then say where it
+            landed under <SettingsLink page={SETTINGS_PAGES.library}>Settings, Library and files</SettingsLink>.
+          </>
+        )
       : null;
 
   return (

@@ -190,8 +190,13 @@ stops applying the moment it ends and leaves a Log entry. A ban's reason can be
 changed later.
 
 The ban list runs as a built-in rule ahead of all the others, with its own
-record only switch, and shows up in the Log like any rule. The message a
-banned device sees is in Settings.
+record only switch, and shows up in the Log like any rule.
+
+Each list has its own message, under **Settings, Live and rules**: a banned
+device, a banned address and a blocked country are three different things to
+tell somebody. Leave the address one empty to use the device wording for both.
+Plex writes the sentence around your words: "<account> asked to stop your
+playback from this server: <your message>".
 
 A ban is tried on every poll rather than once a cooldown, because a stop that
 does not land, from a client that is paused or buffering or simply ignoring it,
@@ -409,6 +414,18 @@ to what the ones that stalled were running at. It fills the field and leaves
 the saving to you, because a stall can be a bad evening on somebody else's line
 as easily as a file that is too big. It stays quiet when the streams do not
 support an answer.
+
+## Finding a setting
+
+Settings has a search box above the page list. It narrows the pages and the
+sections on the page together, matching what a setting is called on screen, the
+key it is stored under, and the words around it, so the upload capacity is
+found by `upload`, by `upload_capacity_mbps`, or by `warn upload` when all you
+remember is that it was near the alert level.
+
+Anywhere else in the app that names a page of Settings is a link to that page.
+"Connect Seerr in Settings", "Add a MaxMind key in Settings" and the rest take
+you there rather than telling you where to go.
 
 ## Making it yours
 
