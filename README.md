@@ -638,6 +638,12 @@ any banned ones, with people who have not watched in 90 days first.
 
 ## Monitoring
 
+A background job that keeps failing sends word through Apprise: three failures
+in a row, one message, then nothing more until it works again and one more when
+it does. A job that breaks does not announce itself otherwise, and the app
+simply stops having the right answer, so this is the alert worth having even if
+you want no others. Switch it off under **Settings, Syncing**.
+
 Uptime Kuma: give Settings a push monitor URL and every sync pings it, so
 the monitor watches the sync, not just the container.
 

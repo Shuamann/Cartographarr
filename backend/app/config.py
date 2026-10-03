@@ -264,6 +264,17 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    task_alerts: bool = True
+    """Send word through Apprise when a background job keeps failing.
+
+    Three failures in a row, then nothing more until it works again, so a job
+    that is broken says so once rather than every half hour. Quiet unless
+    notifications are set up.
+
+    This is the one alert the app could not previously give: a job that stops
+    working stops the app having the right answer, and the only sign was a
+    page nobody had reason to open."""
+
     issue_alerts: bool = True
     """Send word through Apprise when somebody reports a problem. Quiet unless
     notifications are set up."""

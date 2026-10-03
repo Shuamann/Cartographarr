@@ -4,6 +4,28 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.52.0 - 2026-10-03
+
+### Added
+- A background job that keeps failing now says so. Three failures in a row sends one message through Apprise, then
+  nothing more until it works again, and one more when it does, so a job broken for a week is two messages rather
+  than three hundred. This was the one thing the app could not tell anyone: a job that stops working stops the app
+  having the right answer, and the only sign was a page nobody had reason to open. Switch under Settings, Syncing
+
+### Changed
+- A failed job records the reason rather than the stack. Most of these raise a sentence somebody wrote to be read,
+  and four thousand characters of traceback buried it on the Tasks page. The stack goes to the log, where it belongs
+- pytest-xdist is a development dependency, with the numbers in pyproject for choosing how many workers. The suite
+  is 326 seconds serially and 66 at eight workers. It is deliberately not switched on by default: every test builds
+  its own app and database, so a full parallel run is five gigabytes, and it makes a single file slower rather than
+  faster
+
+### Fixed
+- A transcode speed below zero was recorded as fact. Plex reports it as a multiple of real time and occasionally
+  reports nonsense; one session here is on record at -302.8, which went into the session's minimum and stayed there,
+  making a stream that was fine look like one the server could not keep up with. Anything at or below zero, or
+  absurdly above real time, is now treated as not measured
+
 ## 0.51.0 - 2026-10-03
 
 ### Fixed

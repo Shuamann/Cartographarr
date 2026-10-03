@@ -151,6 +151,11 @@ const AREAS: Area[] = [
         note: "Raise these on a strong box to finish the first sync sooner. Lower them if Tautulli or Plex start timing out.",
         keys: ["sync_page_size", "metadata_concurrency"],
       },
+      {
+        title: "When a job stops working",
+        note: "A background job that breaks does not announce itself: the app simply stops having the right answer, and the only sign is the Tasks page, which nobody has reason to open. Three failures in a row sends one message through Apprise, then nothing more until it works again, so a job broken for a week is one message rather than three hundred. Quiet unless notifications are set up.",
+        keys: ["task_alerts"],
+      },
     ],
   },
   {
@@ -391,6 +396,7 @@ const LABELS: Record<string, string> = {
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
+  task_alerts: "Tell me when a job keeps failing",
   auth_proxy_enabled: "Trust a reverse proxy",
   allow_framing: "Allow showing inside other dashboards",
   plex_signin_enabled: "Offer Sign in with Plex",

@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import traceback
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,6 +25,13 @@ from app.redact import redact
 log = logging.getLogger(__name__)
 
 KEEP_RUNS = 100
+
+FAILURES_BEFORE_ALERT = 3
+"""How many times in a row a job must fail before anyone is told.
+
+One failure is a timeout or a service restarting. Three in a row is a job that
+is not going to fix itself. After that nothing more is sent until it works
+again, so a job broken for a week is one message rather than three hundred."""
 
 
 class Skipped(Exception):
@@ -44,6 +50,10 @@ class Task:
     running: bool = False
     runs: int = 0
     failures: int = 0
+    consecutive: int = 0
+    """Failures since the last time it worked, which is the number that says
+    whether something is broken. `failures` counts them all and never falls."""
+    alerted: bool = False
     last: dict[str, Any] = field(default_factory=dict)
 
 
@@ -73,13 +83,23 @@ async def run(key: str, trigger: str = "schedule") -> dict[str, Any]:
         status, message = "skipped", str(exc)
     except Exception as exc:  # noqa: BLE001 - recorded and logged, never raised into the scheduler
         status = "failed"
-        message = redact("".join(traceback.format_exception(exc))[-4000:])
-        log.error("task %s failed: %s", key, redact(exc))
+        # The sentence, not the stack. Most of these raise something a person
+        # wrote to be read ("GitHub can't find <repo>. If the repository is
+        # private, add a token"), and four thousand characters of traceback
+        # buried it on the Tasks page. The stack goes to the log, where it is
+        # the right thing to have.
+        message = redact(str(exc)) or type(exc).__name__
+        log.error("task %s failed: %s", key, redact(exc), exc_info=exc)
     finally:
         task.running = False
     duration_ms = int((time.monotonic() - clock) * 1000)
     task.runs += 1
     task.failures += 1 if status == "failed" else 0
+    if status == "failed":
+        task.consecutive += 1
+    elif status == "ok":
+        task.consecutive = 0
+    await _tell_someone(task, status, message)
     task.last = {
         "started_at": started.isoformat(), "duration_ms": duration_ms, "status": status,
         "message": message, "trigger": trigger,
@@ -90,6 +110,34 @@ async def run(key: str, trigger: str = "schedule") -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             log.exception("could not record a run of %s", key)
     return task.last
+
+
+async def _tell_someone(task: Task, status: str, message: str | None) -> None:
+    """One message when a job breaks, one when it comes back, nothing between.
+
+    A job that has stopped working is the thing most worth knowing about and
+    the thing least likely to be noticed, since the only sign is a page that
+    quietly stops being right.
+    """
+    from app.integrations.notify import apprise_notifier
+    from app.settings_store import current
+
+    try:
+        if not current().task_alerts:
+            return
+        if status == "failed" and not task.alerted and task.consecutive >= FAILURES_BEFORE_ALERT:
+            task.alerted = True
+            await apprise_notifier.send(
+                f"{task.name} is failing",
+                f"{task.name} has failed {task.consecutive} times in a row. "
+                f"The last reason was: {message or 'no reason given'}. "
+                f"Nothing more will be sent about it until it works again.",
+            )
+        elif status == "ok" and task.alerted:
+            task.alerted = False
+            await apprise_notifier.send(f"{task.name} is working again", f"{task.name} has just run cleanly.")
+    except Exception:  # noqa: BLE001 - a job that failed must not fail twice
+        log.exception("could not send word about %s", task.key)
 
 
 def _store(key: str, started: datetime, duration_ms: int, status: str, message: str | None, trigger: str) -> None:

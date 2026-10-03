@@ -97,6 +97,22 @@ def _worst(a: Any, b: Any) -> Any:
     return b if _DECISION_RANK.get(_lower(b) or None, 0) > _DECISION_RANK.get(_lower(a) or None, 0) else a
 
 
+SPEED_CEILING = 100.0
+"""Above this a transcode speed is a measurement artefact rather than a speed.
+
+Plex reports this as a multiple of real time, so 1.0 is keeping up exactly.
+A hundred times real time is not something to read anything into, and the
+numbers seen below zero certainly are not: this server has a session recorded
+at -302.8, which went into the minimum and stayed there, making a stream that
+was fine look like one the server could not keep up with."""
+
+
+def _plausible_speed(value: float | None) -> float | None:
+    if value is None or value <= 0 or value > SPEED_CEILING:
+        return None
+    return value
+
+
 def _hw(s: dict[str, Any]) -> bool:
     return bool(_int(s.get("transcode_hw_encoding")) or _int(s.get("transcode_hw_decoding")) or s.get("transcode_hw_full_pipeline"))
 
@@ -142,7 +158,7 @@ def row_for(s: dict[str, Any], now: float) -> dict[str, Any]:
         "subtitle_decision": s.get("subtitle_decision") or None,
         "container_decision": s.get("container_decision") or None,
         "transcode_hw": _hw(s),
-        "transcode_speed_min": _float(s.get("transcode_speed")) or None,
+        "transcode_speed_min": _plausible_speed(_float(s.get("transcode_speed"))),
         "causes": ",".join(causes) or None,
         "primary_cause": causes[0] if causes else None,
         "bandwidth_max": _int(s.get("bandwidth")),

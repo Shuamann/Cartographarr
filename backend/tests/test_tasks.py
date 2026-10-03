@@ -40,7 +40,11 @@ def test_runs_are_recorded_with_errors_and_skips(client):
     assert listed["t_ok"]["last"]["status"] == "ok" and listed["t_ok"]["last"]["message"] == "history 12"
     assert listed["t_boom"]["failures"] == 1 and listed["t_boom"]["every_seconds"] == 60
     failure = _runs(client, "t_boom")[0]
-    assert failure["status"] == "failed" and "RuntimeError" in failure["message"]
+    # The sentence somebody wrote to be read, not four thousand characters of
+    # stack with it buried in the middle. The stack goes to the log.
+    assert failure["status"] == "failed"
+    assert failure["message"].startswith("Tautulli said no")
+    assert "Traceback" not in failure["message"]
     assert "secret123" not in failure["message"]
     assert _runs(client, "t_skip")[0]["status"] == "skipped"
     # The real tasks are all listed.

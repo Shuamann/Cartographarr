@@ -190,3 +190,27 @@ def test_upload_capacity_comes_from_plex_unless_set(client, monkeypatch):
     claim(client)
     info = client.get("/api/library/upload").json()
     assert info["plex_upload_mbps"] == 40 and info["plex_stream_limit_mbps"] == 8
+
+
+# ---- a speed that is not a speed --------------------------------------------
+
+
+def test_a_negative_transcode_speed_is_not_recorded():
+    """Plex reports this as a multiple of real time, and sometimes reports
+    nonsense. One session on the server this was written against is recorded at
+    -302.8, which went into the minimum and stayed there, making a stream that
+    was fine look like one the server could not keep up with."""
+    assert streams._plausible_speed(-302.8) is None
+    assert streams._plausible_speed(0.0) is None
+    assert streams._plausible_speed(None) is None
+
+
+def test_an_absurdly_fast_one_is_not_either():
+    assert streams._plausible_speed(1000.0) is None
+    assert streams._plausible_speed(streams.SPEED_CEILING + 0.1) is None
+
+
+def test_a_real_speed_survives():
+    assert streams._plausible_speed(0.8) == 0.8
+    assert streams._plausible_speed(1.0) == 1.0
+    assert streams._plausible_speed(11.66) == 11.66
