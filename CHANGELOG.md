@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.56.0 - 2026-10-03
+
+### Changed
+- Two components asking for the same thing at the same moment now make one request, and a handful of answers that
+  do not change while you are looking at them are remembered for a few seconds. Clicking twice round every tab:
+  127 requests before, 98 after, with the users list going from twelve to two and the filter options and the
+  library list from eight each to one. Live activity, the dashboard and anything about a stream are deliberately
+  left out, because a stale number there is worse than a second request, and any write empties the lot
+
 ## 0.55.0 - 2026-10-03
 
 ### Added

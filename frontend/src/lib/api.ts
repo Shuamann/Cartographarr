@@ -1,7 +1,14 @@
 /* Thin fetch wrapper + a loading hook.
  *
- * Not a data-fetching library yet: the app has a handful of endpoints and no
- * polling. Revisit when the live-activity layer needs cache invalidation.
+ * Still not a data-fetching library, and deliberately. What it does have is
+ * the one thing the app was missing: two components asking for the same thing
+ * at the same moment make one request, and a handful of endpoints that do not
+ * change while you are looking at them are remembered for a few seconds.
+ *
+ * Counted over one pass through every tab, before: `/branding` eleven times,
+ * `/users` six, `/filter-options` four, `/bans` three. Nothing was wrong with
+ * any of them, they were simply all asked again every time a component that
+ * wanted one was mounted.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,15 +42,85 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/* How long an answer is reused, by path prefix.
+ *
+ * Only things that do not change while somebody is looking at them. Live
+ * activity, the dashboard and anything about a stream are deliberately absent:
+ * a stale number there is worse than a second request. Writing to any of these
+ * is rare and goes through a reload, which skips the cache.
+ */
+const KEEP_FOR: Record<string, number> = {
+  "/branding": 30_000,
+  "/rules/fields": 60_000,
+  "/filter-options": 60_000,
+  "/libraries": 60_000,
+  "/users": 15_000,
+  "/capabilities": 30_000,
+  "/server-time": 10_000,
+  // Short, because banning something should show up, and every path that
+  // changes one calls reload, which goes past this anyway.
+  "/bans": 10_000,
+  "/address-bans": 10_000,
+};
+
+function keepFor(path: string): number {
+  for (const prefix in KEEP_FOR) {
+    if (path === prefix || path.startsWith(`${prefix}?`)) return KEEP_FOR[prefix];
+  }
+  return 0;
+}
+
+type Held = { at: number; value: unknown };
+
+const held = new Map<string, Held>();
+/* Requests in the air, so two components mounting together share one. This
+ * applies to every path, cached or not: asking twice at the same instant is
+ * never what anybody meant. */
+const inflight = new Map<string, Promise<unknown>>();
+
+/* Everything cached is dropped when anything is written, because working out
+ * which write affects which answer is exactly the complexity this is trying
+ * not to have. A few seconds of re-fetching after a save costs nothing. */
+export function forgetCached(): void {
+  held.clear();
+}
+
+async function shared<T>(path: string, fresh: boolean): Promise<T> {
+  const ttl = keepFor(path);
+  if (!fresh && ttl > 0) {
+    const have = held.get(path);
+    if (have && Date.now() - have.at < ttl) return have.value as T;
+  }
+
+  const already = inflight.get(path);
+  if (already && !fresh) return already as Promise<T>;
+
+  const call = request<T>(path)
+    .then((value) => {
+      if (ttl > 0) held.set(path, { at: Date.now(), value });
+      return value;
+    })
+    .finally(() => {
+      inflight.delete(path);
+    });
+  inflight.set(path, call);
+  return call;
+}
+
+function writes<T>(path: string, init: RequestInit): Promise<T> {
+  forgetCached();
+  return request<T>(path, init);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
+    writes<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
   put: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+    writes<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
-  del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+    writes<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  del: <T>(path: string) => writes<T>(path, { method: "DELETE" }),
 };
 
 type Query<T> = { data: T | undefined; error: string | null; loading: boolean; reload: () => void };
@@ -63,8 +140,9 @@ export function useApi<T>(path: string | null, deps: unknown[] = []): Query<T> {
     }
     const ticket = ++latest.current;
     setLoading(true);
-    api
-      .get<T>(path)
+    // A reload is somebody asking for the current answer, so it goes past the
+    // cache; the first load of a page is happy with one a few seconds old.
+    shared<T>(path, nonce > 0)
       .then((result) => {
         if (ticket !== latest.current) return;
         setData(result);
