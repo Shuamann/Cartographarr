@@ -3,7 +3,7 @@ import { useState } from "react";
 import BrandIcon from "./BrandIcon";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
 import { useNav } from "../lib/nav";
-import { useAddressBans, useBans } from "../lib/bans";
+import { coveredBy, useAddressBans, useBans } from "../lib/bans";
 import { useIsAvailable } from "./Gated";
 
 /* Everything about one live stream, and everything you can do to it.
@@ -41,6 +41,8 @@ export default function StreamDetail({
   const nav = useNav();
   const bans = useBans();
   const addressBans = useAddressBans();
+  // A range counts: an address can be stopped without being on the list.
+  const covering = session.ip_address ? coveredBy(session.ip_address as string, addressBans.list) : null;
   const banned = Boolean(session.machine_id && bans.ids.has(session.machine_id));
   const [stopping, setStopping] = useState(false);
   const [fullSummary, setFullSummary] = useState(false);
@@ -249,7 +251,7 @@ export default function StreamDetail({
             )}
             {/* The connection rather than the box, for a device that comes
                 back under a new identifier. */}
-            {nav.blockAddress && session.ip_address && !addressBans.addresses.has(session.ip_address as string) && (
+            {nav.blockAddress && session.ip_address && !covering && (
               <button
                 className="btn danger"
                 onClick={() => nav.blockAddress?.(session.ip_address as string, session.ip_address as string)}
@@ -257,9 +259,9 @@ export default function StreamDetail({
                 Ban address
               </button>
             )}
-            {nav.unbanAddress && session.ip_address && addressBans.addresses.has(session.ip_address as string) && (
-              <button className="btn" onClick={() => nav.unbanAddress?.(session.ip_address as string)}>
-                Unban address
+            {nav.unbanAddress && covering && (
+              <button className="btn" onClick={() => nav.unbanAddress?.(covering)}>
+                {covering === session.ip_address ? "Unban address" : `Unban ${covering}`}
               </button>
             )}
           </div>

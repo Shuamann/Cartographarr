@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { BAN_LENGTHS, ban, banAddress } from "../lib/bans";
+import { BAN_LENGTHS, ban, banAddress, scopesFor } from "../lib/bans";
 
 /* A device or an address: the same two questions either way, so one dialog. */
 export type BanRequest = {
@@ -18,6 +18,9 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
   const ref = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState("");
   const [hours, setHours] = useState(0);
+  // Which address the ban is written against: the one asked about, or the
+  // block around it. Reset whenever the dialog opens on something new.
+  const [scope, setScope] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,12 +30,15 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
     if (request && !dialog.open) {
       setReason("");
       setHours(0);
+      setScope(request.id);
       setError(null);
       dialog.showModal();
     } else if (!request && dialog.open) {
       dialog.close();
     }
   }, [request]);
+
+  const scopes = request && request.kind === "address" ? scopesFor(request.id) : [];
 
   function finish(banned: boolean) {
     request?.resolve(banned);
@@ -45,7 +51,7 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
     setBusy(true);
     setError(null);
     try {
-      if (request.kind === "address") await banAddress(request.id, reason, hours);
+      if (request.kind === "address") await banAddress(scope || request.id, reason, hours);
       else await ban(request.id, reason, hours);
       finish(true);
     } catch (err) {
@@ -65,6 +71,19 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
               ? "Any stream from this address is stopped. A range works too, typed as 203.0.113.0/24. You can unban it from the ban list on the Rules page."
               : "Any stream from this device is stopped, or only recorded if the ban list is set to record only on the Rules page. You can unban it from People or the ban list."}
           </p>
+          {request.kind === "address" && scopes.length > 1 && (
+            <label>
+              How far it reaches
+              <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                {scopes.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <small>{scopes.find((s) => s.value === scope)?.hint}</small>
+            </label>
+          )}
           <label>
             Reason, for the Log
             <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Optional" autoFocus />

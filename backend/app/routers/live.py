@@ -635,6 +635,15 @@ def unban_device(machine_id: str, admin: AdminUser) -> dict:
 # when the household rather than the box is the thing being stopped.
 
 
+WIDEST_BAN = {4: 16, 6: 48}
+"""The widest range that can be banned, per address family.
+
+An IPv4 /16 is 65,536 addresses, which is already far wider than one house and
+about as far as a provider's block for one town goes. An IPv6 /48 is what a
+customer is typically given. Anything wider is a typo, and a typo here stops
+strangers watching without anybody finding out why."""
+
+
 def _network(value: str) -> str:
     """The address as typed, once it is known to be an address or a range."""
     import ipaddress
@@ -645,9 +654,18 @@ def _network(value: str) -> str:
     try:
         # strict=False so 203.0.113.4/24 is read as the network it names
         # rather than refused for having host bits set.
-        ipaddress.ip_network(text, strict=False)
+        network = ipaddress.ip_network(text, strict=False)
     except ValueError:
         raise HTTPException(400, f"{text} is not an address or a range. Try 203.0.113.4 or 203.0.113.0/24.") from None
+    # A ban stops streams without asking again, so the one mistake worth
+    # refusing outright is the range nobody means: /8 is sixteen million
+    # addresses and /1 is half the internet.
+    if network.prefixlen < WIDEST_BAN[network.version]:
+        raise HTTPException(
+            400,
+            f"{text} covers {network.num_addresses:,} addresses, which is wider than a household. "
+            f"The widest allowed is /{WIDEST_BAN[network.version]}.",
+        )
     return text
 
 

@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.48.0 - 2026-10-03
+
+### Added
+- Ban an address from its page under People, not only from a stream card, so a household found by looking rather
+  than caught in the act can be stopped where you are already standing
+- A ban asks how far it should reach: this address only, its /24, or its /16, with what each one costs written
+  beside it. One address catches one connection, which is enough until the household's address changes; the /24
+  catches it after a reconnect at the cost of up to 255 neighbours. That trade is yours to make, so it is offered
+  rather than guessed
+- An address inside a banned range now says so, on both its own page and the stream card, and the Unban button
+  unbans whatever is actually stopping it rather than offering to ban something that is already stopped
+
+### Changed
+- A range wider than /16 is refused, with what it would have covered. A ban stops streams without asking again, so
+  the one mistake worth refusing outright is the typo that quietly stops strangers
+
 ## 0.47.0 - 2026-10-02
 
 ### Added

@@ -22,7 +22,7 @@ import {
 } from "../lib/api";
 import { useNav } from "../lib/nav";
 import type { PeopleFilter } from "../lib/tabs";
-import { useBans } from "../lib/bans";
+import { coveredBy, useAddressBans, useBans } from "../lib/bans";
 
 /* Users and their devices, in one place.
  *
@@ -699,6 +699,8 @@ function AddressProfile({
 }) {
   const nav = useNav();
   const detail = useApi<AddressDetail>(`/addresses/${encodeURIComponent(ip)}`);
+  const addressBans = useAddressBans();
+  const covering = coveredBy(ip, addressBans.list);
   const [tab, setTab] = useState<"overview" | "history">("overview");
 
   if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
@@ -722,6 +724,11 @@ function AddressProfile({
             {a.place?.is_private && <span className="pill">local network</span>}
             {a.place?.accuracy_km ? <span className="pill">±{a.place.accuracy_km} km</span> : null}
             {a.accounts.length > 1 && <span className="pill warn">used by {a.accounts.length} accounts</span>}
+            {covering && (
+              <span className="pill banned">
+                {covering === ip ? "banned" : `covered by ${covering}`}
+              </span>
+            )}
           </div>
         </div>
         <div className="row wrap profile-actions">
@@ -734,6 +741,21 @@ function AddressProfile({
                 History
               </button>
             </>
+          )}
+          {/* Banned as itself or as the block around it, asked in the dialog.
+              A ban made on the exact address does not hide a wider one that
+              already covers it, so both buttons can be true at once. */}
+          {nav.blockAddress && !covering && (
+            <button className="btn danger" onClick={() => nav.blockAddress?.(ip, ip)}>
+              Ban address
+            </button>
+          )}
+          {/* Unbans whatever is actually stopping it, which may be the range
+              rather than this address. */}
+          {nav.unbanAddress && covering && (
+            <button className="btn" onClick={() => nav.unbanAddress?.(covering)}>
+              {covering === ip ? "Unban address" : `Unban ${covering}`}
+            </button>
           )}
         </div>
       </header>

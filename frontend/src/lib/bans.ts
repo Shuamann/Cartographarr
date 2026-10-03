@@ -79,6 +79,72 @@ export async function banAddress(address: string, reason: string, hours?: number
   window.dispatchEvent(new Event(CHANGED));
 }
 
+/* How wide to make an address ban.
+ *
+ * One address catches one connection, which is enough until the household's
+ * address changes. A provider usually hands out addresses from a block, so
+ * the /24 catches the same house after a reconnect, at the cost of catching
+ * up to 255 neighbours with it. That trade is the viewer's to make, so it is
+ * offered rather than guessed.
+ *
+ * IPv4 only. An IPv6 address is offered as itself, because working out which
+ * part of one a provider treats as a customer is guesswork, and a wrong guess
+ * here bans a stranger.
+ */
+export type Scope = { value: string; label: string; hint: string };
+
+export function scopesFor(address: string): Scope[] {
+  const exact = { value: address, label: "This address only", hint: "One connection" };
+  const parts = address.trim().split(".");
+  if (parts.length !== 4 || parts.some((p) => !/^\d{1,3}$/.test(p) || Number(p) > 255)) return [exact];
+  return [
+    exact,
+    {
+      value: `${parts[0]}.${parts[1]}.${parts[2]}.0/24`,
+      label: `${parts[0]}.${parts[1]}.${parts[2]}.0/24`,
+      hint: "This address and up to 255 neighbours, for an address that changes",
+    },
+    {
+      value: `${parts[0]}.${parts[1]}.0.0/16`,
+      label: `${parts[0]}.${parts[1]}.0.0/16`,
+      hint: "65,536 addresses. Wide enough to catch people you did not mean",
+    },
+  ];
+}
+
+function asInt(address: string): number | null {
+  const parts = address.trim().split(".");
+  if (parts.length !== 4) return null;
+  let total = 0;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part) || Number(part) > 255) return null;
+    total = (total << 8) | Number(part);
+  }
+  return total >>> 0;
+}
+
+/* Which ban, if any, already covers this address.
+ *
+ * The list holds exact addresses and ranges, so an address can be banned
+ * without being on it. A page that only checked for an exact entry would
+ * offer to ban something that is already stopped. IPv4 ranges only, matching
+ * what scopesFor will write; an exact entry matches whatever it is.
+ */
+export function coveredBy(address: string, list: AddressBan[]): string | null {
+  for (const ban of list) {
+    if (ban.address === address) return ban.address;
+    const [network, bits] = ban.address.split("/");
+    if (!bits) continue;
+    const here = asInt(address);
+    const there = asInt(network);
+    const width = Number(bits);
+    if (here === null || there === null || !(width >= 0 && width <= 32)) continue;
+    const mask = width === 0 ? 0 : (~0 << (32 - width)) >>> 0;
+    if (((here & mask) >>> 0) === ((there & mask) >>> 0)) return ban.address;
+  }
+  return null;
+}
+
 export async function unbanAddress(address: string): Promise<void> {
   await api.del(`/address-bans/${encodeURIComponent(address)}`);
   window.dispatchEvent(new Event(CHANGED));

@@ -105,3 +105,14 @@ def test_banning_the_same_address_twice_is_refused(client):
 
 def test_banning_an_address_is_admin_only(client):
     assert client.post("/api/address-bans", json={"address": "203.0.113.9"}).status_code in (401, 403)
+
+
+def test_a_range_wider_than_a_household_is_refused(client):
+    """The one mistake worth refusing: a typo here stops strangers watching."""
+    claim(client)
+    answer = client.post("/api/address-bans", json={"address": "203.0.0.0/8"})
+    assert answer.status_code == 400
+    assert "wider than a household" in answer.json()["detail"]
+
+    # The widest allowed is still allowed.
+    assert client.post("/api/address-bans", json={"address": "203.0.0.0/16"}).status_code == 200

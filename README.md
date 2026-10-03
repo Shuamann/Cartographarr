@@ -200,11 +200,24 @@ wait, so a device that keeps coming back cannot fill it.
 
 ## Banning an address
 
-**Ban address** on a stream card does the same thing to the connection rather
-than the box. That is what you want when a device comes back under a new
-identifier, or when the household rather than one machine in it is the thing to
-stop. A plain address or a range typed as `203.0.113.0/24`, and the Rules page
-has the list with its own box to add one.
+**Ban address** on a stream card, or on the address's own page under People,
+does the same thing to the connection rather than the box. That is what you
+want when a device comes back under a new identifier, or when the household
+rather than one machine in it is the thing to stop.
+
+It asks how far the ban should reach, with what each choice costs beside it:
+
+| Reach | Covers | When |
+| --- | --- | --- |
+| This address only | One connection | The address is stable |
+| `/24` | It and up to 255 neighbours | The address changes on reconnect |
+| `/16` | 65,536 addresses | Rarely. Wide enough to catch people you did not mean |
+
+Anything wider than a `/16` is refused, because a ban stops streams without
+asking again and that typo would quietly stop strangers. An address inside a
+banned range says so on its own page, and **Unban** there removes whatever is
+actually stopping it rather than offering to ban it twice. The Rules page has
+the whole list with its own box to add one.
 
 The two lists are separate and both run ahead of everything else, so the Log
 says which of them stopped a stream.
