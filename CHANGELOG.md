@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.49.0 - 2026-10-03
+
+### Added
+- The release picker opens as a list, with the cards as the other view and the choice remembered. Eighteen releases
+  as cards is a wall of repeated labels; as rows it is one line each, and the thing being compared, size against
+  bitrate against score, lines up in a column
+- Sortable columns. Clicking a heading sorts by it, clicking the same one again turns it round. The Order menu
+  drives the same thing, so the two cannot disagree
+
+### Changed
+- The sort names a field rather than a direction: Size rather than Smallest, Age rather than Newest. A column
+  heading you click to reverse cannot be called Smallest, and the arrow says which way round it is
+
 ## 0.48.0 - 2026-10-03
 
 ### Added

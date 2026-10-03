@@ -1081,14 +1081,28 @@ const CHANNELS: Record<number, string> = { 2: "stereo", 6: "5.1", 8: "7.1" };
  */
 type SortKey = "best" | "score" | "size" | "bitrate" | "seeders" | "age";
 
-const SORTS: Record<SortKey, { label: string; of: (r: Release) => number }> = {
-  best: { label: "Best first", of: () => 0 },
-  score: { label: "Profile score", of: (r) => r.custom_format_score ?? -1e9 },
-  size: { label: "Smallest", of: (r) => -(r.size ?? 0) },
-  bitrate: { label: "Lowest bitrate", of: (r) => -(r.estimated_bitrate ?? 0) },
-  seeders: { label: "Most seeders", of: (r) => r.seeders ?? -1 },
-  age: { label: "Newest", of: (r) => -(r.age_days ?? 1e9) },
+/* Each one names a field and says which way round is usually wanted, rather
+ * than folding the direction into the name. "Smallest" cannot be a column
+ * heading you click to reverse; "Size" can. */
+const SORTS: Record<SortKey, { label: string; of: (r: Release) => number; down: boolean }> = {
+  best: { label: "Best first", of: () => 0, down: true },
+  score: { label: "Profile score", of: (r) => r.custom_format_score ?? -1e9, down: true },
+  size: { label: "Size", of: (r) => r.size ?? 0, down: false },
+  bitrate: { label: "Bitrate", of: (r) => r.estimated_bitrate ?? 0, down: false },
+  seeders: { label: "Seeders", of: (r) => r.seeders ?? -1, down: true },
+  age: { label: "Age", of: (r) => r.age_days ?? 1e9, down: false },
 };
+
+/* The columns of the list, in order. Everything a tile shows except the
+ * rejection text, which is three lines of Radarr's reasoning and belongs in
+ * the tile or a tooltip rather than in a cell. */
+const COLUMNS: { key: SortKey; label: string; cell: (r: Release) => string }[] = [
+  { key: "size", label: "Size", cell: (r) => size(r.size) },
+  { key: "bitrate", label: "Bitrate", cell: (r) => mbps(r.estimated_bitrate) },
+  { key: "score", label: "Score", cell: (r) => String(r.custom_format_score ?? 0) },
+  { key: "seeders", label: "Seeders", cell: (r) => (r.seeders == null ? "n/a" : String(r.seeders)) },
+  { key: "age", label: "Age", cell: (r) => (r.age_days == null ? "?" : `${r.age_days} d`) },
+];
 
 function ReleasePicker({
   ratingKey,
@@ -1104,6 +1118,35 @@ function ReleasePicker({
   const ref = useRef<HTMLDialogElement>(null);
   const found = useApi<{ service: string; current: FileInfo; releases: Release[] }>(`/library/file/${ratingKey}/releases`);
   const [sort, setSort] = useState<SortKey>("best");
+  const [down, setDown] = useState(true);
+  // A list to compare twenty releases, tiles to read one properly. Which was
+  // wanted last time is almost always which is wanted now.
+  const [view, setView] = useState<"list" | "tiles">(() => {
+    try {
+      return localStorage.getItem("releases.view") === "tiles" ? "tiles" : "list";
+    } catch {
+      return "list";
+    }
+  });
+
+  function show(next: "list" | "tiles") {
+    setView(next);
+    try {
+      localStorage.setItem("releases.view", next);
+    } catch {
+      // A private window has no storage, and the view still works without it.
+    }
+  }
+
+  // Clicking the column already sorted by turns it round; a new one starts
+  // whichever way round that field is usually read.
+  function sortBy(key: SortKey) {
+    if (key === sort) setDown((v) => !v);
+    else {
+      setSort(key);
+      setDown(SORTS[key].down);
+    }
+  }
   const [resolution, setResolution] = useState("");
   const [protocol, setProtocol] = useState("");
   const [maxSize, setMaxSize] = useState(0);
@@ -1144,7 +1187,11 @@ function ReleasePicker({
       (!protocol || r.protocol === protocol) &&
       (!maxSize || (r.size ?? 0) <= maxSize),
   );
-  const rows = sort === "best" ? visible : [...visible].sort((a, b) => SORTS[sort].of(b) - SORTS[sort].of(a));
+  // Best first is the order the server worked out, so it is left alone.
+  const rows =
+    sort === "best"
+      ? visible
+      : [...visible].sort((a, b) => (down ? SORTS[sort].of(b) - SORTS[sort].of(a) : SORTS[sort].of(a) - SORTS[sort].of(b)));
 
   return (
     <dialog ref={ref} className="dialog wide" onClose={onClose} aria-labelledby="release-picker-title">
@@ -1232,6 +1279,14 @@ function ReleasePicker({
               <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
               Hide what {label} would refuse
             </label>
+            <div className="segmented push-right">
+              <button className={view === "list" ? "seg on" : "seg"} onClick={() => show("list")}>
+                List
+              </button>
+              <button className={view === "tiles" ? "seg on" : "seg"} onClick={() => show("tiles")}>
+                Cards
+              </button>
+            </div>
           </div>
 
           <p className="muted small">
@@ -1242,6 +1297,70 @@ function ReleasePicker({
 
           {rows.length === 0 ? (
             <p className="muted">Nothing matches those filters.</p>
+          ) : view === "list" ? (
+            <table className="table releases">
+              <thead>
+                <tr>
+                  <th>
+                    <button className="col-sort" onClick={() => sortBy("best")}>
+                      Release {sort === "best" && <span aria-hidden>{"\u2193"}</span>}
+                    </button>
+                  </th>
+                  <th className="num">Fixes</th>
+                  {COLUMNS.map((c) => (
+                    <th key={c.key} className="num">
+                      <button className="col-sort" onClick={() => sortBy(c.key)}>
+                        {c.label} {sort === c.key && <span aria-hidden>{down ? "\u2193" : "\u2191"}</span>}
+                      </button>
+                    </th>
+                  ))}
+                  <th>From</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.guid} className={r.blocked ? "blocked" : undefined}>
+                    <td>
+                      <span className="clip release-name" title={r.title}>
+                        {r.title}
+                      </span>
+                      <span className="row wrap release-badges">
+                        {r.parsed.resolution && <span className="pill">{r.parsed.resolution}</span>}
+                        {r.parsed.source && <span className="pill">{r.parsed.source}</span>}
+                        {r.parsed.video_codec && <span className="pill">{r.parsed.video_codec}</span>}
+                        {r.parsed.hdr && <span className="pill">{r.parsed.hdr}</span>}
+                        {r.parsed.audio_codec && (
+                          <span className="pill">
+                            {r.parsed.audio_codec}
+                            {r.parsed.audio_channels ? ` ${r.parsed.audio_channels}ch` : ""}
+                          </span>
+                        )}
+                        <span className={r.held ? "pill ok" : "pill warn"}>{r.held ? "Waits" : "Auto"}</span>
+                      </span>
+                    </td>
+                    {/* The count, with what they are on hover: five words a row
+                        would push everything else off the screen. */}
+                    <td className="num" title={r.fixes.join(". ") || "Nothing this file needs"}>
+                      {r.fixes.length || ""}
+                    </td>
+                    {COLUMNS.map((c) => (
+                      <td key={c.key} className="num">
+                        {c.cell(r)}
+                      </td>
+                    ))}
+                    <td className="clip" title={r.rejections.join(". ") || undefined}>
+                      {r.indexer ?? "?"}
+                    </td>
+                    <td>
+                      <button className="tab" disabled={Boolean(queued)} onClick={() => queue(r)}>
+                        {queued === r.guid ? "Queued" : "Get"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <div className="release-tiles">
               {rows.map((r) => (

@@ -383,10 +383,13 @@ Open any file for what exactly is wrong with it, named from its own tracks and
 how it played, and how to fix it. For plays from before streams were recorded,
 the reason is read back from Tautulli.
 
-**Find a replacement** has Radarr or Sonarr search the indexers and shows each
-release as a tile against the current file: what it would fix, what it is made
-of, size, rough bitrate, seeders, age, indexer and the profile score. Filter by
-resolution, source, size, or whether the service would import it by itself.
+**Find a replacement** has Radarr or Sonarr search the indexers and lists each
+release against the current file: what it would fix, what it is made of, size,
+rough bitrate, seeders, age, indexer and the profile score. Click a column to
+sort by it, click it again to turn it round. **Cards** is the other view, one
+release to a card with its full reasoning, which is the one to read when you
+have narrowed it down to two; the choice is remembered. Filter by resolution,
+source, size, or whether the service would import it by itself.
 Best first means most of this file's problems solved, then the service's own
 score, rather than one blended number that would have to decide what a fixed
 soundtrack is worth in custom format points. Download one and it is

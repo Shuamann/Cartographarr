@@ -4627,3 +4627,83 @@ label.locked .pill {
   font-size: 12px;
   color: var(--ink);
 }
+
+/* ---- releases as a list ------------------------------------------------- */
+
+/* The release name takes whatever room the numbers do not. */
+.table.releases {
+  table-layout: fixed;
+  margin-top: 10px;
+}
+
+.table.releases th {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table.releases th.num,
+.table.releases td.num {
+  width: 92px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every column but the name is as wide as it needs to be, so the name gets
+   all the slack. Without this the fixed layout splits the leftover between
+   the name and the indexer, and the name is the thing being read. */
+.table.releases th:nth-last-child(2),
+.table.releases td:nth-last-child(2) {
+  width: 110px;
+  padding-left: 14px;
+}
+
+.table.releases td:last-child,
+.table.releases th:last-child {
+  width: 64px;
+  text-align: right;
+}
+
+.table.releases td {
+  vertical-align: top;
+}
+
+.release-name {
+  display: block;
+  font-weight: 500;
+}
+
+.table.releases .release-badges {
+  margin-top: 4px;
+  gap: 4px;
+}
+
+.table.releases .release-badges .pill {
+  font-size: 11px;
+}
+
+/* A release the service would refuse is still shown, greyed, because knowing
+   it exists and why is half the answer. */
+.table.releases tr.blocked td {
+  opacity: 0.55;
+}
+
+/* A heading that sorts. It reads as a heading until the pointer is over it. */
+.col-sort {
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.col-sort:hover {
+  color: var(--accent);
+}
+
+/* The view switch sits at the far end of the filter row. */
+.push-right {
+  margin-left: auto;
+}
