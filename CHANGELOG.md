@@ -4,6 +4,41 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.51.0 - 2026-10-03
+
+### Fixed
+- Tidying an mp4 deleted it. The result was always written as mkv, whatever went in, so a job asked only to drop
+  some subtitle tracks repackaged the file and removed the original, although mp4 is a modern container the plan
+  never offers to repackage. The output now keeps the file's own extension unless repackaging was one of the steps
+- Nothing was told when a tidy finished, so the page went on reporting the problem that had just been fixed until
+  the next library scan, up to six hours later, and a renamed file left the stored path pointing at something that
+  had been deleted. The item's path and size are updated and it is marked for re-reading, which the detail pass
+  does within the minute
+- Looking for a library under the media roots was bounded by how many directories it examined and not by how long
+  that took. The same seven thousand filesystem calls are thirty milliseconds on a local disk and several seconds
+  on a mounted remote share. It now gives up after two seconds and reports the library missing, which is honest and
+  is what the path box is for
+- An index added to a model that already had rows was never created. `create_all` checks whether a table exists and
+  skips the whole of one that does, indexes included, which had been worked around for a single index by hand. They
+  are now added the same way missing columns already were, so the next one appears by itself
+
+### Changed
+- Responses are compressed. JSON takes it better than almost anything, being mostly repeated key names: the largest
+  response on this server goes from 420 KB to 24 KB, and the interface bundle from 435 KB to 132 KB
+- Posters are fetched as JPEG. Left to itself Tautulli hands back whatever Plex has, which is PNG, and a 200x300
+  poster comes to 120 KB against 21 KB as JPEG. A page of sixty of them is seven megabytes rather than one. The
+  cache file carries the format in its name, so the PNGs kept by older builds are replaced rather than served under
+  the wrong content type
+- The library table is indexed. Thirty thousand rows and nothing but the primary key, so every library page scanned
+  the whole table to show sixty titles: 34 ms a query where an index makes it 0.8 ms. A device's, an address's and a
+  title's history gain the sort column too, so finding those rows no longer leaves SQLite to build a temporary tree
+  to put them in order
+- SQLite is told to wait for a locked database rather than give up at once, which was the default. The enforcer
+  writes every five seconds, the sync writes in batches and requests write on top of both; the transactions are all
+  short, so this is about waiting out a brief overlap instead of raising it into somebody's page
+- oauthlib is pinned above the version carrying PYSEC-2026-4114. It arrives through apprise rather than being used
+  here, so the floor is set rather than waiting for apprise to raise its own
+
 ## 0.50.0 - 2026-10-03
 
 ### Added

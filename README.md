@@ -588,6 +588,11 @@ tracks and swapping it for a better copy are the same job from where you are
 standing. The result is checked against the original, for length and for still
 having a picture in it, before it replaces anything.
 
+The file keeps its own container unless **Repackage** was one of the steps, so
+tidying an mp4 leaves an mp4. Afterwards the item is marked for re-reading and
+its details are refreshed within the minute, rather than the page going on
+reporting the problem that was just fixed until the next scan.
+
 ## Taking up room
 
 **Files worth attention, Taking up room** lists big files nobody watches,

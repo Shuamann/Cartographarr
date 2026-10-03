@@ -61,3 +61,20 @@ def test_an_unwritable_cache_costs_the_cache_not_the_picture(tmp_path):
     where.mkdir()
     data_router._keep_poster(where, b"some bytes")
     assert where.is_dir()
+
+
+def test_posters_are_asked_for_as_jpeg():
+    """Left alone Tautulli returns PNG, and a 200x300 poster is 120 KB instead
+    of 21 KB. The spelling matters: `jpeg` is accepted and ignored."""
+    from app.routers import data
+
+    assert data.POSTER_FORMAT == "jpg"
+    source = inspect.getsource(data.media_image)
+    assert '"img_format": POSTER_FORMAT' in source
+
+
+def test_the_cache_name_carries_the_format():
+    """So the PNGs kept by older builds are missed rather than served as JPEG."""
+    from app.routers import data
+
+    assert data._poster_file(7, 200, 300).name.endswith(".jpg")

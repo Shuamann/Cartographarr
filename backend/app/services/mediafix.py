@@ -147,7 +147,17 @@ many folders at its top is not a media root, it is a mistake."""
 
 SEARCH_DEPTH = 2
 """How far below a root a library may sit. /media/Films is one, and
-/media/HotArchive/Films is two, which covers a share mounted whole."""
+/media/Archive/Films is two, which covers a share mounted whole."""
+
+SEARCH_SECONDS = 2.0
+"""How long one library may be looked for before the search gives up.
+
+The width and depth caps bound how many directories are examined, which is the
+wrong thing to bound: the same seven thousand filesystem calls are thirty
+milliseconds on a local disk and several seconds on a mounted remote share,
+where every one of them is a round trip. A deadline bounds the part that
+varies. Giving up is not a failure: the library is reported missing, which is
+honest, and the path box in Settings is there to be told the answer."""
 
 
 def _search(library: str, tail: str) -> str | None:
@@ -166,18 +176,23 @@ def _search(library: str, tail: str) -> str | None:
     is gone, and the caller is told None for the file either way.
     """
     import os
+    import time
 
     if _missed.get(library, 0) >= SEARCH_TRIES:
         return None
 
-    # "Coyote vs. Acme (2026)" out of "Coyote vs. Acme (2026)/Coyote...mkv".
+    # "A Film (2026)" out of "A Film (2026)/A Film (2026).mkv".
     head = tail.split("/")[0]
+    deadline = time.monotonic() + SEARCH_SECONDS
 
     for root in roots():
         frontier = [root]
         for _ in range(SEARCH_DEPTH):
             below: list[str] = []
             for here in frontier:
+                if time.monotonic() > deadline:
+                    _missed[library] = _missed.get(library, 0) + 1
+                    return None
                 try:
                     with os.scandir(here) as entries:
                         children = [
@@ -187,7 +202,13 @@ def _search(library: str, tail: str) -> str | None:
                         ]
                 except OSError:
                     continue
-                for child in children[:SEARCH_WIDTH]:
+                for n, child in enumerate(children[:SEARCH_WIDTH]):
+                    # Checked every so often rather than every time, because
+                    # the clock is not free either and a local pass does
+                    # thousands of these.
+                    if n % 64 == 0 and time.monotonic() > deadline:
+                        _missed[library] = _missed.get(library, 0) + 1
+                        return None
                     if os.path.exists(f"{child}/{head}"):
                         _memory()[library] = child
                         _missed.pop(library, None)
@@ -754,6 +775,7 @@ async def _run(job_id: int) -> None:
     with session_scope() as db:
         job = db.get(MediaJob, job_id)
         source, asked = job.path, json.loads(job.steps or "[]")
+        rating_key = job.rating_key
     # Older jobs stored a bare list of steps; newer ones carry the choice too.
     steps = asked.get("steps", []) if isinstance(asked, dict) else asked
     chosen = asked.get("chosen", {}) if isinstance(asked, dict) else {}
@@ -768,8 +790,14 @@ async def _run(job_id: int) -> None:
 
     # Beside the original, on the same mount, so the swap at the end is a
     # rename rather than a copy across filesystems.
+    #
+    # The suffix decides the container ffmpeg writes, so it is the source's own
+    # unless repackaging is one of the steps. Writing mkv regardless would
+    # rename a perfectly good mp4 and delete it, for a job that was only asked
+    # to drop some subtitles.
     folder = os.path.dirname(source)
-    handle, target = tempfile.mkstemp(prefix=".cartographarr-", suffix=".mkv", dir=folder)
+    suffix = ".mkv" if "legacy_container" in steps else (os.path.splitext(source)[1] or ".mkv")
+    handle, target = tempfile.mkstemp(prefix=".cartographarr-", suffix=suffix, dir=folder)
     os.close(handle)
     argv = build(streams, steps, source, target, chosen)
     await asyncio.to_thread(_say, job_id, 0, "Reading the file")
@@ -814,13 +842,38 @@ async def _run(job_id: int) -> None:
         return
 
     after = os.path.getsize(target)
-    final = os.path.splitext(source)[0] + ".mkv"
+    final = os.path.splitext(source)[0] + suffix
     os.replace(target, final)
     if final != source:
         os.unlink(source)
+    await asyncio.to_thread(_rewritten, rating_key, final, after)
     changes = len(steps)
     word = "changes" if changes != 1 else "change"
     await asyncio.to_thread(_finish, job_id, "done", f"Tidied, {changes} {word} made", before - after)
+
+
+def _rewritten(rating_key: int | None, path: str, size: int) -> None:
+    """Record that the file on disk is no longer the one we read.
+
+    Without this the stored track list is still the one from before, so the
+    page goes on saying the file has the problem that was just fixed until the
+    next library scan, and if the name changed the stored path points at
+    something that has been deleted. Clearing file_checked_at is what the
+    replacement flow does for the same reason: the detail pass runs every
+    minute and reads it again.
+    """
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    if rating_key is None:
+        return
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is None:
+            return
+        item.file_path = path
+        item.file_size = size
+        item.file_checked_at = None
 
 
 def cancel(job_id: int) -> bool:

@@ -317,8 +317,23 @@ flood that Tautulli answers slowly for everybody, including the pages that are
 not asking for pictures at all."""
 
 
+POSTER_FORMAT = "jpg"
+"""What to ask Tautulli for.
+
+Left to itself it hands back whatever Plex has, which is PNG, and a 200x300
+poster comes to 120 KB. The same poster as JPEG is 21 KB. Posters are
+photographs, so there is nothing for PNG to do for them except be larger, and
+a page of sixty of them is the difference between seven megabytes and one.
+
+`jpeg` is not a synonym here: Tautulli accepts it, ignores it, and returns the
+PNG. It has to be `jpg`."""
+
+
 def _poster_file(rating_key: int, width: int, height: int) -> pathlib.Path:
-    return get_settings().data_dir / "posters" / f"{rating_key}-{width}x{height}.jpg"
+    # The extension is part of the name, so the PNGs cached by older builds
+    # are simply not found and are replaced on the next request rather than
+    # being served under the wrong type for ever.
+    return get_settings().data_dir / "posters" / f"{rating_key}-{width}x{height}.{POSTER_FORMAT}"
 
 
 def _poster_art(rating_key: int) -> str | None:
@@ -385,6 +400,7 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450):
         "width": width,
         "height": height,
         "fallback": "poster",
+        "img_format": POSTER_FORMAT,
     }
 
     async with POSTER_FETCHES:

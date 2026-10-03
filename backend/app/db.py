@@ -32,6 +32,14 @@ def _make_engine():
         cur = conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA foreign_keys=ON")
+        # SQLite's default is to give up the instant it meets a locked
+        # database rather than wait, which is the wrong answer here: the
+        # enforcer writes every five seconds, the sync writes in batches and
+        # request handlers write on top of both. The transactions are all
+        # short, so the overlaps are brief and five seconds is far more than
+        # any of them needs; it is there so a brief one is waited out instead
+        # of being raised into somebody's page.
+        cur.execute("PRAGMA busy_timeout=5000")
         cur.close()
 
     return engine
@@ -59,9 +67,37 @@ def init_db() -> None:
 
     Base.metadata.create_all(engine)
     _add_missing_columns()
+    _add_missing_indexes()
+
+
+def _add_missing_indexes() -> None:
+    """Create indexes the models declare but the database has not got.
+
+    `create_all` checks whether each table exists and skips the whole of one
+    that does, indexes included, so an index added to a model that already has
+    rows would never be created. That was handled for one index by hand, which
+    is evidence of the problem rather than a solution to it: the next one would
+    have been invisible in the same way, and silently, since a missing index
+    costs speed and nothing else.
+
+    The same shape as `_add_missing_columns`, and the same limit: this adds
+    what is missing and never drops or alters what is there.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
     with engine.begin() as conn:
-        # create_all never indexes an existing table.
-        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_history_reference_id ON history (reference_id)")
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            have = {i["name"] for i in inspector.get_indexes(table.name)}
+            for index in table.indexes:
+                if index.name in have:
+                    continue
+                index.create(conn, checkfirst=True)
+                log.info("Added index %s on %s", index.name, table.name)
 
 
 def _add_missing_columns() -> None:
