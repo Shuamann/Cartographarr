@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.53.0 - 2026-10-03
+
+### Added
+- The database backs itself up. Everything the app has worked out lives in one file and nowhere else: stall causes,
+  shared account signals, bans, rules, reported problems, keep decisions and every setting. Tautulli can rebuild the
+  raw history and none of the rest. A snapshot is taken daily, kept beside the live file so whatever already backs
+  up appdata gets it too, and the last seven are kept. Taken with VACUUM INTO while the database is in use, because
+  copying a SQLite file in WAL mode can catch it mid-transaction and produce something that will not open
+- Settings shows what time the server thinks it is, next to the backup hour and the rules. Every time-of-day rule
+  reads the container's clock, so a TZ that is not what you meant shifts them silently and for ever, and nothing
+  anywhere showed it
+
 ## 0.52.0 - 2026-10-03
 
 ### Added

@@ -152,6 +152,11 @@ const AREAS: Area[] = [
         keys: ["sync_page_size", "metadata_concurrency"],
       },
       {
+        title: "Backups",
+        note: "Everything this app has worked out lives in one file and nowhere else: stall causes, shared account signals, bans, rules, reported problems, keep decisions and every setting. Tautulli can rebuild the raw history and none of the rest. Snapshots are taken while the database is in use, so nothing stops, and they land beside it in the appdata volume, which means whatever already backs that up gets them too. Keep 0 to switch it off.",
+        keys: ["backup_keep", "backup_hour"],
+      },
+      {
         title: "When a job stops working",
         note: "A background job that breaks does not announce itself: the app simply stops having the right answer, and the only sign is the Tasks page, which nobody has reason to open. Three failures in a row sends one message through Apprise, then nothing more until it works again, so a job broken for a week is one message rather than three hundred. Quiet unless notifications are set up.",
         keys: ["task_alerts"],
@@ -397,6 +402,8 @@ const LABELS: Record<string, string> = {
   upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
   task_alerts: "Tell me when a job keeps failing",
+  backup_keep: "Snapshots to keep",
+  backup_hour: "Taken at",
   auth_proxy_enabled: "Trust a reverse proxy",
   allow_framing: "Allow showing inside other dashboards",
   plex_signin_enabled: "Offer Sign in with Plex",
@@ -461,6 +468,8 @@ const SHAPES: Record<string, FieldShape> = {
   impossible_min_km: { unit: "km", min: 0, max: 5000, step: 10 },
   impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
   session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
+  backup_keep: { unit: "snapshots", min: 0, max: 60, step: 1 },
+  backup_hour: { unit: "o'''clock", min: 0, max: 23, step: 1 },
   keep_subtitle_languages: { kind: "chips" },
   keep_audio_languages: { kind: "chips" },
   trusted_proxy_ips: { kind: "chips" },
@@ -924,6 +933,8 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             {section.note && <p className="muted small">{section.note}</p>}
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Schedule" && <SyncNow />}
+            {section.title === "Backups" && <ServerTime />}
+            {section.title === "Rules" && <ServerTime />}
             {section.title === "Tidying files" && (
               <MediaPaths
                 roots={String(draft.media_roots ?? byKey.get("media_roots")?.value ?? "")}
@@ -1601,6 +1612,24 @@ function MediaPaths({
         </p>
       )}
     </div>
+  );
+}
+
+/* What the server believes the time is.
+ *
+ * The backup hour and every time-of-day rule read the container's clock, which
+ * is whatever TZ says, and a wrong one shifts them silently and for ever.
+ * Showing it where those settings are is the whole fix.
+ */
+function ServerTime() {
+  const when = useApi<{ now: string; hour: number; zone: string }>("/server-time");
+  if (when.error || !when.data) return null;
+  const shown = new Date(when.data.now).toLocaleString();
+  return (
+    <p className="muted small">
+      The server thinks it is <strong>{shown}</strong> ({when.data.zone}). Times here and in rules mean that clock,
+      so if it is wrong, set TZ on the container.
+    </p>
   );
 }
 

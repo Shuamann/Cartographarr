@@ -264,6 +264,20 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    backup_keep: int = 7
+    """How many database snapshots to keep beside the live one. 0 turns it off.
+
+    Everything the app has worked out lives in one file and nowhere else:
+    stall causes, travel flags, bans, rules, reported problems, keep decisions,
+    every setting. Tautulli can reconstruct the raw history and none of the
+    rest. A week of daily snapshots is a few hundred megabytes against losing
+    all of it to a bad restore or a damaged volume."""
+
+    backup_hour: int = 4
+    """The hour, in the server's own time, to take it. Four in the morning on
+    the assumption that nobody is watching; Settings shows what the server
+    thinks the time is, in case TZ is not what you meant."""
+
     task_alerts: bool = True
     """Send word through Apprise when a background job keeps failing.
 

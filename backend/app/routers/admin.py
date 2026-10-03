@@ -127,6 +127,27 @@ def test_maxmind(
     }
 
 
+@router.get("/server-time")
+def server_time(_: AdminUser) -> dict:
+    """What the server believes the time is, and what it calls that.
+
+    Every time-of-day rule, and the hour a backup is taken, read the
+    container's clock, which is whatever TZ says. Set it wrong and "no
+    transcodes after ten" fires six hours out, silently and for ever. Nothing
+    anywhere showed this, so there was no way to notice.
+    """
+    import os
+    import time
+    from datetime import datetime
+
+    now = datetime.now()
+    return {
+        "now": now.isoformat(timespec="seconds"),
+        "hour": now.hour,
+        "zone": os.environ.get("TZ") or (time.tzname[time.daylight and time.localtime().tm_isdst > 0] or "unset"),
+    }
+
+
 @router.get("/settings")
 def get_settings() -> list[dict]:
     """Every setting, its value, and whether the environment owns it.

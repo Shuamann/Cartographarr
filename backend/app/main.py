@@ -56,6 +56,28 @@ async def _replacement_cycle() -> str:
     return f"{changed} changed" if changed else "nothing to update"
 
 
+async def _backup_cycle() -> dict | str:
+    """A snapshot of the database, around the hour asked for.
+
+    The scheduler runs this hourly and it does the work in one of them, which
+    keeps the task list honest (a job that says it runs daily and might not
+    have, versus one that runs hourly and usually has nothing to do) and
+    survives a restart without needing to remember when it last went.
+    """
+    import asyncio
+    from datetime import datetime
+
+    from app.services import backups
+
+    settings = current()
+    if settings.backup_keep <= 0:
+        raise tasks.Skipped("Backups are switched off")
+    if datetime.now().hour != settings.backup_hour % 24:
+        raise tasks.Skipped(f"Taken at {settings.backup_hour % 24:02d}:00")
+    result = await asyncio.to_thread(backups.take)
+    return result
+
+
 async def _slow_cycle() -> dict:
     if not is_configured():
         raise tasks.Skipped("Not set up yet")
@@ -69,6 +91,12 @@ async def _slow_cycle() -> dict:
 tasks.register(tasks.Task(
     "sync", "Sync history", "New plays, titles, file details, devices, locations, sharing signals and stall causes.",
     _cycle, lambda: current().sync_interval_minutes * 60,
+))
+tasks.register(tasks.Task(
+    "backup", "Back up the database",
+    "A snapshot of everything the app has worked out, kept beside the live file. Taken while it is in use, so "
+    "nothing has to stop.",
+    _backup_cycle, lambda: 3600, store_every_run=False,
 ))
 tasks.register(tasks.Task(
     "slow_sync", "Sync users and libraries", "Plex users, their shared libraries, libraries, and Plex's upload speed.",

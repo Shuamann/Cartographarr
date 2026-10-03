@@ -636,6 +636,24 @@ from Tautulli and history, so it works without a Plex token: everyone, the
 libraries shared with them, plays, when they last watched, their devices and
 any banned ones, with people who have not watched in 90 days first.
 
+## Backups
+
+Everything this app works out lives in one SQLite file and nowhere else: stall
+causes, shared account signals, bans, rules, reported problems, keep decisions
+and every setting. Tautulli can rebuild the raw history and none of the rest.
+
+A snapshot is taken once a day, at the hour set under **Settings, Syncing**,
+and the last seven are kept in `backups/` inside the appdata volume. They are
+taken with `VACUUM INTO` while the database is in use, so nothing stops and the
+result is consistent; copying the file instead would risk catching WAL mode
+mid-transaction and producing something that will not open.
+
+They sit beside the live file on purpose. What this protects against is a
+damaged database or a bad restore, not the array failing, and keeping them in
+appdata means whatever already backs that up carries them without being told.
+To restore, stop the container, swap the snapshot in as `cartographarr.db`, and
+start it.
+
 ## Monitoring
 
 A background job that keeps failing sends word through Apprise: three failures
