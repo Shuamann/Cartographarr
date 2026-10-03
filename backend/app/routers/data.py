@@ -1336,6 +1336,30 @@ def devices(db: Db, scope: ViewerScope, user_id: int | None = None, new_only: bo
     ]
 
 
+@router.post("/devices/review-all")
+def review_all_devices(admin: AdminUser) -> dict:
+    """Clear every "new device" flag at once.
+
+    An alert is only worth anything if the normal state is nought, and there
+    is no getting to nought from a backlog of twenty eight except by clicking
+    twenty eight times, which is why nobody ever has. This is the one click.
+    """
+    from app.models import Device
+
+    with session_scope() as db:
+        rows = db.execute(
+            update(Device).where(Device.is_new_unreviewed.is_(True)).values(is_new_unreviewed=False)
+        )
+        cleared = rows.rowcount or 0
+    if cleared:
+        audit.record(
+            admin, "device.review_all",
+            f"Marked {cleared} device{'s' if cleared != 1 else ''} as reviewed",
+            detail={"devices": cleared},
+        )
+    return {"reviewed": cleared}
+
+
 @router.post("/devices/{machine_id}/review")
 def review_device(machine_id: str, admin: AdminUser, reviewed: bool = True) -> dict:
     """Clear (or restore) the "new device" flag.

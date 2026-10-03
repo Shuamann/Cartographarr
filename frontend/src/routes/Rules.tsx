@@ -177,6 +177,7 @@ export default function RulesRoute({
             none of these run.
           </p>
         )}
+        <RunNow enabled={enforcing} />
         {locked && (
           <p className="note warn-note">
             ENFORCE_DRY_RUN is set in the container configuration, so every rule records only,
@@ -265,6 +266,51 @@ export default function RulesRoute({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Run the rules against what is playing, instead of waiting for the sweep.
+ *
+ * The endpoint for this has existed and been audited since rules were built,
+ * and nothing called it, so the only way to see whether a rule you just wrote
+ * does what you meant was to wait for the next poll and watch the Log. A rule
+ * that is recording only is the sensible thing to try this with, which is why
+ * the result says what it would have done as well as what it did.
+ */
+function RunNow({ enabled }: { enabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    setSaid(null);
+    setFailed(false);
+    try {
+      const r = await api.post<{ checked: number; matched: number; acted: number }>("/rules/run", {});
+      const streams = `${r.checked} stream${r.checked === 1 ? "" : "s"}`;
+      setSaid(
+        r.matched === 0
+          ? `Checked ${streams}. Nothing matched.`
+          : `Checked ${streams}. ${r.matched} matched, ${r.acted} acted on. The Log says which.`,
+      );
+    } catch (err) {
+      setFailed(true);
+      setSaid((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="row wrap sync-now">
+      <button className="btn" onClick={run} disabled={busy || !enabled}>
+        {busy ? "Running" : "Run the rules now"}
+      </button>
+      <span className={failed ? "note bad-note" : "muted small"}>
+        {said ?? "Against whatever is playing at this moment, instead of waiting for the next sweep."}
+      </span>
     </div>
   );
 }

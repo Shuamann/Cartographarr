@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.55.0 - 2026-10-03
+
+### Added
+- A sync that turns up a new device or a shared account signal says so, through Apprise. These are the two things
+  this app exists to notice and the two it never mentioned: both sat on a page until somebody went and looked. Only
+  ever about what that sync found, never the backlog
+- And a way to clear the backlog, on People and on the signals list. An alert is worth nothing unless the normal
+  state is nought, and there was no way to reach nought from twenty eight devices except by clicking twenty eight
+  times, which is presumably why nobody had. A count that reads the same number for three years says nothing
+- Why streams transcode now says whether any of it was done on a GPU. The app has always recorded this and never
+  mentioned it, and software transcoding spends most of a processor core on each stream where the same work on an
+  integrated GPU is nearly free. Said only when there are enough transcodes to mean something
+- A Run the rules now button on the Rules page. The endpoint behind it has existed and been audited since rules
+  were built and nothing called it, so the only way to see whether a rule did what you meant was to wait for the
+  next sweep and read the Log
+
 ## 0.54.0 - 2026-10-03
 
 ### Fixed

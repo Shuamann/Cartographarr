@@ -334,8 +334,8 @@ async def sync_libraries(client: TautulliClient) -> int:
 
 # ---- derived: devices ------------------------------------------------------
 
-def refresh_devices() -> int:
-    """Rebuild the device inventory from history.
+def refresh_devices() -> tuple[int, int]:
+    """Rebuild the device inventory from history, and say how many are new.
 
     One GROUP BY beats tracking device state during the history upsert, and it
     self-heals if a sync is ever interrupted mid-batch.
@@ -384,7 +384,10 @@ def refresh_devices() -> int:
             in grouped
         ]
         _upsert(session, Device, rows)
-        return len(rows)
+        # The ones this sync has just flagged, which is what is worth telling
+        # anybody about. The standing total is a backlog, not news.
+        fresh = sum(1 for row in rows if row.get("is_new_unreviewed"))
+        return len(rows), fresh
 
 
 # ---- geocoding -------------------------------------------------------------
@@ -629,6 +632,33 @@ async def cache_new_metadata(client: TautulliClient, settings: Settings) -> int:
 
 # ---- orchestration ---------------------------------------------------------
 
+async def _tell_about(new_devices: int, new_signals: int) -> None:
+    """Say what this sync turned up, if it turned up anything.
+
+    The two things the app exists to notice were the two it never mentioned.
+    Only what is new: a backlog nobody has worked through is not news, and
+    sending it every five minutes would teach anyone to ignore the lot.
+    """
+    from app.integrations.notify import apprise_notifier
+
+    if not (new_devices or new_signals):
+        return
+    try:
+        if not current_settings().watch_alerts:
+            return
+        parts = []
+        if new_devices:
+            parts.append(f"{new_devices} new device{'s' if new_devices != 1 else ''}")
+        if new_signals:
+            parts.append(f"{new_signals} shared account signal{'s' if new_signals != 1 else ''}")
+        await apprise_notifier.send(
+            "Worth a look",
+            " and ".join(parts) + ". People shows the devices; the map and the signals list show the rest.",
+        )
+    except Exception:  # noqa: BLE001 - a sync must not fail at saying so
+        log.exception("could not send word about what the sync found")
+
+
 async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
     """One full cycle. Safe to call concurrently with reads."""
     # Two one-time re-reads: history synced before episode numbers were kept
@@ -649,7 +679,7 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)
     metadata = await cache_new_metadata(client, settings)
-    devices = refresh_devices()
+    devices, new_devices = refresh_devices()
 
     resolver = GeoResolver(settings.geoip_dir)
     try:
@@ -676,6 +706,7 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
         "ips": ips,
         "travel_flags": flags,
     }
+    await _tell_about(new_devices, flags)
     with session_scope() as session:
         # For monitoring: a container that is up but has not synced in hours
         # looks healthy to everything else.

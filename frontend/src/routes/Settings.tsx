@@ -229,8 +229,8 @@ const AREAS: Area[] = [
       },
       {
         title: "Shared account detection",
-        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: a pair is ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance.",
-        keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km"],
+        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: a pair is ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance. A sync that turns up a new device or a new signal can send word through Apprise, which is the only way either is seen without going and looking; it is only ever about what that sync found, never the backlog.",
+        keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km", "watch_alerts"],
       },
       {
         title: "Access review",
@@ -402,6 +402,7 @@ const LABELS: Record<string, string> = {
   upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
   task_alerts: "Tell me when a job keeps failing",
+  watch_alerts: "Tell me about new devices and signals",
   backup_keep: "Snapshots to keep",
   backup_hour: "Taken at",
   auth_proxy_enabled: "Trust a reverse proxy",

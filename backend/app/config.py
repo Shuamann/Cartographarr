@@ -264,6 +264,19 @@ class Settings(BaseSettings):
     """Set true once served over HTTPS. Left false by default because a LAN
     install on plain http would otherwise never receive the cookie."""
 
+    watch_alerts: bool = True
+    """Send word when a sync turns up a new device or a shared account signal.
+
+    These are the two things this app exists to notice and the two it never
+    mentioned: both sat on a page until somebody went and looked, and on the
+    server this was written against twenty eight devices had been waiting since
+    2023 and no signal had ever been reviewed. A number that is always twenty
+    eight carries nothing; one that is usually nought and becomes one carries
+    everything, which is why there is also a way to clear the list.
+
+    Only ever about what the sync just found, never the backlog. Quiet unless
+    notifications are set up."""
+
     backup_keep: int = 7
     """How many database snapshots to keep beside the live one. 0 turns it off.
 

@@ -301,7 +301,27 @@ def transcode_causes(db: Session, days: int) -> dict[str, Any]:
             "titles": [{"rating_key": k, "title": e["names"].get(k), "streams": c} for k, c in e["titles"].most_common(5)],
         })
     out.sort(key=lambda r: -r["streams"])
-    return {"total_streams": total, "causes": out}
+
+    # One session can transcode for several reasons, so the per-cause counts
+    # add up to more than the number of streams. These are the streams.
+    transcoded = len(rows)
+    hardware = sum(1 for *_, hw in rows if hw)
+    return {
+        "total_streams": total,
+        "transcoded": transcoded,
+        "hardware": hardware,
+        "enough_to_judge": transcoded >= ENOUGH_TRANSCODES,
+        "causes": out,
+    }
+
+
+ENOUGH_TRANSCODES = 20
+"""Below this, "none of them used hardware" is not a finding about the server.
+
+Two software transcodes is a quiet week. Twenty with none of them accelerated
+is a setting that has never been turned on, which is worth saying, because
+software transcoding spends most of a core on each stream and the same work on
+an iGPU is nearly free."""
 
 
 def observed_trouble(db: Session, days: int) -> dict[int, Counter]:

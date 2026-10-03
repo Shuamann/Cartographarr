@@ -293,10 +293,16 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
 }
 function Transcodes({ days }: { days: number }) {
   const nav = useNav();
-  const data = useApi<{ total_streams: number; causes: CauseRow[] }>(`/library/transcodes?days=${days}`);
+  const data = useApi<{
+    total_streams: number;
+    transcoded: number;
+    hardware: number;
+    enough_to_judge: boolean;
+    causes: CauseRow[];
+  }>(`/library/transcodes?days=${days}`);
   if (data.error) return <p className="note bad-note">{data.error}</p>;
   if (!data.data) return <Loading label="Counting why streams transcoded" />;
-  const { total_streams, causes } = data.data;
+  const { total_streams, transcoded, hardware, enough_to_judge, causes } = data.data;
   return (
     <>
       <p className="muted">
@@ -306,6 +312,25 @@ function Transcodes({ days }: { days: number }) {
       <p className="small">
         <strong>{total_streams.toLocaleString()}</strong> <span className="muted">streams recorded in this period.</span>
       </p>
+      {/* The app has always recorded whether a transcode was done on a GPU and
+          has never said anything about it. Software transcoding spends most of
+          a core on each stream; the same work on an iGPU is nearly free, which
+          makes this the single most useful thing the numbers here can tell
+          somebody. */}
+      {enough_to_judge && hardware === 0 && (
+        <p className="note warn-note">
+          <strong>None of the {transcoded.toLocaleString()} transcoded streams used hardware.</strong> Every one was
+          done in software, which spends most of a processor core per stream. If this server has an integrated GPU
+          or a graphics card, switching on hardware acceleration in Plex under Settings, Transcoder is the single
+          biggest change available here. It needs Plex Pass.
+        </p>
+      )}
+      {enough_to_judge && hardware > 0 && hardware < transcoded && (
+        <p className="note">
+          {hardware.toLocaleString()} of {transcoded.toLocaleString()} transcoded streams used hardware. The rest
+          fell back to software, usually a format the card cannot handle or more streams at once than it will take.
+        </p>
+      )}
       {causes.length === 0 && <p className="muted">No transcodes recorded yet.</p>}
       <div className="cause-grid">
         {causes.map((c) => (

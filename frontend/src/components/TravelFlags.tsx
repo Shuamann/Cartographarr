@@ -59,6 +59,27 @@ export default function TravelFlags({
               {showIgnores ? "Hide ignored patterns" : `Ignored patterns ${patterns.length}`}
             </button>
           )}
+          {/* Not one of these had ever been reviewed on the server this was
+              written for, so the count had been a constant since there were
+              signals, and a constant says nothing. Getting to nought is what
+              makes the next one worth looking at. */}
+          {!showAll && rows.length > 1 && (
+            <button
+              className="tab"
+              title="Mark them all reviewed, so the next signal stands out"
+              onClick={async () => {
+                if (!window.confirm(`Mark all ${rows.length} signals as reviewed?`)) return;
+                try {
+                  await api.post("/travel-flags/review-all", {});
+                  changed();
+                } catch (err) {
+                  window.alert((err as Error).message);
+                }
+              }}
+            >
+              Mark all reviewed
+            </button>
+          )}
           <button className="tab" onClick={() => setShowAll(!showAll)}>
             {showAll ? "Unreviewed only" : "Show all"}
           </button>

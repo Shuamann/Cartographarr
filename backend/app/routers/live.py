@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
@@ -1473,6 +1473,28 @@ def travel_flag_detail(flag_id: int, db: Db, scope: ViewerScope) -> dict:
         else {c.name: getattr(pattern, c.name) for c in SignalIgnore.__table__.columns},
         "similar": similar,
     }
+
+
+@router.post("/travel-flags/review-all")
+def review_all_flags(admin: AdminUser) -> dict:
+    """Mark every open shared account signal as reviewed.
+
+    Same reason as the devices: on the server this was written against not one
+    signal had ever been reviewed, so the count had been a constant for as
+    long as there had been signals, and a constant says nothing.
+    """
+    with session_scope() as db:
+        rows = db.execute(
+            update(TravelFlag).where(TravelFlag.status == "new").values(status="reviewed")
+        )
+        cleared = rows.rowcount or 0
+    if cleared:
+        audit.record(
+            admin, "signal.review_all",
+            f"Marked {cleared} signal{'s' if cleared != 1 else ''} as reviewed",
+            detail={"signals": cleared},
+        )
+    return {"reviewed": cleared}
 
 
 @router.patch("/travel-flags/{flag_id}")

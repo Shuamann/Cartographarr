@@ -93,6 +93,7 @@ export default function PeopleRoute({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
+  const nav = useNav();
   const liveUsers = useMemo(
     () => new Set((live.data?.sessions ?? []).map((s) => Number(s.user_id))),
     [live.data],
@@ -210,6 +211,26 @@ export default function PeopleRoute({
             <button className={onlyDeleted ? "chip on" : "chip"} onClick={() => setOnlyDeleted(!onlyDeleted)}>
               Deleted in Tautulli {deletedCount || ""}
             </button>
+            {/* A count that has read the same number for years says nothing.
+                Clearing it is what makes the next one mean something, and
+                there was no way to do it except one device at a time. */}
+            {nav.isAdmin && newCount > 1 && (
+              <button
+                className="chip"
+                title="Clear the new flag on all of them, so the next new device stands out"
+                onClick={async () => {
+                  if (!confirm(`Mark all ${newCount} devices as reviewed?`)) return;
+                  try {
+                    await api.post("/devices/review-all", {});
+                    devices.reload();
+                  } catch (err) {
+                    window.alert((err as Error).message);
+                  }
+                }}
+              >
+                Mark all reviewed
+              </button>
+            )}
           </div>
         </div>
 
