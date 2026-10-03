@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.49.1 - 2026-10-03
+
+### Changed
+- A release in the list is one line. The badges, Waits and Auto included, sat under the name and made every row two
+  lines tall, which is half the point of a list gone. They sit beside the name now and the name gives up its end
+  instead, with the whole of it on hover. Eight releases take 640 pixels rather than 940
+
 ## 0.49.0 - 2026-10-03
 
 ### Added

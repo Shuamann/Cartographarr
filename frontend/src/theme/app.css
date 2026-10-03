@@ -4643,7 +4643,7 @@ label.locked .pill {
 
 .table.releases th.num,
 .table.releases td.num {
-  width: 92px;
+  width: 76px;
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -4665,7 +4665,30 @@ label.locked .pill {
 }
 
 .table.releases td {
-  vertical-align: top;
+  vertical-align: middle;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+/* The name takes the slack and gives up its end; the badges keep their width
+   and stay on the line. */
+.release-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.release-cell .release-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.release-cell .release-badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
 .release-name {
@@ -4673,13 +4696,10 @@ label.locked .pill {
   font-weight: 500;
 }
 
-.table.releases .release-badges {
-  margin-top: 4px;
-  gap: 4px;
-}
-
 .table.releases .release-badges .pill {
+  padding: 2px 7px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 /* A release the service would refuse is still shown, greyed, because knowing

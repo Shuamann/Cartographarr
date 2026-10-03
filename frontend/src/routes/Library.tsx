@@ -1321,23 +1321,27 @@ function ReleasePicker({
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.guid} className={r.blocked ? "blocked" : undefined}>
+                    {/* Name and badges on one line: the name gives up its end
+                        rather than the row growing a second line for them. */}
                     <td>
-                      <span className="clip release-name" title={r.title}>
-                        {r.title}
-                      </span>
-                      <span className="row wrap release-badges">
-                        {r.parsed.resolution && <span className="pill">{r.parsed.resolution}</span>}
-                        {r.parsed.source && <span className="pill">{r.parsed.source}</span>}
-                        {r.parsed.video_codec && <span className="pill">{r.parsed.video_codec}</span>}
-                        {r.parsed.hdr && <span className="pill">{r.parsed.hdr}</span>}
-                        {r.parsed.audio_codec && (
-                          <span className="pill">
-                            {r.parsed.audio_codec}
-                            {r.parsed.audio_channels ? ` ${r.parsed.audio_channels}ch` : ""}
-                          </span>
-                        )}
-                        <span className={r.held ? "pill ok" : "pill warn"}>{r.held ? "Waits" : "Auto"}</span>
-                      </span>
+                      <div className="release-cell">
+                        <span className="clip release-name" title={r.title}>
+                          {r.title}
+                        </span>
+                        <span className="release-badges">
+                          {r.parsed.resolution && <span className="pill">{r.parsed.resolution}</span>}
+                          {r.parsed.source && <span className="pill">{r.parsed.source}</span>}
+                          {r.parsed.video_codec && <span className="pill">{r.parsed.video_codec}</span>}
+                          {r.parsed.hdr && <span className="pill">{r.parsed.hdr}</span>}
+                          {r.parsed.audio_codec && (
+                            <span className="pill">
+                              {r.parsed.audio_codec}
+                              {r.parsed.audio_channels ? ` ${r.parsed.audio_channels}ch` : ""}
+                            </span>
+                          )}
+                          <span className={r.held ? "pill ok" : "pill warn"}>{r.held ? "Waits" : "Auto"}</span>
+                        </span>
+                      </div>
                     </td>
                     {/* The count, with what they are on hover: five words a row
                         would push everything else off the screen. */}
