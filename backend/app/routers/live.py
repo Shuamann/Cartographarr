@@ -1603,16 +1603,29 @@ def delete_signal_ignore(ignore_id: int, admin: AdminUser) -> dict:
 # ---- dashboard -------------------------------------------------------------
 
 @router.get("/dashboard")
-async def dashboard(db: Db, filters: Filt, scope: ViewerScope) -> dict:
+async def dashboard(filters: Filt, scope: ViewerScope) -> dict:
     """Everything the landing screen needs, composed in one call.
 
-    Live activity is awaited here; the history counts run in a worker thread,
-    since on a large history they take long enough to hold up every other
-    request if run on the event loop."""
+    No database session as a dependency, on purpose. Taking one here would
+    have FastAPI open it before this function starts and hold it for the whole
+    of the Tautulli round trip below, which is one connection out of fifteen
+    for as long as Tautulli takes to answer, multiplied by every browser with
+    this page open. That is the shape that took the whole app down when the
+    poster wall was added, and this was the last place still doing it.
+
+    Live activity is awaited first; the history counts then run in a worker
+    thread with their own session, since on a large history they take long
+    enough to hold up every other request if run on the event loop.
+    """
     import asyncio
 
-    live = await activity(db, scope)
-    return await asyncio.to_thread(_dashboard_payload, db, filters, scope, live)
+    live = await activity(None, scope)
+
+    def counts() -> dict:
+        with session_scope() as db:
+            return _dashboard_payload(db, filters, scope, live)
+
+    return await asyncio.to_thread(counts)
 
 
 def _dashboard_payload(db: Session, filters: Filters, scope: "privacy.Scope | None", live: dict) -> dict:

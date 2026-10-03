@@ -1247,7 +1247,7 @@ function Drawer({
 
           <h3 id="loc-users" className={focus === "users" ? "lit" : undefined}>Users</h3>
               <div className="mini-list">
-                {detail.data?.users.map((u) => (
+                {detail.data?.users?.map((u) => (
                   <div key={u.user_id ?? u.name} className="mini">
                     <div>
                       {u.user_id != null && onOpenUser ? (
@@ -1266,7 +1266,7 @@ function Drawer({
 
           <h3 id="loc-devices" className={focus === "devices" ? "lit" : undefined}>Devices</h3>
               <div className="mini-list">
-                {detail.data?.devices.map((d) => (
+                {detail.data?.devices?.map((d) => (
                   <div key={d.machine_id} className="mini">
                     <div>
                       {nav.openDevice ? (
@@ -1287,7 +1287,7 @@ function Drawer({
 
           <h3 id="loc-addresses" className={focus === "addresses" ? "lit" : undefined}>Addresses</h3>
               <div className="mini-list">
-                {detail.data?.addresses.map((a) => (
+                {detail.data?.addresses?.map((a) => (
                   <div key={a.ip_address} className="mini">
                     <div>
                       {nav.openAddress ? (
@@ -1309,9 +1309,9 @@ function Drawer({
 
       {tab === "watched" && (
             <>
-              {recent.data?.items.length === 0 && <p className="muted small">Nothing recorded.</p>}
+              {recent.data?.items?.length === 0 && <p className="muted small">Nothing recorded.</p>}
               <div className="mini-list">
-                {recent.data?.items.map((row) => (
+                {recent.data?.items?.map((row) => (
                   <div key={row.row_id}>
                     <button
                       className="mini as-row"
@@ -1550,7 +1550,7 @@ function firstSymbolLayer(map: maplibregl.Map): string | undefined {
 function BlockCountry({ code, name }: { code: string; name: string | null }) {
   const [state, setState] = useState<"idle" | "saving" | "done" | string>("idle");
   const listed = useApi<{ items: { code: string; mode: string }[] }>("/geoblocks");
-  const already = listed.data?.items.find((c) => c.code === code.toUpperCase());
+  const already = listed.data?.items?.find((c) => c.code === code.toUpperCase());
 
   if (already) {
     return (

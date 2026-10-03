@@ -44,7 +44,7 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
   const claiming = state.needs_claim;
   const branding = useBranding();
   const name = branding.data?.app_name ?? "Cartographarr";
-  const hasLogo = branding.data?.images.login_logo;
+  const hasLogo = branding.data?.images?.login_logo;
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

@@ -493,7 +493,7 @@ function RaiseIssue({ onDone }: { onDone: (id: number) => void }) {
                     </span>
                   </button>
                 ))}
-                {recent.data?.items.length === 0 && <p className="muted small">Nothing has been watched yet.</p>}
+                {recent.data?.items?.length === 0 && <p className="muted small">Nothing has been watched yet.</p>}
               </div>
             </>
           )}

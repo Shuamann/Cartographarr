@@ -236,7 +236,7 @@ export default function Reports() {
             <p className="muted">{source.blurb}</p>
           </div>
           <div className="report-actions">
-            <button className="btn" onClick={() => result.data && downloadCsv(spec.name, result.data)} disabled={!result.data?.rows.length}>
+            <button className="btn" onClick={() => result.data && downloadCsv(spec.name, result.data)} disabled={!result.data?.rows?.length}>
               Download CSV
             </button>
             {nav.isAdmin && savedRow && (

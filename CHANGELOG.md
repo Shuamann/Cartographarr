@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.54.0 - 2026-10-03
+
+### Fixed
+- The dashboard held a database connection for the whole of the Tautulli round trip, once for every browser with the
+  page open, out of a pool of fifteen. That is the shape that took the app down when the poster wall was added, and
+  this was the last place still doing it. It waits for Tautulli first and opens a session afterwards, in the thread
+  that needs it
+- An answer in an unexpected shape was a blank page with no message. Eleven places guarded the outer object and
+  walked straight into the inner one, and the worst of them was the sign-in screen, which had no error boundary
+  above it at all. The guards go all the way through now, and the boundary wraps the whole app rather than only the
+  page inside it
+
 ## 0.53.0 - 2026-10-03
 
 ### Added

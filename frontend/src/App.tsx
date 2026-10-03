@@ -47,6 +47,19 @@ import { unban, unbanAddress } from "./lib/bans";
 import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
 
 export default function App() {
+  /* Wrapped here as well as around the active tab. The inner one keeps a
+   * broken page from taking the rest of the app with it; this one is for
+   * everything above it, including the sign-in screen, which had nothing over
+   * it at all. A 200 carrying unexpected JSON used to be a white page with no
+   * message, which is the worst thing a failure can look like. */
+  return (
+    <ErrorBoundary name="Cartographarr">
+      <Everything />
+    </ErrorBoundary>
+  );
+}
+
+function Everything() {
   const auth = useApi<AuthState>("/auth/state");
   const [tab, setTab] = useState<Tab>(() => {
     let wanted = new URLSearchParams(window.location.search).get("tab");
@@ -361,7 +374,7 @@ function Brand() {
     }
   }, [branding.data, name]);
 
-  if (branding.data?.images.logo) {
+  if (branding.data?.images?.logo) {
     return <img className="brand-mark" src={brandingUrl("logo")} alt={name} />;
   }
   return <div className="brand">{name}</div>;

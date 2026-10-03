@@ -106,7 +106,7 @@ export default function HistoryRoute({
               </tr>
             </thead>
             <tbody>
-              {data.data?.items.map((row) => [
+              {data.data?.items?.map((row) => [
                 <tr
                   key={row.row_id}
                   className={open === row.row_id ? "loc-row selected" : "loc-row"}

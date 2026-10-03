@@ -26,6 +26,16 @@ def test_live_activity_takes_no_session_either():
     assert "db" not in inspect.signature(live.activity_endpoint).parameters
 
 
+def test_the_dashboard_does_not_hold_one_either():
+    """It awaits Tautulli before counting anything, so a session taken as a
+    dependency would be held for the whole round trip, once per open browser.
+    The counts open their own inside the worker thread."""
+    from app.routers import live
+
+    assert "db" not in inspect.signature(live.dashboard).parameters
+    assert "session_scope" in inspect.getsource(live.dashboard)
+
+
 def test_a_kept_poster_is_served_from_disk(client, tmp_path, monkeypatch):
     claim(client)
     kept = data_router._poster_file(99, 200, 300)
