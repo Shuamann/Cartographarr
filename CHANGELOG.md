@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.57.0 - 2026-10-03
+
+### Changed
+- Files worth attention sends the row rather than the file. Each of the three questions behind it selects what it
+  needs for its own sorting, and the answer was being passed on whole: every subtitle track, the full path, and
+  every finding with its entire description, two hundred times over, so the page could print one line of it. 420 KB
+  to draw 57. It is 67 KB now, and 8 KB over the wire
+- A rebuild no longer reinstalls every dependency. They sit on their own layer, so changing a line of Python does
+  not fetch sixty packages again. The shadowing problem that made this look impossible is handled by uninstalling
+  the placeholder package, which leaves everything it pulled in behind
+
+### Removed
+- Five routes nothing called: the two library lists that Files worth attention replaced, the enforcement log the
+  Log page does not read, and the sync status Settings shows under Tasks. The two library ones were tested, which
+  made them look maintained; those tests now ask the services directly, which is what they were really about
+
 ## 0.56.0 - 2026-10-03
 
 ### Changed

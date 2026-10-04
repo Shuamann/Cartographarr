@@ -12,7 +12,7 @@ from app import audit
 from app.auth.deps import AdminUser
 from app.db import session_scope
 from app.geo.lookup import ensure_databases
-from app.models import History, IpLocation, MediaItem, SyncState
+from app.models import History
 from app.services import sync as sync_service
 from app.settings_store import (
     current,
@@ -186,27 +186,6 @@ def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[d
         detail=changes,
     )
     return get_settings()
-
-
-@router.get("/sync/status")
-def sync_status() -> dict:
-    with session_scope() as session:
-        counts = session.execute(
-            select(
-                select(func.count()).select_from(History).scalar_subquery(),
-                select(func.count()).select_from(IpLocation).scalar_subquery(),
-                select(func.count()).select_from(MediaItem).scalar_subquery(),
-            )
-        ).one()
-        state = {row.key: row.value for row in session.execute(select(SyncState)).scalars()}
-
-    return {
-        "running": _sync_lock.locked(),
-        "history_rows": counts[0],
-        "ip_locations": counts[1],
-        "media_items": counts[2],
-        "state": state,
-    }
 
 
 @router.post("/sync/run")

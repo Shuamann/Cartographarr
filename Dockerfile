@@ -29,15 +29,23 @@ WORKDIR /srv
 # Above the source, so an ordinary code change never recopies them.
 COPY --from=ffmpeg /ffmpeg /ffprobe /usr/local/bin/
 
-# Source first, then one install. A dep-caching layer is possible by copying
-# pyproject alone and faking a package dir, but that leaves an empty `app` in
-# site-packages shadowing the real one, a bad trade for ~40s of rebuild.
+# pip itself ships with advisories against it in the base image, and it is the
+# one package here that installs other packages.
+RUN pip install --no-cache-dir --upgrade pip
+
+# Dependencies on their own layer, so changing a line of Python does not fetch
+# sixty packages again. The obvious way to do this leaves an empty `app` in
+# site-packages shadowing the real one, which is why it was not done before;
+# uninstalling the package afterwards removes the shadow and keeps everything
+# it pulled in. The second install is --no-deps, so it is close to instant.
 COPY backend/pyproject.toml ./
+RUN mkdir -p app && touch app/__init__.py \
+ && pip install --no-cache-dir . \
+ && pip uninstall -y cartographarr
+
 COPY backend/app ./app
 COPY backend/scripts ./scripts
-# pip itself ships with advisories against it in the base image, and it is
-# the one package here that installs other packages.
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 # main.py looks here for the built UI and serves API-only if it's absent.
 COPY --from=ui /ui/dist /srv/static

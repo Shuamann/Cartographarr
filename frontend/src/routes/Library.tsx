@@ -46,6 +46,19 @@ type FileInfo = {
   issues: string[];
 };
 
+/* What a row in any of these lists needs, which is far less than a file.
+ *
+ * `FileRow` draws a title, some badges, some stats and the first finding; the
+ * card underneath fetches the file properly when it is opened. Typing the
+ * prop as a whole FileInfo made the server send one, which was most of a 420
+ * kilobyte payload for a page that draws 57. */
+type RowSummary = {
+  rating_key: number;
+  title: string;
+  finding?: string | null;
+  findings_count?: number;
+};
+
 type Overview = {
   titles: number;
   checked: number;
@@ -484,7 +497,7 @@ function Requests() {
 }
 
 /* One file in any list: a summary that opens to the whole file. */
-function FileRow({ file, badges, stats, days }: { file: FileInfo; badges: ReactNode[]; stats: (string | null)[]; days: number }) {
+function FileRow({ file, badges, stats, days }: { file: RowSummary; badges: ReactNode[]; stats: (string | null)[]; days: number }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -495,10 +508,10 @@ function FileRow({ file, badges, stats, days }: { file: FileInfo; badges: ReactN
           </span>
           <div className="row wrap file-badges">{badges}</div>
           <p className="muted small">{stats.filter(Boolean).join(" · ")}</p>
-          {file.findings && file.findings.length > 0 && (
+          {file.finding && (
             <p className="small finding-summary">
-              {file.findings[0].title}
-              {file.findings.length > 1 ? ` and ${file.findings.length - 1} more` : ""}
+              {file.finding}
+              {(file.findings_count ?? 1) > 1 ? ` and ${(file.findings_count ?? 1) - 1} more` : ""}
             </p>
           )}
         </div>
@@ -2510,14 +2523,15 @@ function FileDialog({ ratingKey, days, onClose }: { ratingKey: number; days: num
 type Kept = { rating_key: number; title: string; reason: string | null; kept_by: string | null; kept_at: string | null };
 type Lens = "trouble" | "messy" | "room";
 
-type AttentionRow = FileInfo & {
+type AttentionRow = RowSummary & {
   kind: Lens;
   why: string | null;
   store: string;
   plays?: number;
-  remote_plays?: number;
-  last_play?: number | null;
-  findings?: Finding[];
+  media_type: string | null;
+  year: number | null;
+  file_bitrate: number | null;
+  file_size: number | null;
 };
 
 const LENSES: { id: Lens; label: string; blurb: string }[] = [

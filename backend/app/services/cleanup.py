@@ -226,11 +226,21 @@ def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> di
 
 def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int,
          named: dict[str, str] | None = None) -> dict[str, Any]:
-    """Every row the same shape, whichever question found it.
+    """Every row the same shape, whichever question found it, and no wider than
+    the row on screen.
 
-    Including the findings: a file listed for taking up room still gets the
-    same "what is wrong and how to fix it" as one listed for stalling, because
-    the answer to both might be the same better copy.
+    Named field by field rather than spread from whatever the query returned.
+    The three queries behind this each select what they need for their own
+    sorting, which is a good deal more than a row shows, and spreading it sent
+    the lot: the subtitle track list of every file, the full path, and every
+    finding with its whole description, two hundred times over, so that the
+    page could print one line of it. Four hundred and twenty kilobytes to draw
+    fifty seven.
+
+    The findings are still worked out, because a file listed for taking up room
+    deserves the same "what is wrong and how to fix it" as one listed for
+    stalling, and because the count is part of the row. Only the first one's
+    title travels; opening the row fetches the file properly.
     """
     from app.services.findings import explain
     from app.services.stores import name_for
@@ -240,11 +250,18 @@ def _row(file: dict[str, Any], kind: str, why: str | None, threshold_kbps: int,
         findings = explain(file, threshold_kbps, None, None,
                            "Sonarr" if file.get("media_type") == "episode" else "Radarr")
     return {
-        **file,
+        "rating_key": file.get("rating_key"),
+        "title": file.get("title"),
+        "media_type": file.get("media_type"),
+        "year": file.get("year"),
+        "file_bitrate": file.get("file_bitrate"),
+        "file_size": file.get("file_size"),
+        "plays": file.get("plays"),
         "kind": kind,
         "why": why,
-        "findings": findings,
         "store": file.get("store") or name_for(file.get("file_path"), named),
+        "finding": (findings[0] or {}).get("title") if findings else None,
+        "findings_count": len(findings or []),
     }
 
 

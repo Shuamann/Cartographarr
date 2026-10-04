@@ -64,30 +64,45 @@ def seed():
 
 
 def test_problem_files(client):
+    """Asked of the service rather than through a route.
+
+    There was an endpoint in front of this that nothing in the interface
+    called; Files worth attention replaced it and reads the service directly.
+    The behaviour is worth keeping, so the test moved down to where it lives
+    rather than keeping a route alive to be tested through.
+    """
+    from app.db import session_scope
+    from app.services import library
+
     claim(client)
     seed()
-    rows = {r["title"]: r for r in client.get("/api/library/problems?threshold_mbps=20").json()}
-    assert set(rows) == {"Remux", "Stalls", "Transcoded everywhere", "Big 4K"}
-    assert rows["Remux"]["reasons"] == ["over_threshold"]
-    assert rows["Stalls"]["reasons"] == ["stalls"] and rows["Stalls"]["stalls"] == 1
-    assert rows["Transcoded everywhere"]["reasons"] == ["mostly_transcoded"]
-    assert rows["Transcoded everywhere"]["causes"] == ["audio_codec"]
-    # A higher threshold drops the remux, nothing else changes.
-    assert "Remux" not in {r["title"] for r in client.get("/api/library/problems?threshold_mbps=80").json()}
+    with session_scope() as db:
+        rows = {r["title"]: r for r in library.problem_files(db, 20_000, 90)}
+        assert set(rows) == {"Remux", "Stalls", "Transcoded everywhere", "Big 4K"}
+        assert rows["Remux"]["reasons"] == ["over_threshold"]
+        assert rows["Stalls"]["reasons"] == ["stalls"] and rows["Stalls"]["stalls"] == 1
+        assert rows["Transcoded everywhere"]["reasons"] == ["mostly_transcoded"]
+        assert rows["Transcoded everywhere"]["causes"] == ["audio_codec"]
+        # A higher threshold drops the remux, nothing else changes.
+        assert "Remux" not in {r["title"] for r in library.problem_files(db, 80_000, 90)}
 
 
 def test_messy_files(client):
+    """The same, for the other endpoint that nothing called."""
+    from app.db import session_scope
+    from app.services import library
+
     claim(client)
     seed()
-    data = client.get("/api/library/messy").json()
-    issues = {f["title"]: f["issues"] for f in data["files"]}
-    assert issues["Transcoded everywhere"] == ["no_compatible_audio"]
-    assert set(issues["Anime"]) == {"styled_subtitles", "subtitle_clutter"}
-    assert set(issues["Old"]) == {"untagged_audio", "legacy_container"}
-    assert "Small" not in issues
-    only = client.get("/api/library/messy?issue=legacy_container").json()
-    assert [f["title"] for f in only["files"]] == ["Old"]
-    assert client.get("/api/library/messy?issue=nope").status_code == 400
+    with session_scope() as db:
+        data = library.messy_files(db, 90)
+        issues = {f["title"]: f["issues"] for f in data["files"]}
+        assert issues["Transcoded everywhere"] == ["no_compatible_audio"]
+        assert set(issues["Anime"]) == {"styled_subtitles", "subtitle_clutter"}
+        assert set(issues["Old"]) == {"untagged_audio", "legacy_container"}
+        assert "Small" not in issues
+        only = library.messy_files(db, 90, "legacy_container")
+        assert [f["title"] for f in only["files"]] == ["Old"]
 
 
 def test_a_file_that_was_converted_for_viewers_counts_as_awkward(client):
@@ -107,7 +122,11 @@ def test_a_file_that_was_converted_for_viewers_counts_as_awkward(client):
                              player="A stick", transcode_decision="transcode",
                              started_at=datetime.now(UTC) - timedelta(days=1)))
 
-    messy = client.get("/api/library/messy?days=30").json()
+    from app.db import session_scope as scope
+    from app.services import library as lib
+
+    with scope() as db:
+        messy = lib.messy_files(db, 30)
     listed = {f["rating_key"]: f for f in messy["files"]}
     assert 77 in listed, "a file proved awkward by what happened should be listed"
     assert "audio_converted" in listed[77]["issues"]
@@ -115,7 +134,8 @@ def test_a_file_that_was_converted_for_viewers_counts_as_awkward(client):
     assert counts["audio_converted"] == 1
     # And it is not double counted when the track list already said so.
     assert counts["no_compatible_audio"] >= 1
-    only = client.get("/api/library/messy?issue=audio_converted").json()
+    with scope() as db:
+        only = lib.messy_files(db, 30, "audio_converted")
     assert [f["rating_key"] for f in only["files"]] == [77]
 
 
@@ -174,7 +194,7 @@ def test_unwatched_requests(client, monkeypatch):
 
 def test_library_is_admin_only(client):
     as_viewer(client, "all")
-    for path in ("overview", "problems", "transcodes", "messy", "four-k", "requests", "file/1"):
+    for path in ("overview", "transcodes", "four-k", "requests", "file/1"):
         assert client.get(f"/api/library/{path}").status_code == 403, path
 
 

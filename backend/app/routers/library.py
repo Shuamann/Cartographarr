@@ -48,22 +48,9 @@ def overview(_: AdminUser, db: Db) -> dict:
     }
 
 
-@router.get("/problems")
-def problems(_: AdminUser, db: Db, days: int = Days, threshold_mbps: float | None = Query(None, ge=0.5, le=500)) -> list:
-    threshold = threshold_mbps if threshold_mbps is not None else current().library_bitrate_threshold_mbps
-    return library.problem_files(db, int(threshold * 1000), days)
-
-
 @router.get("/transcodes")
 def transcodes(_: AdminUser, db: Db, days: int = Days) -> dict:
     return library.transcode_causes(db, days)
-
-
-@router.get("/messy")
-def messy(_: AdminUser, db: Db, days: int = Days, issue: str | None = None) -> dict:
-    if issue is not None and issue not in library.ISSUES:
-        raise HTTPException(400, f"No such issue. Try: {', '.join(library.ISSUES)}")
-    return library.messy_files(db, days, issue)
 
 
 @router.get("/four-k")
