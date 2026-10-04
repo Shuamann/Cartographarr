@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.60.0 - 2026-10-03
+
+### Added
+- A file with something already happening to it says so wherever it is listed. Both the poster wall and Files worth
+  attention now carry a "tidying" or "being replaced" marker, so browsing for a replacement for something that is
+  already downloading no longer looks like a file nobody has touched.
+
+### Changed
+- The remediation queue, and the count beside it in the Library nav, fill in the moment something is queued rather
+  than on the next visit to the page. Queueing happens on one page and shows up on another, which made a file sent
+  to Radarr look like it had gone nowhere.
+- Asking for a replacement says what it is doing while it is doing it. The request can take a few seconds, and the
+  picker used to sit there unchanged, which is how the same file gets asked for twice. The button now reads
+  "Asking Radarr..." and the other releases are held until the answer comes back.
+
+### Fixed
+- Two places still sent you to "Library, Replacements" for a queued replacement. That section is called the
+  remediation queue now.
+
 ## 0.59.0 - 2026-10-03
 
 ### Added

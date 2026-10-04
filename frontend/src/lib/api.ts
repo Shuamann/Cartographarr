@@ -81,6 +81,19 @@ const inflight = new Map<string, Promise<unknown>>();
 /* Everything cached is dropped when anything is written, because working out
  * which write affects which answer is exactly the complexity this is trying
  * not to have. A few seconds of re-fetching after a save costs nothing. */
+/* Something was added to the remediation queue.
+ *
+ * The queue, and the count beside it in the Library nav, are fetched by
+ * components that are not mounted when the thing that queued the work was
+ * clicked. Without this they only catch up on the next visit, so a file you
+ * just sent to Radarr appears to have gone nowhere. The ban lists already
+ * worked this way; this is the same idea for the other queue. */
+export const QUEUE_CHANGED = "cartographarr:queue-changed";
+
+export function queueChanged(): void {
+  window.dispatchEvent(new Event(QUEUE_CHANGED));
+}
+
 export function forgetCached(): void {
   held.clear();
 }

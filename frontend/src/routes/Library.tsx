@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
-import { api, useApi } from "../lib/api";
+import { QUEUE_CHANGED, api, queueChanged, useApi } from "../lib/api";
 import { useNav } from "../lib/nav";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
@@ -186,6 +186,32 @@ export default function Library() {
   const current = SECTIONS.find((s) => s.id === section)!;
   const replacementList = useApi<Replacement[]>("/library/replacements");
   const tidyList = useApi<TidyJob[]>("/library/tidy/jobs?limit=30");
+
+  // Queueing happens on one page and shows up on another, so the queue and the
+  // count beside it are told rather than left to catch up on the next visit.
+  useEffect(() => {
+    const again = () => {
+      replacementList.reload();
+      tidyList.reload();
+    };
+    window.addEventListener(QUEUE_CHANGED, again);
+    return () => window.removeEventListener(QUEUE_CHANGED, again);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* Which files already have something happening to them, so a list can say
+   * so rather than letting somebody ask for the same replacement twice while
+   * the first one is still downloading. */
+  const inFlight = useMemo(() => {
+    const out = new Map<number, string>();
+    for (const r of tidyList.data ?? []) {
+      if (r.status === "running" || r.status === "queued") out.set(r.rating_key, "tidying");
+    }
+    for (const r of replacementList.data ?? []) {
+      if (ACTIVE_STATUSES.includes(r.status)) out.set(r.rating_key, "being replaced");
+    }
+    return out;
+  }, [tidyList.data, replacementList.data]);
   const waiting = (replacementList.data ?? []).filter((r) => r.status === "ready").length;
   const working = (tidyList.data ?? []).filter((j) => j.status === "running" || j.status === "queued").length;
 
@@ -227,8 +253,8 @@ export default function Library() {
           )}
         </header>
         {section === "overview" && <OverviewSection onOpen={setSection} />}
-        {section === "browse" && <Browse days={days} />}
-        {section === "attention" && <Attention days={days} />}
+        {section === "browse" && <Browse days={days} inFlight={inFlight} />}
+        {section === "attention" && <Attention days={days} inFlight={inFlight} />}
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
@@ -757,6 +783,7 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
             }
           : {},
       });
+      queueChanged();
       setMessage({ text: "Queued. It runs one file at a time, and the Remediation queue shows how far along it is.", ok: true });
     } catch (err) {
       setMessage({ text: (err as Error).message, ok: false });
@@ -1208,6 +1235,7 @@ function ReleasePicker({
   const [hideBlocked, setHideBlocked] = useState(true);
   const [hideHeld, setHideHeld] = useState(false);
   const [queued, setQueued] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1216,15 +1244,22 @@ function ReleasePicker({
 
   async function queue(release: Release) {
     const how = release.held
-      ? `${label} does not rate it as an upgrade, so once downloaded it waits in Library, Replacements for you to confirm or deny.`
+      ? `${label} does not rate it as an upgrade, so once downloaded it waits in Library, Remediation queue for you to confirm or deny.`
       : `${label} rates it as an upgrade, so it will import it as soon as it is downloaded, without waiting for you.`;
     if (!confirm(`Download this replacement for ${title}?\n\n${release.title}\n\n${how}`)) return;
     setError(null);
+    // Asking the service can take a few seconds, and until now the dialog sat
+    // there looking like nothing had happened, which is how a file gets asked
+    // for twice.
+    setAsking(release.guid);
     try {
       await api.post(`/library/file/${ratingKey}/replace`, { release });
       setQueued(release.guid);
+      queueChanged();
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setAsking(null);
     }
   }
 
@@ -1273,7 +1308,8 @@ function ReleasePicker({
           slowHint="A live search across every indexer, which often takes half a minute or more."
         />
       )}
-      {queued && <p className="note ok-note">Queued. Follow it in Library, Replacements.</p>}
+      {asking && <p className="note">Asking {label} to start the download\u2026</p>}
+      {queued && <p className="note ok-note">Queued. Follow it under Library, Remediation queue.</p>}
       {error && <p className="note bad-note">{error}</p>}
 
       {found.data && (
@@ -1412,8 +1448,8 @@ function ReleasePicker({
                       {r.indexer ?? "?"}
                     </td>
                     <td>
-                      <button className="tab" disabled={Boolean(queued)} onClick={() => queue(r)}>
-                        {queued === r.guid ? "Queued" : "Get"}
+                      <button className="tab" disabled={Boolean(queued || asking)} onClick={() => queue(r)}>
+                        {queued === r.guid ? "Queued" : asking === r.guid ? "Asking" : "Get"}
                       </button>
                     </td>
                   </tr>
@@ -1485,8 +1521,8 @@ function ReleasePicker({
                     <p className="muted small">{r.rejections.join(". ")}</p>
                   )}
 
-                  <button className="btn" disabled={Boolean(queued)} onClick={() => queue(r)}>
-                    {queued === r.guid ? "Queued" : "Download this"}
+                  <button className="btn" disabled={Boolean(queued || asking)} onClick={() => queue(r)}>
+                    {queued === r.guid ? "Queued" : asking === r.guid ? `Asking ${label}\u2026` : "Download this"}
                   </button>
                 </article>
               ))}
@@ -1544,6 +1580,15 @@ function RemediationQueue() {
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current.length]);
+  useEffect(() => {
+    const again = () => {
+      list.reload();
+      tidy.reload();
+    };
+    window.addEventListener(QUEUE_CHANGED, again);
+    return () => window.removeEventListener(QUEUE_CHANGED, again);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   if (list.error) return <p className="note bad-note">{list.error}</p>;
   if (!list.data) return <Loading label="Reading the queue" />;
   const shown = tab === "active" ? current : past;
@@ -2226,7 +2271,7 @@ function poster(ratingKey: number, width = 200): string {
   return `/api/media/${ratingKey}/image?width=${width}&height=${Math.round(width * 1.5)}`;
 }
 
-function Browse({ days }: { days: number }) {
+function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string> }) {
   const [sort, setSort] = useState(() => localStorage.getItem("browse.sort") ?? "per_hour");
   const [kind, setKind] = useState(() => localStorage.getItem("browse.kind") ?? "movie");
   const [problem, setProblem] = useState(() => localStorage.getItem("browse.problem") ?? "");
@@ -2479,6 +2524,14 @@ function Browse({ days }: { days: number }) {
                 .join(" \u00b7 ")}
             </span>
             <span className="row wrap poster-marks">
+              {/* First, because it is the one that changes what you would do
+                  next: asking for a second replacement while the first is
+                  still downloading is the mistake this prevents. */}
+              {inFlight.has(tile.rating_key) && (
+                <span className="pill ok" title="Already in the remediation queue">
+                  {inFlight.get(tile.rating_key)}
+                </span>
+              )}
               {tile.marks.map((mark) => (
                 <span key={mark} className={MARKS[mark]?.tone ?? "pill"} title={MARKS[mark]?.why}>
                   {MARKS[mark]?.label ?? mark}
@@ -2560,7 +2613,7 @@ const LENSES: { id: Lens; label: string; blurb: string }[] = [
   },
 ];
 
-function Attention({ days }: { days: number }) {
+function Attention({ days, inFlight }: { days: number; inFlight: Map<number, string> }) {
   const [lens, setLens] = useState<Lens>(() => (localStorage.getItem("library.lens") as Lens) || "trouble");
   const [error, setError] = useState<string | null>(null);
   const [showKept, setShowKept] = useState(false);
@@ -2624,6 +2677,13 @@ function Attention({ days }: { days: number }) {
               file={f}
               days={days}
               badges={[
+                ...(inFlight.has(f.rating_key)
+                  ? [
+                      <span key="busy" className="pill ok" title="Already in the remediation queue">
+                        {inFlight.get(f.rating_key)}
+                      </span>,
+                    ]
+                  : []),
                 <span key="store" className="pill">
                   {f.store}
                 </span>,
