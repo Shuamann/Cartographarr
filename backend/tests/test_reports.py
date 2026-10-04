@@ -216,3 +216,49 @@ def test_reports_can_be_charted(client):
 
     by_title = client.get("/api/reports/run?source=issues&measure=reports&group=title&range=30").json()
     assert [row["label"] for row in by_title["rows"]] == ["Film"]
+def test_the_library_itself_can_be_reported_on(client):
+    """Space, counts and what has never been played, from the files rather
+    than the plays."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import reports
+
+    claim(client)
+    seed()
+    with session_scope() as db:
+        # Two films in one library, one episode in another, and a row that is
+        # only metadata: a show, with no file and no size.
+        db.add(MediaItem(rating_key=101, title="Film 1", media_type="movie", section_id=1,
+                         file_size=8_000_000_000, file_container="mkv", video_resolution="1080p", duration=3_600_000))
+        db.add(MediaItem(rating_key=900, title="Film 9", media_type="movie", section_id=1,
+                         file_size=2_000_000_000, file_container="mp4", video_resolution="720p", duration=1_800_000))
+        db.add(MediaItem(rating_key=901, title="Show - S01E01", media_type="episode", section_id=2,
+                         grandparent_rating_key=950, file_size=1_000_000_000, file_container="mkv",
+                         video_resolution="1080p", duration=1_800_000))
+        db.add(MediaItem(rating_key=950, title="Show", media_type="show", section_id=2))
+
+    r = client.get("/api/reports/run?source=library&measure=size&group=library").json()
+    # The show is left out: it has no file, so it is not what is on the disks.
+    assert r["total"] == 11_000_000_000
+    assert r["measure"]["unit"] == "bytes" and r["measure"]["additive"] is True
+    assert {row["key"]: row["value"] for row in r["rows"]} == {1: 10_000_000_000, 2: 1_000_000_000}
+
+    r = client.get("/api/reports/run?source=library&measure=items&group=played").json()
+    # Only Film 1 has a play against it, from the seed.
+    assert {row["label"]: row["value"] for row in r["rows"]} == {"Never played": 2, "Played at least once": 1}
+    r = client.get("/api/reports/run?source=library&measure=never_played&group=container").json()
+    assert {row["label"]: row["value"] for row in r["rows"]} == {"mkv": 1, "mp4": 1}
+
+    r = client.get("/api/reports/run?source=library&measure=hours&group=media_type").json()
+    assert r["total"] == 2  # an hour and two half hours
+
+    # A snapshot has no clock, and says so rather than quietly covering
+    # everything while the page shows a range.
+    r = client.get("/api/reports/run?source=library&measure=items&group=library&start=2026-09-01").json()
+    assert r["ignored"] == ["dates"] and r["total"] == 3
+    catalog = client.get("/api/reports/catalog").json()
+    library = next(s for s in catalog["sources"] if s["key"] == "library")
+    assert not [d for d in library["dimensions"] if d["group"] == "When"]
+    # It is the Library tab's data, and that tab is for admins. The viewer
+    # test above checks the catalog offers them nothing but plays.
+    assert reports.SOURCES["library"].admin_only

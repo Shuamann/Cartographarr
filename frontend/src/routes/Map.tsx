@@ -191,6 +191,7 @@ export default function MapRoute({
 
   return (
     <div className="map-page">
+      <h1 className="spoken">Map</h1>
       <FilterBar value={filters} onChange={onFilters} />
 
       <div className="viewbar">
@@ -1243,7 +1244,7 @@ function Drawer({
 
       {tab === "who" && (
             <>
-              {detail.error && <p className="note bad-note">{detail.error}</p>}
+              {detail.error && <p className="note bad-note" role="alert">{detail.error}</p>}
 
           <h3 id="loc-users" className={focus === "users" ? "lit" : undefined}>Users</h3>
               <div className="mini-list">
@@ -1637,7 +1638,7 @@ function CountryPicker({
         {here ? `${here.plays.toLocaleString()} ${here.plays === 1 ? "play" : "plays"} from here` : "Nothing has been watched from here"}
         {mode ? ` \u00b7 currently ${mode}` : ""}
       </p>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
       <div className="segmented">
         {[
           { id: "flag", label: "Flag" },

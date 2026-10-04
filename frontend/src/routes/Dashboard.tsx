@@ -48,7 +48,7 @@ export default function DashboardRoute({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (data.error) return <div className="pad"><p className="note bad-note">{data.error}</p></div>;
+  if (data.error) return <div className="pad"><p className="note bad-note" role="alert">{data.error}</p></div>;
   if (!data.data) return <div className="pad"><Loading /></div>;
 
   const d = data.data;
@@ -67,7 +67,15 @@ export default function DashboardRoute({
         </span>
       </div>
 
-      {live.error && <p className="note bad-note">{live.error}</p>}
+      {live.error && <p className="note bad-note" role="alert">{live.error}</p>}
+      {/* The strip below redraws itself every few seconds and announced
+          nothing. One polite line, so a stream starting or stopping is heard
+          without reading the whole strip again. */}
+      <p className="spoken" role="status">
+        {live.stream_count
+          ? `${live.stream_count} ${live.stream_count === 1 ? "stream" : "streams"} playing now`
+          : "Nothing streaming right now"}
+      </p>
 
       <NowPlaying
         sessions={live.sessions}

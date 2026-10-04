@@ -68,7 +68,7 @@ export default function SignalDetail({ id, onChanged }: { id: number; onChanged?
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  if (detail.error) return <p className="note bad-note">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note" role="alert">{detail.error}</p>;
   if (!detail.data) return <Loading compact />;
   const s = detail.data;
 

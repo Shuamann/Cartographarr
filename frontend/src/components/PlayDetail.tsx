@@ -94,7 +94,7 @@ export default function PlayDetail({ rowId }: { rowId: number }) {
   const p = detail.data;
   const media = useApi<MediaDetail>(p?.rating_key ? `/media/${p.rating_key}` : null, [p?.rating_key]);
 
-  if (detail.error) return <p className="note bad-note">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note" role="alert">{detail.error}</p>;
   if (!p) return <Loading compact label="Getting stream details from Tautulli" />;
 
   const s = p.stream ?? {};

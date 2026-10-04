@@ -43,7 +43,7 @@ export default function HomeLinks() {
     }
   }
 
-  if (links.error) return <p className="note bad-note">{links.error}</p>;
+  if (links.error) return <p className="note bad-note" role="alert">{links.error}</p>;
   if (!links.data) return <Loading label="Reading the home page" />;
 
   return (
@@ -53,7 +53,7 @@ export default function HomeLinks() {
         <p className="muted small">
           Anything you have set up is offered here already. Hide what nobody needs, and choose who sees the rest.
         </p>
-        {error && <p className="note bad-note">{error}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
         <div className="mini-list">
           {links.data.map((link, index) => (
             <div key={link.key} className={link.hidden ? "mini home-link-row off" : "mini home-link-row"}>

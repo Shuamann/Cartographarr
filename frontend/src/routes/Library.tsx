@@ -267,7 +267,7 @@ export default function Library() {
 
 function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
   const data = useApi<Overview>("/library/overview");
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Reading the library" />;
   const o = data.data;
   const pending = o.titles - o.checked;
@@ -339,7 +339,7 @@ function Transcodes({ days }: { days: number }) {
     enough_to_judge: boolean;
     causes: CauseRow[];
   }>(`/library/transcodes?days=${days}`);
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Counting why streams transcoded" />;
   const { total_streams, transcoded, hardware, enough_to_judge, causes } = data.data;
   return (
@@ -429,7 +429,7 @@ const FIXES: Record<string, string> = {
 };
 function FourKSection({ days }: { days: number }) {
   const rows = useApi<FourK[]>(`/library/four-k?days=${days}`);
-  if (rows.error) return <p className="note bad-note">{rows.error}</p>;
+  if (rows.error) return <p className="note bad-note" role="alert">{rows.error}</p>;
   if (!rows.data) return <Loading label="Checking 4K files" />;
   const wasted = rows.data.filter((r) => r.verdict === "never_4k" || r.verdict === "mostly_downscaled");
   return (
@@ -470,7 +470,7 @@ function FourKSection({ days }: { days: number }) {
 function Requests() {
   const nav = useNav();
   const data = useApi<{ configured: boolean; requests: RequestRow[] }>("/library/requests");
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Asking Seerr for requests" slowHint="Seerr is read a page of 100 requests at a time." />;
   if (!data.data.configured)
     return (
@@ -550,7 +550,7 @@ function FileRow({ file, badges, stats, days }: { file: RowSummary; badges: Reac
 
 function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
   const detail = useApi<FileDetail>(`/library/file/${ratingKey}?days=${days}`);
-  if (detail.error) return <p className="note bad-note">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note" role="alert">{detail.error}</p>;
   if (!detail.data)
     return (
       <div className="file-card">
@@ -1301,7 +1301,7 @@ function ReleasePicker({
         </button>
       </div>
 
-      {found.error && <p className="note bad-note">{found.error}</p>}
+      {found.error && <p className="note bad-note" role="alert">{found.error}</p>}
       {!found.data && !found.error && (
         <Loading
           label={`Asking ${label} to search the indexers`}
@@ -1310,7 +1310,7 @@ function ReleasePicker({
       )}
       {asking && <p className="note">Asking {label} to start the download\u2026</p>}
       {queued && <p className="note ok-note">Queued. Follow it under Library, Remediation queue.</p>}
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       {found.data && (
         <>
@@ -1589,7 +1589,7 @@ function RemediationQueue() {
     return () => window.removeEventListener(QUEUE_CHANGED, again);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  if (list.error) return <p className="note bad-note">{list.error}</p>;
+  if (list.error) return <p className="note bad-note" role="alert">{list.error}</p>;
   if (!list.data) return <Loading label="Reading the queue" />;
   const shown = tab === "active" ? current : past;
   const nothing = shown.length === 0 && (tab === "active" ? running.length : jobs.length - running.length) === 0;
@@ -1835,7 +1835,7 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
       {r.message && !(r.candidate?.rejections ?? []).some((x) => r.message?.includes(x)) && (
         <p className="muted small">{r.message}</p>
       )}
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
     </div>
   );
 }
@@ -1914,7 +1914,7 @@ function StorageSection({ days }: { days: number }) {
     }
   }
 
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Reading storage" />;
   const stores = data.data.stores;
   // Worth saying only when one store is clearly worse than the rest put
@@ -1932,7 +1932,7 @@ function StorageSection({ days }: { days: number }) {
         Where each file is, read from the paths Plex reports. Give two mounts the same name and they count as one
         store, which is how several shares off one box read together.
       </p>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
       {worst && elsewhereRate != null && (worst.stalls_per_100 ?? 0) > elsewhereRate * 2 && (
         <p className="note">
           Watching from <strong>{worst.store}</strong> stalls {worst.stalls_per_100} times per 100 plays, against{" "}
@@ -2030,7 +2030,7 @@ function StoreTroublePanel({ store, days }: { store: string; days: number }) {
     `/library/stores/trouble?store=${encodeURIComponent(store)}&days=${days}`,
     [store, days],
   );
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Reading the stalls" />;
   const t = data.data;
   if (t.events === 0) return <p className="muted small">Nothing has stalled here in {days} days.</p>;
@@ -2330,7 +2330,7 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
     }
   }
 
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
 
   return (
     <>
@@ -2565,7 +2565,7 @@ function FileDialog({ ratingKey, days, onClose }: { ratingKey: number; days: num
           &times;
         </button>
       </div>
-      {file.error && <p className="note bad-note">{file.error}</p>}
+      {file.error && <p className="note bad-note" role="alert">{file.error}</p>}
       {!file.data && !file.error && <Loading label="Reading the file" />}
       {file.data && <FileCardView f={file.data} days={days} />}
     </dialog>
@@ -2655,9 +2655,9 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
         ))}
       </div>
       <p className="muted">{here.blurb}</p>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
-      {data.error && <p className="note bad-note">{data.error}</p>}
+      {data.error && <p className="note bad-note" role="alert">{data.error}</p>}
       {!data.data && <Loading label="Reading the library" />}
       {data.data && data.data.items.length === 0 && (
         <p className="note">Nothing here. Either nothing qualifies, or you have kept everything that did.</p>

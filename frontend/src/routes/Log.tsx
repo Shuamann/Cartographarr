@@ -55,7 +55,7 @@ export default function LogRoute({ onOpenUser }: { onOpenUser?: (userId: number)
         Cartographarr. Open an entry for the detail.
       </p>
 
-      {rows.error && <p className="note bad-note">{rows.error}</p>}
+      {rows.error && <p className="note bad-note" role="alert">{rows.error}</p>}
       {rows.data?.length === 0 && <p className="muted">Nothing yet.</p>}
 
       <div className="log-list">

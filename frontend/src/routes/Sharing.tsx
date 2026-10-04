@@ -31,7 +31,7 @@ function Shares() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (shares.error) return <p className="note bad-note">{shares.error}</p>;
+  if (shares.error) return <p className="note bad-note" role="alert">{shares.error}</p>;
   if (!shares.data)
     return (
       <div>
@@ -97,7 +97,7 @@ function Shares() {
         with them altogether.
       </p>
 
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       <div className="mini-list">
         {shares.data.users.map((user) => (
@@ -267,7 +267,7 @@ function AccessReview() {
   const nav = useNav();
   const data = useApi<{ inactive_days: number; people: Reviewed[] }>("/access-review");
   const [filter, setFilter] = useState<"all" | "attention">("attention");
-  if (data.error) return <p className="note bad-note">{data.error}</p>;
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Reviewing who uses their access" />;
   const { inactive_days, people } = data.data;
   const attention = people.filter((p) => p.status === "inactive" || p.status === "never");

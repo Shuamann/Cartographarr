@@ -151,7 +151,7 @@ export default function Login({ state, onDone }: { state: AuthState; onDone: () 
             </label>
           )}
 
-          {error && <p className="note bad-note">{error}</p>}
+          {error && <p className="note bad-note" role="alert">{error}</p>}
 
           <button className="btn primary" type="submit" disabled={!ready || busy}>
             {busy ? "Working…" : claiming ? "Create account" : "Sign in"}

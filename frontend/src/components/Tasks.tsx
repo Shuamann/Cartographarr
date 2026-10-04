@@ -73,12 +73,12 @@ export default function Tasks() {
     }
   }
 
-  if (tasks.error) return <p className="note bad-note">{tasks.error}</p>;
+  if (tasks.error) return <p className="note bad-note" role="alert">{tasks.error}</p>;
   if (!tasks.data) return <Loading label="Reading background tasks" />;
 
   return (
     <section className="card-section">
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
       <table className="table tasks">
         <thead>
           <tr>
@@ -150,7 +150,7 @@ export default function Tasks() {
 
 function TaskRuns({ task }: { task: TaskInfo }) {
   const runs = useApi<Run[]>(`/tasks/${task.key}/runs`, [task.last?.started_at]);
-  if (runs.error) return <p className="note bad-note">{runs.error}</p>;
+  if (runs.error) return <p className="note bad-note" role="alert">{runs.error}</p>;
   if (!runs.data) return <Loading compact label="Reading runs" />;
   return (
     <div className="task-runs">

@@ -66,10 +66,11 @@ export default function HistoryRoute({
 
   return (
     <div className="map-page">
+      <h1 className="spoken">History</h1>
       <FilterBar value={filters} onChange={changeFilters} />
 
       <div className="viewbar">
-        <span className="muted small">
+        <span className="muted small" role="status">
           {plays.toLocaleString()} {plays === 1 ? "play" : "plays"}
           {total !== plays && ` · ${total.toLocaleString()} sessions`}
         </span>
@@ -88,7 +89,7 @@ export default function HistoryRoute({
 
       <div className="view-body">
         <div className="list-wrap">
-          {data.error && <p className="note bad-note pad">{data.error}</p>}
+          {data.error && <p className="note bad-note pad" role="alert">{data.error}</p>}
           <table className="table locations">
             <thead>
               <tr>

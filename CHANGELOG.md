@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.61.0 - 2026-10-03
+
+### Added
+- Reports can slice the library itself. There were six sources and none of them was the thing on the disks, so the
+  app could answer "watch time by user per week" and not "space by library", "files by resolution" or "how much of
+  each library has never been played". A library source with seven measures (files, space used, average file,
+  running time, average bitrate, never played, different shows) and a dozen dimensions, including three new ones:
+  file container, release year, and whether a file has ever been played. Five presets come with it.
+- Four pages carry a heading again. History, People and Map had no h1 at all, which is what a screen reader reads
+  first to work out where it is.
+- Live activity says when it changes. The strip at the top of the dashboard redraws itself every few seconds and
+  announced nothing; there is now one polite line reporting how many streams are playing. Every error note is a
+  live region too, so a failure that happens while a page is open is heard rather than appearing silently.
+
+### Changed
+- A report source with no clock no longer offers a date range. The library is a snapshot of how things are now, so
+  a range would have been a control that changed nothing. If dates are set anyway the report says it covered all
+  of it rather than quietly ignoring them.
+
 ## 0.60.0 - 2026-10-03
 
 ### Added

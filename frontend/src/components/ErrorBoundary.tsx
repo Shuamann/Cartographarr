@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component<
     return (
       <div className="pad">
         <h1>{this.props.name} couldn't load</h1>
-        <p className="note bad-note">{this.state.error.message}</p>
+        <p className="note bad-note" role="alert">{this.state.error.message}</p>
         <p className="muted">
           The rest of the app still works, so pick another tab. Details are in the browser
           console.

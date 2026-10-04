@@ -85,7 +85,7 @@ export default function CountryList() {
           {allowList ? "record it" : "do what that country says: flag, warn or stop."}
         </p>
         <p className="muted small">Add a country here, or from a place on the map.</p>
-        {error && <p className="note bad-note">{error}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
 
         {open && (
           <>

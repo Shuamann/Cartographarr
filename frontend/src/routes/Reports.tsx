@@ -4,6 +4,7 @@ import FilterBar from "../components/FilterBar";
 import { api, useApi } from "../lib/api";
 import { EMPTY, fromQuery, toQuery, type FilterState } from "../lib/filters";
 import { useNav } from "../lib/nav";
+import { size } from "./Library";
 
 /* Reports: pick what to count, how to group it, and the filters.
  *
@@ -68,6 +69,11 @@ const FILTER_NAMES: Record<string, string> = {
   search: "title search",
 };
 
+/* The dimensions that are a clock. A source offering none of them is a
+ * snapshot of how things are now, so the page drops its range rather than
+ * showing a control that changes nothing. */
+const TIME_KEYS = ["day", "week", "month", "hour", "weekday"];
+
 const BLANK: Spec = {
   name: "New report",
   source: "plays",
@@ -119,18 +125,23 @@ export default function Reports() {
     setStatus(null);
   }
 
+  const dated = !source || source.dimensions.some((d) => TIME_KEYS.includes(d.key));
+
   // Changing the source keeps whatever still applies and resets the rest.
   function setSource(key: string) {
     const s = sources.find((x) => x.key === key);
     if (!s) return;
     const has = (d: string | null) => d !== null && s.dimensions.some((x) => x.key === d);
+    const hasClock = s.dimensions.some((d) => TIME_KEYS.includes(d.key));
     setSpec({
       ...spec,
       source: key,
       measure: s.measures.some((m) => m.key === spec.measure) ? spec.measure : s.measures[0].key,
       group: has(spec.group) ? spec.group : s.dimensions[0].key,
       then: has(spec.then) ? spec.then : null,
+      range: hasClock ? spec.range : "all",
     });
+    if (!hasClock) setFilters({ ...filters, start: "", end: "" });
   }
 
   function setRange(range: string) {
@@ -186,7 +197,7 @@ export default function Reports() {
     open(BLANK);
   }
 
-  if (catalog.error) return <p className="note bad-note pad">{catalog.error}</p>;
+  if (catalog.error) return <p className="note bad-note pad" role="alert">{catalog.error}</p>;
   if (!source) return <div className="pad"><Loading /></div>;
 
   return (
@@ -298,21 +309,23 @@ export default function Reports() {
               onChange={(v) => setSpec({ ...spec, then: v })}
             />
           </label>
-          <label>
-            <span>Time</span>
-            <select value={spec.range} onChange={(e) => setRange(e.target.value)}>
-              {RANGES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {dated && (
+            <label>
+              <span>Time</span>
+              <select value={spec.range} onChange={(e) => setRange(e.target.value)}>
+                {RANGES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </section>
 
         <FilterBar value={filters} onChange={onFilters} />
 
-        {result.error && <p className="note bad-note">{result.error}</p>}
+        {result.error && <p className="note bad-note" role="alert">{result.error}</p>}
         {result.data && <ResultView result={result.data} loading={result.loading} />}
       </div>
     </div>
@@ -373,6 +386,8 @@ export function formatValue(value: number | null | undefined, unit: string): str
       return `${n(0)} kbps`;
     case "mbps":
       return `${n(1)} Mbps`;
+    case "bytes":
+      return size(value);
     default:
       return n(2);
   }
@@ -381,7 +396,10 @@ export function formatValue(value: number | null | undefined, unit: string): str
 function ResultView({ result, loading }: { result: Result; loading: boolean }) {
   const { measure, group, then, rows, columns } = result;
   const stacked = Boolean(then) && measure.additive && columns.length > 0;
-  const ignored = result.ignored.map((f) => FILTER_NAMES[f] ?? f.replace(/_/g, " "));
+  const undated = result.ignored.includes("dates");
+  const ignored = result.ignored
+    .filter((f) => f !== "dates")
+    .map((f) => FILTER_NAMES[f] ?? f.replace(/_/g, " "));
 
   return (
     <div className={loading ? "report-result loading" : "report-result"}>
@@ -394,6 +412,12 @@ function ResultView({ result, loading }: { result: Result; loading: boolean }) {
       </p>
       {ignored.length > 0 && (
         <p className="note">This source has no {ignored.join(", ")} to filter on, so those filters were not applied.</p>
+      )}
+      {undated && (
+        <p className="note">
+          This is how things stand now rather than a history, so the dates were not applied and the report covers all
+          of it.
+        </p>
       )}
       {result.narrowed_to_you && <p className="note">This report only covers your own plays.</p>}
 

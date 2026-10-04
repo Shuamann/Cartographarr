@@ -174,6 +174,7 @@ export default function PeopleRoute({
 
   return (
     <div className="people">
+      <h1 className="spoken">People</h1>
       <aside className="people-list">
         <div className="people-tools">
           <input
@@ -234,7 +235,7 @@ export default function PeopleRoute({
           </div>
         </div>
 
-        {(users.error || devices.error) && <p className="note bad-note">{users.error || devices.error}</p>}
+        {(users.error || devices.error) && <p className="note bad-note" role="alert">{users.error || devices.error}</p>}
 
         <div className="people-rows">
           {mode === "users" &&
@@ -389,7 +390,7 @@ function UserProfile({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note pad" role="alert">{detail.error}</p>;
   if (!detail.data) return <div className="pad"><Loading /></div>;
   const u = detail.data;
   const name = u.friendly_name || u.username || `Account ${u.user_id}`;
@@ -456,7 +457,7 @@ function UserProfile({
           )}
         </div>
       </header>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       <nav className="profile-tabs segmented">
         {tabs.map(([value, label]) => (
@@ -523,7 +524,7 @@ function DeviceProfile({
   const [tab, setTab] = useState<Tab>("overview");
   const [copied, setCopied] = useState(false);
 
-  if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note pad" role="alert">{detail.error}</p>;
   if (!detail.data) return <div className="pad"><Loading /></div>;
   const d = detail.data;
   const label = d.player || machineId.slice(0, 12);
@@ -725,7 +726,7 @@ function AddressProfile({
   const covering = coveredBy(ip, addressBans.list);
   const [tab, setTab] = useState<"overview" | "history">("overview");
 
-  if (detail.error) return <p className="note bad-note pad">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note pad" role="alert">{detail.error}</p>;
   if (!detail.data) return <div className="pad"><Loading /></div>;
   const a = detail.data;
   const where = a.place ? [a.place.city, a.place.region, a.place.country].filter(Boolean).join(", ") : "";
@@ -1149,7 +1150,7 @@ function RecentPlays({
   const users = useApi<PlexUser[]>(showUser ? "/users" : null);
   const names = new Map((users.data ?? []).map((u) => [u.user_id, u.friendly_name || u.username]));
 
-  if (page.error) return <p className="note bad-note">{page.error}</p>;
+  if (page.error) return <p className="note bad-note" role="alert">{page.error}</p>;
   if (!page.data) return <Loading compact />;
 
   return (
@@ -1207,7 +1208,7 @@ function ActivityList({ query }: { query: string }) {
   const events = useApi<PersonEvent[]>(`/people/activity?${query}`);
   const [open, setOpen] = useState<string | null>(null);
 
-  if (events.error) return <p className="note bad-note">{events.error}</p>;
+  if (events.error) return <p className="note bad-note" role="alert">{events.error}</p>;
   if (!events.data) return <Loading compact />;
 
   return (
@@ -1291,7 +1292,7 @@ function Access({ username }: { username: string | null }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  if (shares.error) return <p className="note bad-note">{shares.error}</p>;
+  if (shares.error) return <p className="note bad-note" role="alert">{shares.error}</p>;
   if (!shares.data) return <p className="muted">Asking Plex…</p>;
   if (!shares.data.configured) {
     return (

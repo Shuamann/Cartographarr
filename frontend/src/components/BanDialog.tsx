@@ -98,7 +98,7 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
               ))}
             </select>
           </label>
-          {error && <p className="note bad-note">{error}</p>}
+          {error && <p className="note bad-note" role="alert">{error}</p>}
           <div className="row dialog-actions">
             <button type="button" className="btn" onClick={() => finish(false)} disabled={busy}>
               Cancel

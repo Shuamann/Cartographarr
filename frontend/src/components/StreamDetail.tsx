@@ -383,7 +383,7 @@ function StopForm({ session, onDone }: { session: LiveSession; onDone: () => voi
         </small>
       </div>
 
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       <div className="row">
         <button className="btn danger" onClick={stop} disabled={busy || !plexPass.ok}>

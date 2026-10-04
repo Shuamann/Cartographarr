@@ -101,7 +101,7 @@ export default function Issues() {
   const query = `/issues?status=${status}${type ? `&issue_type=${type}` : ""}`;
   const data = useApi<Listing>(query, [status, type]);
 
-  if (data.error) return <p className="note bad-note pad">{data.error}</p>;
+  if (data.error) return <p className="note bad-note pad" role="alert">{data.error}</p>;
   if (!data.data) return <div className="pad"><Loading label="Reading reported issues" /></div>;
   const d = data.data;
 
@@ -223,7 +223,7 @@ function IssueCard({
     }
   }
 
-  if (detail.error) return <p className="note bad-note">{detail.error}</p>;
+  if (detail.error) return <p className="note bad-note" role="alert">{detail.error}</p>;
   if (!detail.data) return <Loading compact label="Reading the report" />;
   const d = detail.data;
   const mine = d.plays.filter((p) => p.mine);
@@ -262,7 +262,7 @@ function IssueCard({
             </a>
           )}
         </p>
-        {error && <p className="note bad-note">{error}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
         {warning && <p className="note warn-note">{warning}</p>}
         <div className="row wrap">
           <input placeholder="Add a note" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -422,7 +422,7 @@ function RaiseIssue({ onDone }: { onDone: (id: number) => void }) {
   return (
     <section className="card-section raise">
       <h3>Raise an issue</h3>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       {picked ? (
         <>

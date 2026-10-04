@@ -868,7 +868,7 @@ function Editor({
             Shows which of the streams playing right now this would catch. Nothing is stopped or
             logged.
           </p>
-          {preview?.error && <p className="note bad-note">{preview.error}</p>}
+          {preview?.error && <p className="note bad-note" role="alert">{preview.error}</p>}
           {preview && preview.unmet.length > 0 && (
             <p className="note warn-note">This rule cannot run until you add {needs(preview.unmet)}.</p>
           )}
@@ -895,7 +895,7 @@ function Editor({
         </section>
         )}
 
-        {error && <p className="note bad-note">{error}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
 
         <div className="row rule-editor-actions">
           <button className="btn primary" onClick={save} disabled={saving || !draft.name.trim()}>

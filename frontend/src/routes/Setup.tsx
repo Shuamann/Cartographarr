@@ -214,7 +214,7 @@ export default function Setup({ status, onDone }: Props) {
           )}
         </section>
 
-        {saveError && <p className="note bad-note">{saveError}</p>}
+        {saveError && <p className="note bad-note" role="alert">{saveError}</p>}
 
         <footer>
           <button className="btn primary" onClick={finish} disabled={!canContinue || saving}>

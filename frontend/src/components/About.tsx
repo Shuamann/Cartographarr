@@ -80,7 +80,7 @@ export default function About() {
     }
   }
 
-  if (about.error) return <p className="note bad-note">{about.error}</p>;
+  if (about.error) return <p className="note bad-note" role="alert">{about.error}</p>;
   if (!about.data) return <Loading label="Reading version" />;
   const info = about.data;
   const u = info.update;
@@ -113,8 +113,8 @@ export default function About() {
           </button>
         </div>
 
-        {error && <p className="note bad-note">{error}</p>}
-        {u?.status === "error" && <p className="note bad-note">{u.message}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
+        {u?.status === "error" && <p className="note bad-note" role="alert">{u.message}</p>}
 
         {u && (
           <dl className="about-facts">

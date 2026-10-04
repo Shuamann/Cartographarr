@@ -851,7 +851,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
     );
   }
 
-  if (settings.error) return <p className="note bad-note pad">{settings.error}</p>;
+  if (settings.error) return <p className="note bad-note pad" role="alert">{settings.error}</p>;
 
   const searching = query.trim().length > 0;
   const found = searching ? PAGES.filter((x) => pageHits(x, query)) : PAGES;
@@ -910,7 +910,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
           {current.blurb && <p className="muted">{current.blurb}</p>}
         </header>
 
-        {error && <p className="note bad-note">{error}</p>}
+        {error && <p className="note bad-note" role="alert">{error}</p>}
 
         {current.id === "about" && <About />}
 
@@ -1061,7 +1061,7 @@ function BrandingImages() {
         Stored on the server rather than linked, so they keep working without depending on
         anywhere else. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB.
       </p>
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       <div className="mini-list">
         {MARKS.map((mark) => {
@@ -1724,7 +1724,7 @@ function Accounts() {
         these settings.
       </p>
 
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
 
       {adding && (
         <div className="editor">
@@ -1858,7 +1858,7 @@ function ChangePassword() {
         </label>
       </div>
       {message && <p className="note ok-note">{message}</p>}
-      {error && <p className="note bad-note">{error}</p>}
+      {error && <p className="note bad-note" role="alert">{error}</p>}
       <button className="btn" onClick={submit} disabled={!current || !next}>
         Change password
       </button>
@@ -1947,7 +1947,7 @@ function ThemeEditor({ value, onChange }: { value: string; onChange: (colours: s
         </p>
       )}
       {faint && (
-        <p className="note bad-note">
+        <p className="note bad-note" role="alert">
           This text is hard to read on these colours ({faint.toFixed(1)} to 1, and text wants 4.5). Move the text and
           the page further apart.
         </p>

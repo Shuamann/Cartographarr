@@ -55,7 +55,7 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
   const home = useApi<Home>("/home");
   const live = useApi<Activity>("/activity", []);
 
-  if (home.error) return <p className="note bad-note pad">{home.error}</p>;
+  if (home.error) return <p className="note bad-note pad" role="alert">{home.error}</p>;
   if (!home.data) return <div className="pad"><Loading label="Setting up" /></div>;
   const d = home.data;
   const streams = live.data?.sessions?.length ?? 0;

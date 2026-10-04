@@ -89,6 +89,10 @@ class Source:
     # For the location and file joins: this source's address and title columns.
     ip_column: Callable[[], ColumnElement] | None = None
     rating_column: Callable[[], ColumnElement] | None = None
+    # Rows this source is about, when its table holds more than that. The
+    # metadata cache keeps whatever has ever been looked up; the library is
+    # only the films and episodes with a file behind them.
+    base: Callable[[], ColumnElement[bool]] | None = None
 
 
 DIMENSIONS: list[Dimension] = [
@@ -119,6 +123,10 @@ DIMENSIONS: list[Dimension] = [
     Dimension("file_hdr", "File HDR", "File"),
     Dimension("file_audio_codec", "File audio format", "File"),
     Dimension("file_bitrate_band", "File bitrate", "File"),
+    Dimension("container", "File container", "File"),
+    Dimension("year", "Release year", "What"),
+    Dimension("played", "Played or never", "What",
+              hint="Whether anything has ever been played from the file."),
     Dimension("video_resolution", "Resolution", "Quality"),
     Dimension("quality_profile", "Quality profile", "Quality"),
     Dimension("rule", "Rule", "Rules"),
@@ -161,6 +169,16 @@ def _bitrate_band(column: Callable[[], ColumnElement] | None = None) -> ColumnEl
         (rate < 40000, literal("4")),
         else_=literal("5"),
     )
+
+
+def _ever_played() -> ColumnElement:
+    """Whether anything has ever been played from this file.
+
+    A correlated exists rather than a join: joining the plays would multiply a
+    file by the number of times it was watched, and every size and count in
+    the report would come out wrong.
+    """
+    return select(literal(1)).where(History.rating_key == MediaItem.rating_key).correlate(MediaItem).exists()
 
 
 # Dimensions read from the file, joined through the title.
@@ -465,6 +483,51 @@ SOURCES["issues"] = Source(
     },
 )
 
+SOURCES["library"] = Source(
+    key="library",
+    label="Library",
+    blurb="What is on the disks now, from the library scan. A snapshot rather than a history, so the dates do not apply.",
+    table=MediaItem,
+    admin_only=True,
+    # Films and episodes with a file. The rest of this table is metadata
+    # looked up for other reasons, with no size, no bitrate and no disk.
+    base=lambda: MediaItem.media_type.in_(("movie", "episode")),
+    measures=[
+        Measure("items", "Files", "count", _count),
+        Measure("size", "Space used", "bytes", lambda: func.coalesce(func.sum(MediaItem.file_size), 0)),
+        Measure("average_size", "Average file", "bytes", lambda: func.avg(MediaItem.file_size)),
+        Measure("hours", "Running time", "hours",
+                lambda: func.coalesce(func.sum(MediaItem.duration), 0) / 3_600_000.0),
+        Measure("bitrate", "Average bitrate", "kbps", lambda: func.avg(MediaItem.file_bitrate),
+                hint="Averaged over the files that have been checked."),
+        Measure("never_played", "Never played", "count",
+                lambda: func.sum(case((_ever_played(), 0), else_=1)),
+                hint="Files with no play recorded against them, ever."),
+        Measure("shows", "Different shows", "count", lambda: func.count(func.distinct(
+            func.coalesce(MediaItem.grandparent_rating_key, MediaItem.rating_key)))),
+    ],
+    columns={
+        "library": lambda: MediaItem.section_id,
+        "media_type": lambda: MediaItem.media_type,
+        "title": lambda: MediaItem.rating_key,
+        "show": lambda: func.coalesce(MediaItem.grandparent_rating_key, MediaItem.rating_key),
+        "year": lambda: MediaItem.year,
+        "played": lambda: case((_ever_played(), literal("played")), else_=literal("never")),
+        "file_resolution": lambda: MediaItem.video_resolution,
+        "file_video_codec": lambda: MediaItem.video_codec,
+        "file_hdr": lambda: MediaItem.video_dynamic_range,
+        "file_audio_codec": lambda: MediaItem.audio_codec,
+        "file_bitrate_band": _bitrate_band,
+        "container": lambda: MediaItem.file_container,
+    },
+    filter_columns={
+        "section_id": lambda: MediaItem.section_id,
+        "media_type": lambda: MediaItem.media_type,
+        "rating_key": lambda: MediaItem.rating_key,
+        "search": lambda: MediaItem.full_title,
+    },
+)
+
 # Starting points. Ordinary specs: open one, change it, save it as your own.
 PRESETS: list[dict[str, Any]] = [
     {"id": "issues-kind", "name": "Reports by kind", "source": "issues", "measure": "reports",
@@ -501,6 +564,16 @@ PRESETS: list[dict[str, Any]] = [
      "group": "day", "then": None, "range": "90"},
     {"id": "plays-file-bitrate", "name": "Plays by file bitrate", "source": "plays", "measure": "plays",
      "group": "file_bitrate_band", "then": "transcode_decision", "range": "90"},
+    {"id": "library-space", "name": "Space by library", "source": "library", "measure": "size",
+     "group": "library", "then": "file_resolution", "range": "all"},
+    {"id": "library-unplayed", "name": "What has never been played", "source": "library", "measure": "items",
+     "group": "library", "then": "played", "range": "all"},
+    {"id": "library-resolution", "name": "Files by resolution", "source": "library", "measure": "items",
+     "group": "file_resolution", "then": "media_type", "range": "all"},
+    {"id": "library-container", "name": "Container and codec mix", "source": "library", "measure": "items",
+     "group": "container", "then": "file_video_codec", "range": "all"},
+    {"id": "library-shows", "name": "Space by show", "source": "library", "measure": "size",
+     "group": "show", "then": None, "range": "all"},
 ]
 
 
@@ -567,10 +640,16 @@ def _where(s: Source, filters: Filters) -> tuple[list[ColumnElement[bool]], list
     def moment(epoch: int):
         return epoch if s.epoch_time else datetime.fromtimestamp(epoch, UTC)
 
-    if filters.start and time_col is not None:
-        where.append(time_col >= moment(_epoch(filters.start)))
-    if filters.end and time_col is not None:
-        where.append(time_col < moment(_epoch(filters.end) + 86400))
+    if time_col is None:
+        # A snapshot has no clock. Saying so beats a report that quietly covers
+        # everything while the page shows a thirty day range.
+        if filters.start or filters.end:
+            ignored.append("dates")
+    else:
+        if filters.start:
+            where.append(time_col >= moment(_epoch(filters.start)))
+        if filters.end:
+            where.append(time_col < moment(_epoch(filters.end) + 86400))
 
     for name in (
         "user_id", "machine_id", "ip_address", "platform", "product", "player", "media_type",
@@ -612,6 +691,8 @@ def _where(s: Source, filters: Filters) -> tuple[list[ColumnElement[bool]], list
 
 def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: bool, needs_media: bool = False):
     stmt = select(*columns).select_from(s.table)
+    if s.base is not None:
+        stmt = stmt.where(s.base())
     if needs_location and s.joins_location and s.ip_column is not None:
         stmt = stmt.outerjoin(IpLocation, IpLocation.ip == s.ip_column())
     if needs_media and s.rating_column is not None:
@@ -639,7 +720,11 @@ def run(
         d in ("network", "city", "country", "vpn") for d in (group, then) if d
     ) and s.joins_location
     needs_location = needs_location or uses_location
-    needs_media = s.table is not StreamSession and any(d in FILE_DIMENSIONS for d in (group, then) if d)
+    # Streams keep their own copy of the file's details, and the library source
+    # is that table already, so neither of them joins it.
+    needs_media = s.table not in (StreamSession, MediaItem) and any(
+        d in FILE_DIMENSIONS for d in (group, then) if d
+    )
 
     is_time = group in TIME_FORMATS
     g = _dimension_expr(s, group).label("grp")
@@ -737,7 +822,9 @@ def _fill_gaps(dim: str, rows: list[dict[str, Any]], additive: bool) -> list[dic
 def _additive(m: Measure) -> bool:
     """Whether parts add up to the whole. Sums and counts do; averages, maxima
     and counts of different things do not."""
-    return m.unit in ("count", "hours", "minutes") and m.key not in ("users", "devices", "addresses", "titles", "streams")
+    return m.unit in ("count", "hours", "minutes", "bytes") and m.key not in (
+        "users", "devices", "addresses", "titles", "streams", "shows", "average_size", "average",
+    )
 
 
 def _num(value: Any) -> float | int | None:
@@ -758,6 +845,8 @@ def _plain_label(dim: str, key: Any) -> str:
             "stall_cause": "Not worked out yet",
             "file_bitrate_band": "File not checked yet",
             "hardware": "Software or none",
+            "container": "Not checked yet",
+            "year": "No year",
         }.get(dim, "Unknown")
     if dim == "vpn":
         return "VPN or hosting" if key in (True, 1, "1") else "Home or mobile network"
@@ -771,6 +860,8 @@ def _plain_label(dim: str, key: Any) -> str:
         return BITRATE_BANDS[int(key) - 1] if str(key).isdigit() and 1 <= int(key) <= 5 else str(key)
     if dim == "hardware":
         return "Hardware" if key in (True, 1, "1") else "Software or none"
+    if dim == "played":
+        return "Played at least once" if str(key) == "played" else "Never played"
     if dim == "transcode_cause":
         from app.services.streams import CAUSES as TRANSCODE_CAUSES
 
