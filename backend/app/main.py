@@ -290,18 +290,52 @@ app = FastAPI(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
+MAP_TILES = "https://basemaps.cartocdn.com"
+"""Where the basemap comes from, and the only outside thing the page loads.
+
+Named here as well as in the front end's map style, because a policy that does
+not know about it is a policy that leaves the map blank. Swapping in a
+self-hosted basemap later means changing both.
+"""
+
+POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    # React writes inline styles, and so does the map.
+    "style-src 'self' 'unsafe-inline'",
+    # Posters and branding are served by this app; the rest are data URIs.
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    f"connect-src 'self' {MAP_TILES} https://*.basemaps.cartocdn.com",
+    # The map renders tiles in a worker it creates from a blob.
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+])
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     """Headers every response gets. No framing by other sites (clickjacking a
     Ban or Unshare button), unless ALLOW_FRAMING=true for dashboards such as
     Organizr that show apps in a frame (Settings, Access, or ALLOW_FRAMING);
     no guessing content types; and no
-    leaking page addresses to other sites."""
+    leaking page addresses to other sites.
+
+    The policy says where the page may load things from. There is nothing to
+    exploit today, since the front end never writes HTML it was given, but the
+    page does render library titles, player names and the text an indexer sent
+    back, all of which come from outside this app.
+    """
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "same-origin")
+    policy = POLICY
     if not current().allow_framing:
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        policy += "; frame-ancestors 'self'"
+    response.headers.setdefault("Content-Security-Policy", policy)
     return response
 
 

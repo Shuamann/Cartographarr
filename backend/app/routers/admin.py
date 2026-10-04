@@ -59,6 +59,24 @@ def setup_status() -> dict:
         "locked": sorted(locked_keys() - {"data_dir"}),
         "geoip_ready": (settings.geoip_dir / "city.mmdb").exists(),
         "history_rows": rows,
+        # Setup asks for Tautulli and for MaxMind, and never mentions the one
+        # thing it cannot test for you: TZ decides what every time of day rule
+        # will mean, and a wrong one is silent for ever. Showing the clock is
+        # the whole fix. Not a secret, so it is here rather than behind the
+        # sign-in that does not exist yet.
+        "clock": _clock(),
+    }
+
+
+def _clock() -> dict:
+    import os
+    import time
+    from datetime import datetime
+
+    now = datetime.now()
+    return {
+        "now": now.isoformat(timespec="seconds"),
+        "zone": os.environ.get("TZ") or (time.tzname[time.daylight and time.localtime().tm_isdst > 0] or "unset"),
     }
 
 

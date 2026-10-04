@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.64.0 - 2026-10-04
+
+### Added
+- A Content-Security-Policy on every response. The other three security headers were already set and this was the
+  missing one. There is nothing to exploit today, since the front end never writes HTML it was handed, but the page
+  does render library titles, player names and the text an indexer sent back, and all of those come from outside.
+  The policy names the basemap host, because a policy that forgets it is a policy that leaves the map blank.
+- Setup shows what time the server thinks it is. It asks for Tautulli and tests it, asks for MaxMind and tests
+  that, and never mentioned the one thing it cannot test for you: TZ decides what every time-of-day rule means, and
+  a wrong one is silent for ever.
+- Settings says so when the app is being read over HTTPS and the session cookie's HTTPS lock is off. The browser is
+  the thing that knows which scheme the page arrived over, so it is the browser that asks.
+
 ## 0.63.0 - 2026-10-04
 
 ### Added

@@ -182,6 +182,7 @@ export type SetupStatus = {
   missing: string[];
   locked: string[];
   geoip_ready: boolean;
+  clock?: { now: string; zone: string };
   history_rows: number;
 };
 

@@ -487,6 +487,21 @@ const SHAPES: Record<string, FieldShape> = {
   apprise_urls: { kind: "lines" },
 };
 
+/* The cookie's HTTPS lock is off by default, which is right on a LAN and
+ * wrong the moment the app is reachable over TLS. Nothing noticed the
+ * difference, and the browser is the one that knows: it is the scheme it
+ * loaded this page over that decides whether the lock costs anything. */
+function HttpsHint({ on }: { on: boolean }) {
+  if (on || typeof window === "undefined" || window.location.protocol !== "https:") return null;
+  return (
+    <p className="note">
+      You are reading this over HTTPS and the lock above is off, so the session cookie would also travel over plain
+      HTTP. Turn it on unless something still reaches this app without TLS.
+    </p>
+  );
+}
+
+
 /* A list typed one value at a time, kept as the comma separated string the
  * settings store expects. Enter or a comma commits what is in the box, which
  * is what everyone tries first; leaving the box commits it too, because a
@@ -974,6 +989,9 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
               />
             )}
             {section.title === "Server upload" && <UploadSource />}
+            {section.title === "Sessions" && (
+              <HttpsHint on={Boolean(draft.session_cookie_secure ?? byKey.get("session_cookie_secure")?.value)} />
+            )}
           </section>
         ))}
 

@@ -105,6 +105,15 @@ def test_security_headers(client):
     assert res.headers["X-Frame-Options"] == "SAMEORIGIN"
     assert res.headers["Referrer-Policy"] == "same-origin"
 
+    # The page may load from itself, and from the one outside thing it needs.
+    # A policy that forgets the basemap is a policy that leaves the map blank.
+    policy = res.headers["Content-Security-Policy"]
+    assert "default-src 'self'" in policy
+    assert "script-src 'self'" in policy and "'unsafe-eval'" not in policy
+    assert "basemaps.cartocdn.com" in policy
+    assert "object-src 'none'" in policy
+    assert "frame-ancestors 'self'" in policy
+
 
 def test_branding_uploads_are_checked_and_sandboxed(client):
     claim(client)
@@ -122,4 +131,7 @@ def test_framing_can_be_allowed_in_settings(client):
     claim(client)
     assert client.get("/health").headers.get("X-Frame-Options") == "SAMEORIGIN"
     client.put("/api/settings", json={"allow_framing": True})
-    assert "X-Frame-Options" not in client.get("/health").headers
+    res = client.get("/health")
+    assert "X-Frame-Options" not in res.headers
+    # And the policy's half of the same rule goes with it.
+    assert "frame-ancestors" not in res.headers["Content-Security-Policy"]

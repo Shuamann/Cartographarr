@@ -214,6 +214,19 @@ export default function Setup({ status, onDone }: Props) {
           )}
         </section>
 
+        {status.clock && (
+          <section>
+            <h2>
+              The server&apos;s clock <span className="opt">check this</span>
+            </h2>
+            <p className="muted">
+              This container thinks it is <strong>{new Date(status.clock.now).toLocaleString()}</strong> ({status.clock.zone}).
+              Every rule with a time of day means that clock, so if this is wrong by hours, set TZ on the container
+              and restart it. Nothing else here depends on it.
+            </p>
+          </section>
+        )}
+
         {saveError && <p className="note bad-note" role="alert">{saveError}</p>}
 
         <footer>
