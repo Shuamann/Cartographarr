@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.67.0 - 2026-10-04
+
+### Changed
+- One scale for text and space, and one height for every control. Six button styles sat at four different heights,
+  so a row holding more than one of them stepped up and down across the page. Buttons, chips, segmented controls,
+  selects and inputs are all 32 pixels now and centre what is inside them.
+- Files worth attention reads like the rest of the app. Every row carries its poster, the reason it is in the list
+  is the coloured thing rather than another line of grey, and the word "Details" at the far right is a control that
+  looks like it opens.
+- "Keep it, stop asking" moved into the row. It had a full width band of its own under every file, which was a
+  second strip of furniture per file and doubled the height of a list of two hundred.
+- A count is not a notice. "200 files, worst first" was in the same boxed note the app uses to warn you about
+  something.
+
 ## 0.66.0 - 2026-10-04
 
 ### Changed

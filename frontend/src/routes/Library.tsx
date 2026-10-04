@@ -612,26 +612,54 @@ function Requests() {
 }
 
 /* One file in any list: a summary that opens to the whole file. */
-function FileRow({ file, badges, stats, days }: { file: RowSummary; badges: ReactNode[]; stats: (string | null)[]; days: number }) {
+function FileRow({
+  file,
+  badges,
+  stats,
+  days,
+  aside,
+}: {
+  file: RowSummary;
+  badges: ReactNode[];
+  stats: (string | null)[];
+  days: number;
+  /* A quiet action belonging to this file. It sits inside the row rather than
+     in a band under it, because a second full width strip per file doubled the
+     height of a list of two hundred. */
+  aside?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
+  const more = (file.findings_count ?? 1) - 1;
   return (
-    <div>
-      <button className={open ? "mini mini-button on" : "mini mini-button"} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <div className="min0">
-          <span className="clip">
-            <strong>{file.title}</strong>
+    <div className={open ? "file-row open" : "file-row"}>
+      <div className="file-row-head">
+        <button
+          className="file-row-main"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {/* The rest of the app shows a poster wherever it shows a title, and
+              this list read as a wall of text without one. */}
+          <img className="file-row-poster" src={poster(file.rating_key, 80)} alt="" loading="lazy" />
+          <span className="min0 file-row-text">
+            <span className="clip">
+              <strong>{file.title}</strong>
+            </span>
+            <span className="row wrap file-badges">{badges}</span>
+            <span className="muted small file-row-line">{stats.filter(Boolean).join(" · ")}</span>
+            {file.finding && (
+              <span className="small finding-summary file-row-line">
+                {file.finding}
+                {more > 0 ? ` and ${more} more` : ""}
+              </span>
+            )}
           </span>
-          <div className="row wrap file-badges">{badges}</div>
-          <p className="muted small">{stats.filter(Boolean).join(" · ")}</p>
-          {file.finding && (
-            <p className="small finding-summary">
-              {file.finding}
-              {(file.findings_count ?? 1) > 1 ? ` and ${(file.findings_count ?? 1) - 1} more` : ""}
-            </p>
-          )}
-        </div>
-        <span className="muted small">{open ? "Hide" : "Details"}</span>
-      </button>
+          <span className="file-row-caret" aria-hidden="true">
+            {open ? "−" : "+"}
+          </span>
+        </button>
+        {aside}
+      </div>
       {open && <FileCard ratingKey={file.rating_key} days={days} />}
     </div>
   );
@@ -2834,7 +2862,9 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
         <p className="note">Nothing here. Either nothing qualifies, or you have kept everything that did.</p>
       )}
       {data.data && data.data.items.length > 0 && (
-        <p className="note">
+        /* A count is not a notice. It was in a full width boxed note, which
+           is the same furniture the app uses to warn somebody. */
+        <p className="muted small count-line">
           {lens === "room" && data.data.reclaimable
             ? `${size(data.data.reclaimable)} across ${(data.data.found ?? data.data.total).toLocaleString()} files nobody is watching.`
             : `${data.data.total.toLocaleString()} ${data.data.total === 1 ? "file" : "files"}, worst first.`}
@@ -2847,6 +2877,25 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
             <FileRow
               file={f}
               days={days}
+              aside={
+                <button
+                  className="tab file-row-aside"
+                  title="Stop this file being suggested, whichever question is asked"
+                  onClick={async () => {
+                    const why = await askText({
+                      title: `Keep ${f.title} and stop suggesting it?`,
+                      body: "It stays in the library and stops appearing in this list. You can undo it later.",
+                      label: "Reason, for the Log",
+                      placeholder: "Optional",
+                      confirm: "Keep it",
+                    });
+                    if (why === null) return;
+                    act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: why }));
+                  }}
+                >
+                  Keep it
+                </button>
+              }
               badges={[
                 ...(inFlight.has(f.rating_key)
                   ? [
@@ -2872,25 +2921,6 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
               ]}
               stats={[f.why, mbps(f.file_bitrate), size(f.file_size)]}
             />
-            <div className="keep-row">
-              <button
-                className="linkish small"
-                title="Stop this file being suggested, whichever question is asked"
-                onClick={async () => {
-                  const why = await askText({
-                    title: `Keep ${f.title} and stop suggesting it?`,
-                    body: "It stays in the library and stops appearing in this list. You can undo it later.",
-                    label: "Reason, for the Log",
-                    placeholder: "Optional",
-                    confirm: "Keep it",
-                  });
-                  if (why === null) return;
-                  act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: why }));
-                }}
-              >
-                Keep it, stop asking
-              </button>
-            </div>
           </div>
         ))}
       </div>
