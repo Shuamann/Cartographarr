@@ -54,6 +54,10 @@ class Task:
     """Failures since the last time it worked, which is the number that says
     whether something is broken. `failures` counts them all and never falls."""
     alerted: bool = False
+    trigger: str = "schedule"
+    """What started the run happening now. A job that waits for its hour reads
+    this, because pressing Run now and being told it runs at four in the
+    morning is not an answer."""
     last: dict[str, Any] = field(default_factory=dict)
 
 
@@ -70,6 +74,7 @@ async def run(key: str, trigger: str = "schedule") -> dict[str, Any]:
     if task.running:
         return {"status": "already running"}
     task.running = True
+    task.trigger = trigger
     started = datetime.now(UTC)
     clock = time.monotonic()
     status, message = "ok", None

@@ -303,6 +303,21 @@ class Settings(BaseSettings):
     the assumption that nobody is watching; Settings shows what the server
     thinks the time is, in case TZ is not what you meant."""
 
+    weekly_digest: bool = False
+    """One message a week with the week in it, through the same Apprise setup.
+
+    Every number this app works out sits on a page waiting to be visited, and
+    mostly is not: devices nobody reviewed, signals nobody opened, a job that
+    quietly stopped working. This is the dashboard's week pushed rather than
+    pulled. It adds no data and no analysis, and it is off until asked for."""
+
+    digest_weekday: int = 0
+    """Which day to send it, Monday being 0, in the server's own time."""
+
+    digest_hour: int = 9
+    """The hour to send it, in the server's own time. Settings shows what the
+    server thinks the time is, in case TZ is not what you meant."""
+
     task_alerts: bool = True
     """Send word through Apprise when a background job keeps failing.
 

@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.63.0 - 2026-10-04
+
+### Added
+- A weekly digest. Every number this app works out sits on a page waiting to be visited, and mostly is not: devices
+  nobody reviewed, signals nobody opened, a job that quietly stopped working. One message a week now carries the
+  week's watching and by how many people, new devices, new signals, problems reported, where the library stands and
+  anything that has failed three times running. It goes through the Apprise setup that was already there, adds no
+  new data and no new analysis, and is off until switched on in Settings, Alerts and monitoring.
+
+### Changed
+- Pressing Run now on a job that waits for its hour runs it. The backup and the digest both check the clock, and
+  being told a job runs at four in the morning is not an answer to being asked to run it.
+
+### Fixed
+- The backup hour's unit read "o'''clock" on the Settings page, from a shell quoting accident when it was written.
+
 ## 0.62.0 - 2026-10-04
 
 ### Added

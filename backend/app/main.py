@@ -72,7 +72,8 @@ async def _backup_cycle() -> dict | str:
     settings = current()
     if settings.backup_keep <= 0:
         raise tasks.Skipped("Backups are switched off")
-    if datetime.now().hour != settings.backup_hour % 24:
+    # Asked for by hand means now, whatever the hour says.
+    if tasks.TASKS["backup"].trigger != "manual" and datetime.now().hour != settings.backup_hour % 24:
         raise tasks.Skipped(f"Taken at {settings.backup_hour % 24:02d}:00")
     result = await asyncio.to_thread(backups.take)
     return result
@@ -138,6 +139,29 @@ tasks.register(tasks.Task(
 tasks.register(tasks.Task(
     "file_details", "Read file details", "Every audio and subtitle track, a chunk at a time, until all files are read.",
     _file_details, lambda: 60,
+))
+async def _weekly_digest() -> str:
+    """Checked hourly, sent once, like the backup.
+
+    No record is kept of having sent it: the task runs on the hour, so the
+    window is an hour wide and it cannot fire twice inside one.
+    """
+    from app.services import digest
+
+    settings = current()
+    if not settings.weekly_digest:
+        raise tasks.Skipped("The weekly digest is switched off")
+    now = datetime.now()
+    by_hand = tasks.TASKS["digest"].trigger == "manual"
+    if not by_hand and (now.weekday() != settings.digest_weekday % 7 or now.hour != settings.digest_hour % 24):
+        day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][settings.digest_weekday % 7]
+        raise tasks.Skipped(f"Sent {day} at {settings.digest_hour % 24:02d}:00")
+    return await digest.send()
+
+
+tasks.register(tasks.Task(
+    "digest", "Send the weekly digest", "The week's watching, new devices, signals, problems and anything that failed.",
+    _weekly_digest, lambda: 3600, store_every_run=False,
 ))
 async def _update_check() -> str:
     from app.services import updates

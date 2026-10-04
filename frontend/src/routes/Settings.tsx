@@ -112,6 +112,11 @@ const AREAS: Area[] = [
         keys: ["apprise_urls"],
       },
       {
+        title: "Weekly digest",
+        note: "One message a week with the week in it: hours watched and by how many people, new devices, new signals, problems reported, where the library stands, and any job that has stopped working. Everything in it is already on a page somewhere; this is the version that comes to you. Goes to the Apprise targets above, so it stays quiet until those are set up.",
+        keys: ["weekly_digest", "digest_weekday", "digest_hour"],
+      },
+      {
         title: "Messaging viewers",
         note: "Lets a rule message the person watching instead of stopping them. An Apprise URL with {email} (and optionally {username}) filled in from their Plex account, usually email, for example mailtos://you:app-password@gmail.com?to={email}. Leave empty to keep the action off.",
         keys: ["viewer_message_url"],
@@ -403,6 +408,9 @@ const LABELS: Record<string, string> = {
   upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
   task_alerts: "Tell me when a job keeps failing",
+  weekly_digest: "Send a weekly digest",
+  digest_weekday: "On",
+  digest_hour: "At",
   watch_alerts: "Tell me about new devices and signals",
   backup_keep: "Snapshots to keep",
   backup_hour: "Taken at",
@@ -471,7 +479,8 @@ const SHAPES: Record<string, FieldShape> = {
   impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
   session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
   backup_keep: { unit: "snapshots", min: 0, max: 60, step: 1 },
-  backup_hour: { unit: "o'''clock", min: 0, max: 23, step: 1 },
+  backup_hour: { unit: "o'clock", min: 0, max: 23, step: 1 },
+  digest_hour: { unit: "o'clock", min: 0, max: 23, step: 1 },
   keep_subtitle_languages: { kind: "chips" },
   keep_audio_languages: { kind: "chips" },
   trusted_proxy_ips: { kind: "chips" },
@@ -760,6 +769,18 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             value={masked && !(key in draft) ? "" : String(value ?? "").split(",").map((x) => x.trim()).join("\n")}
             onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
           />
+        ) : key === "digest_weekday" ? (
+          <select
+            disabled={locked}
+            value={String(value ?? 0)}
+            onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })}
+          >
+            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, i) => (
+              <option key={day} value={i}>
+                {day}
+              </option>
+            ))}
+          </select>
         ) : typeof setting.value === "number" ? (
           <span className="number-field">
             <input
