@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.59.0 - 2026-10-03
+
+### Added
+- Tidying waits for the house to go quiet. Reading and rewriting a whole film is minutes of the disks' attention
+  for a file nobody is waiting on, which makes it the one piece of work here that somebody else can feel, so a
+  queued job now holds until the streams stop. Queue twenty files at teatime and they are done by morning. Switch
+  it off under Settings, Library and files to have them run the moment they are asked for. A job that is waiting
+  stays on the queue and says why, rather than being taken off it and looking stalled
+
 ## 0.58.0 - 2026-10-03
 
 ### Added

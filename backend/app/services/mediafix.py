@@ -723,6 +723,14 @@ async def _work() -> None:
             return job.id
 
     while True:
+        if not await _house_is_quiet():
+            # Nothing is taken off the queue while somebody is watching, so a
+            # job that is waiting still reads as queued rather than as one
+            # that has stalled halfway through.
+            await asyncio.sleep(QUIET_CHECK_SECONDS)
+            if await asyncio.to_thread(_anything_queued):
+                continue
+            return
         job_id = await asyncio.to_thread(take)
         if job_id is None:
             return
@@ -731,6 +739,51 @@ async def _work() -> None:
         except Exception as exc:  # noqa: BLE001 - one bad file must not stop the queue
             log.exception("media job %s failed", job_id)
             await asyncio.to_thread(_finish, job_id, "failed", str(exc))
+
+
+QUIET_CHECK_SECONDS = 60
+"""How often to look again while waiting for the streams to stop. A minute,
+because a job that waits an extra minute costs nothing and asking Tautulli
+every second for hours costs something."""
+
+
+def _anything_queued() -> bool:
+    from sqlalchemy import func, select
+
+    from app.db import session_scope
+    from app.models import MediaJob
+
+    with session_scope() as db:
+        return bool(db.execute(
+            select(func.count()).select_from(MediaJob).where(MediaJob.status == "queued")
+        ).scalar())
+
+
+async def _house_is_quiet() -> bool:
+    """Whether to start another file now.
+
+    Asked of Tautulli rather than of this app's own records, because what
+    matters is whether somebody is watching at this moment. If Tautulli cannot
+    be reached the answer is yes: a tidy that never runs because the thing it
+    asks is down is worse than one that runs while somebody watches.
+    """
+    from app.settings_store import current, is_configured
+
+    if not current().tidy_when_quiet:
+        return True
+    if not is_configured():
+        return True
+    from app.tautulli.client import TautulliClient
+
+    client = TautulliClient(current())
+    try:
+        data = await client.call("get_activity") or {}
+        return not (data.get("sessions") or [])
+    except Exception:  # noqa: BLE001 - see the docstring
+        log.debug("could not check for streams before tidying; carrying on")
+        return True
+    finally:
+        await client.aclose()
 
 
 def _say(job_id: int, progress: int | None = None, detail: str | None = None) -> None:

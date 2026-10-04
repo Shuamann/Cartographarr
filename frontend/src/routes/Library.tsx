@@ -908,6 +908,10 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
    something to say, so the page is unchanged for anyone not using it. */
 function TidyJobs({ scope }: { scope: "active" | "history" }) {
   const jobs = useApi<TidyJob[]>("/library/tidy/jobs?limit=40", []);
+  // Why a job is sitting there rather than running, which is otherwise the
+  // sort of thing somebody watches for ten minutes before asking about.
+  const settings = useApi<{ key: string; value: unknown }[]>("/settings");
+  const waitForQuiet = (settings.data ?? []).some((s) => s.key === "tidy_when_quiet" && s.value === true);
   const busy = (jobs.data ?? []).some((j) => j.status === "running" || j.status === "queued");
   const again = useRef(jobs.reload);
   again.current = jobs.reload;
@@ -940,7 +944,9 @@ function TidyJobs({ scope }: { scope: "active" | "history" }) {
                 {job.status === "running"
                   ? `${job.progress}% - ${job.detail ?? "working"}`
                   : job.status === "queued"
-                    ? "Waiting its turn"
+                    ? waitForQuiet
+                      ? "Waiting for the streams to stop"
+                      : "Waiting its turn"
                     : `${job.status}: ${job.detail ?? ""}`}
                 {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
                 {/* Who asked, because a rule acting on its own is the case

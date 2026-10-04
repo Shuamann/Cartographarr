@@ -202,8 +202,8 @@ const AREAS: Area[] = [
       },
       {
         title: "Tidying files",
-        note: "What tidying a file's tracks should aim for. Languages are the three letter codes the tracks carry: eng, spa, jpn. An empty list keeps every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do.",
-        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages"],
+        note: "What tidying a file's tracks should aim for, and when. Languages are the three letter codes the tracks carry: eng, spa, jpn. An empty list keeps every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do. Tidying reads and rewrites a whole file, which is minutes of the disks' attention for something nobody is waiting on, so by default a queued job waits for the streams to stop.",
+        keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages", "tidy_when_quiet"],
       },
       {
         title: "Storage",
@@ -397,6 +397,7 @@ const LABELS: Record<string, string> = {
   keep_audio_languages: "Audio languages to keep",
   media_path_map: "Where this container sees the media",
   media_roots: "Mounted media directories",
+  tidy_when_quiet: "Wait until nobody is watching",
   access_inactive_days: "Not watching after",
   viewer_message_url: "Viewer message address",
   upload_alert_percent: "Warn when upload passes",

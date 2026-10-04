@@ -55,6 +55,18 @@ class Settings(BaseSettings):
     """Audio languages worth keeping, comma separated. Empty keeps every one,
     and a file that would be left silent keeps everything whatever this says."""
 
+    tidy_when_quiet: bool = True
+    """Hold tidying jobs back while anybody is watching.
+
+    Tidying reads and rewrites a whole film: minutes of the array's attention,
+    for a file nobody is waiting on. Doing that at eight in the evening while
+    four people stream from the same disks is the one piece of work this app
+    does that can be felt by somebody else.
+
+    So a queued job waits for the streams to stop. Queue twenty files at
+    teatime and they are done by morning without anyone having thought about
+    when. Turn it off to have them run the moment they are asked for."""
+
     media_roots: str = ""
     """Where the media is mounted inside this container, as one path per entry.
 

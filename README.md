@@ -588,6 +588,12 @@ in, not one share per library. **Settings, Library and files** then
 lists every library and where it found each one, with a box for any it could
 not. The compose file has the mount commented out ready.
 
+By default a queued file waits until nobody is watching. Tidying reads and
+rewrites a whole film, which is minutes of the array's attention for something
+nobody is waiting on, so queueing twenty at teatime gets them done by morning
+rather than competing with the evening. Turn that off under **Settings, Library
+and files** if you would rather they ran straight away.
+
 One file is worked on at a time, with progress and a Stop button under
 **Remediation queue**, which is where replacements live too: tidying a file's
 tracks and swapping it for a better copy are the same job from where you are
