@@ -1244,16 +1244,33 @@ function ActionsEditor({
               Object.entries(spec.param_schema).map(([key, schema]) => (
                 <label key={key}>
                   {schema.label}
-                  <textarea
-                    rows={2}
-                    value={String(step.params?.[key] ?? "")}
-                    placeholder={schema.default ?? ""}
-                    onChange={(e) =>
-                      onChange(
-                        steps.map((s, j) => (j === i ? { ...s, params: { ...s.params, [key]: e.target.value } } : s)),
-                      )
-                    }
-                  />
+                  {schema.options ? (
+                    <select
+                      value={String(step.params?.[key] ?? schema.default ?? "")}
+                      onChange={(e) =>
+                        onChange(
+                          steps.map((s, j) => (j === i ? { ...s, params: { ...s.params, [key]: e.target.value } } : s)),
+                        )
+                      }
+                    >
+                      {schema.options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <textarea
+                      rows={2}
+                      value={String(step.params?.[key] ?? "")}
+                      placeholder={schema.default ?? ""}
+                      onChange={(e) =>
+                        onChange(
+                          steps.map((s, j) => (j === i ? { ...s, params: { ...s.params, [key]: e.target.value } } : s)),
+                        )
+                      }
+                    />
+                  )}
                 </label>
               ))}
           </div>

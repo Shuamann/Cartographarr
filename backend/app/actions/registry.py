@@ -118,6 +118,148 @@ register(
 )
 
 
+# ---- banning ---------------------------------------------------------------
+#
+# A rule could stop a stream and could not stop it coming back, so the same
+# device could be caught and stopped every evening for ever while the only way
+# to end it was to go and ban it by hand. The ban lists already have timed
+# entries, an expiry sweep, reasons and an audit trail; this joins the two.
+#
+# Timed by default rather than permanent. A rule acting on its own should not
+# make a decision nobody can see being made, and a day is long enough to stop
+# a pattern while being short enough to forgive a mistake.
+
+BAN_HOURS = {
+    "1": 1.0,
+    "24": 24.0,
+    "168": 24.0 * 7,
+    "720": 24.0 * 30,
+    "0": 0.0,
+}
+"""The lengths a rule may ban for, as the dropdown offers them. 0 is for good,
+which is last on the list and not the default on purpose."""
+
+DEFAULT_BAN_HOURS = "24"
+
+
+def _ban_length(params: Params) -> float | None:
+    """Hours, or None for a permanent ban."""
+    hours = BAN_HOURS.get(str(params.get("hours") or DEFAULT_BAN_HOURS), 24.0)
+    return hours or None
+
+
+async def _ban_device(session: Session, params: Params) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import desc, select
+
+    from app.db import session_scope
+    from app.models import BannedDevice, Device
+
+    machine_id = session.get("machine_id")
+    if not machine_id:
+        raise RuntimeError("this stream has no device to ban")
+
+    hours = _ban_length(params)
+    with session_scope() as db:
+        if db.get(BannedDevice, machine_id) is not None:
+            return "already banned"
+        # A device is keyed on the machine and the account together, since two
+        # people can share one box, so this asks for the most recent rather
+        # than fetching by key.
+        known = db.execute(
+            select(Device).where(Device.machine_id == machine_id).order_by(desc(Device.last_seen)).limit(1)
+        ).scalar_one_or_none()
+        label = session.get("player") or (known.player if known else None) or str(machine_id)[:12]
+        db.add(BannedDevice(
+            machine_id=machine_id,
+            label=label,
+            user_id=_as_int(session.get("user_id")),
+            reason=params.get("reason") or "Banned by a rule",
+            banned_by="a rule",
+            banned_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(hours=hours) if hours else None,
+        ))
+    return f"banned {label}" + (f" for {hours:g} hours" if hours else " for good")
+
+
+async def _ban_address(session: Session, params: Params) -> str:
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import BannedAddress
+
+    address = session.get("ip_address")
+    if not address:
+        raise RuntimeError("this stream has no address to ban")
+
+    hours = _ban_length(params)
+    with session_scope() as db:
+        if db.get(BannedAddress, address) is not None:
+            return "already banned"
+        where = session.get("geo") or {}
+        db.add(BannedAddress(
+            address=address,
+            label=", ".join(x for x in [where.get("city"), where.get("country")] if x) or None
+            if isinstance(where, dict) else None,
+            user_id=_as_int(session.get("user_id")),
+            reason=params.get("reason") or "Banned by a rule",
+            banned_by="a rule",
+            banned_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(hours=hours) if hours else None,
+        ))
+    return f"banned {address}" + (f" for {hours:g} hours" if hours else " for good")
+
+
+def _as_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+_BAN_PARAMS = {
+    "hours": {
+        "type": "choice",
+        "label": "For how long",
+        "default": DEFAULT_BAN_HOURS,
+        "options": [
+            {"value": "1", "label": "1 hour"},
+            {"value": "24", "label": "1 day"},
+            {"value": "168", "label": "1 week"},
+            {"value": "720", "label": "30 days"},
+            {"value": "0", "label": "Permanently"},
+        ],
+    },
+    "reason": {"type": "string", "label": "Reason, for the ban list and the Log"},
+}
+
+
+register(
+    Action(
+        name="ban_device",
+        label="Ban the device",
+        description="Adds it to the ban list, so the next stream from it is stopped without this rule having to "
+                    "match again. Timed unless you say otherwise.",
+        execute=_ban_device,
+        requires=(),
+        param_schema=_BAN_PARAMS,
+    )
+)
+
+register(
+    Action(
+        name="ban_address",
+        label="Ban the address",
+        description="The connection rather than the box, for a device that comes back under a new identifier. "
+                    "Exactly the address this stream came from, never a range.",
+        execute=_ban_address,
+        requires=(),
+        param_schema=_BAN_PARAMS,
+    )
+)
+
+
 # ---- log only --------------------------------------------------------------
 
 async def _log_only(session: Session, _params: Params) -> str:

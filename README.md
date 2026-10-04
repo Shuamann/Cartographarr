@@ -227,6 +227,12 @@ the whole list with its own box to add one.
 The two lists are separate and both run ahead of everything else, so the Log
 says which of them stopped a stream.
 
+A rule can add to either. **Ban the device** and **Ban the address** are rule
+actions, so "stop it, and if it happens three times this week ban it for a day"
+is a sentence the app can say. They are timed unless you choose otherwise,
+since a rule acting on its own should not make a permanent decision quietly,
+and the list records them as banned by a rule rather than by you.
+
 If you banned devices before the ban list existed, each one became its own
 rule. The Rules page spots those and offers to move them in.
 

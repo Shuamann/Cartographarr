@@ -232,7 +232,17 @@ export type ActionSpec = {
   unmet: string[];
   /** What this can be the answer to: stopping a stream needs a stream. */
   triggers: string[];
-  param_schema: Record<string, { type: string; label: string; default?: string }>;
+  param_schema: Record<
+    string,
+    {
+      type: string;
+      label: string;
+      default?: string;
+      /** Present when the answer is one of a fixed few, such as how long to
+       *  ban something for. Rendered as a list rather than a text box. */
+      options?: { value: string; label: string }[];
+    }
+  >;
 };
 
 export type LiveSession = {

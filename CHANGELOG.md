@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.58.0 - 2026-10-03
+
+### Added
+- Ban the device and Ban the address are rule actions. A rule could stop a stream and could not stop it coming back,
+  so the same device could be caught every evening for ever while the only way to end it was to go and ban it by
+  hand. Both halves were first class features that could not see each other. Timed by default, because a rule acting
+  on its own should not make a permanent decision quietly, and recorded as banned by a rule so the list never looks
+  like somebody's choice
+- A rule action's settings can offer a list of answers rather than a text box, which is what the ban length uses.
+  Typing a number of hours into a text area is not a question anybody should be asked
+
 ## 0.57.0 - 2026-10-03
 
 ### Changed
