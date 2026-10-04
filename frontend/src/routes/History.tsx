@@ -74,6 +74,28 @@ export default function HistoryRoute({
           {plays.toLocaleString()} {plays === 1 ? "play" : "plays"}
           {total !== plays && ` · ${total.toLocaleString()} sessions`}
         </span>
+        <label className="only-narrow row">
+          <span className="muted small">Sort</span>
+          <select
+            className="inline-select"
+            value={`${sort}:${order}`}
+            onChange={(e) => {
+              const [key, dir] = e.target.value.split(":");
+              setSort(key);
+              setOrder(dir as "asc" | "desc");
+              setPage(1);
+            }}
+          >
+            {Object.entries(SORTABLE).map(([key, label]) => [
+              <option key={`${key}:desc`} value={`${key}:desc`}>
+                {label}, highest first
+              </option>,
+              <option key={`${key}:asc`} value={`${key}:asc`}>
+                {label}, lowest first
+              </option>,
+            ])}
+          </select>
+        </label>
         <div className="row" style={{ marginLeft: "auto" }}>
           <button className="ms-btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>
             Previous
@@ -90,7 +112,7 @@ export default function HistoryRoute({
       <div className="view-body">
         <div className="list-wrap">
           {data.error && <p className="note bad-note pad" role="alert">{data.error}</p>}
-          <table className="table locations">
+          <table className="table locations stacks">
             <thead>
               <tr>
                 {Object.entries(SORTABLE).map(([key, label]) => (
@@ -120,15 +142,15 @@ export default function HistoryRoute({
                   }
                   aria-expanded={open === row.row_id}
                 >
-                  <td className="muted">{when(row.started)}</td>
-                  <td>
+                  <td className="muted" data-label="When">{when(row.started)}</td>
+                  <td data-label="Title">
                     {(row as HistoryRow & { anonymised?: boolean }).anonymised ? (
                       <span className="muted">Withheld, another viewer</span>
                     ) : (
                       displayTitle(row)
                     )}
                   </td>
-                  <td>
+                  <td data-label="User">
                     {row.user_id !== null && onOpenUser ? (
                       <button
                         className="linkish"
@@ -143,16 +165,16 @@ export default function HistoryRoute({
                       names.get(row.user_id ?? -1) ?? row.user_id
                     )}
                   </td>
-                  <td className="muted">{row.platform}</td>
-                  <td className="muted">{row.player}</td>
-                  <td>
+                  <td className="muted" data-label="Platform">{row.platform}</td>
+                  <td className="muted" data-label="Device">{row.player}</td>
+                  <td data-label="Type">
                     <span className="pill">{row.media_type}</span>
                     {row.transcode_decision === "transcode" && (
                       <span className="pill warn">transcode</span>
                     )}
                   </td>
-                  <td className="num">{row.percent_complete ?? 0}%</td>
-                  <td className="muted">{row.ip_address}</td>
+                  <td className="num" data-label="Progress">{row.percent_complete ?? 0}%</td>
+                  <td className="muted" data-label="Address">{row.ip_address}</td>
                 </tr>,
                 open === row.row_id && (
                   <tr key={`${row.row_id}-detail`} className="play-detail-row">

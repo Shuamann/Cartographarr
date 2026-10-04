@@ -245,6 +245,7 @@ type Reviewed = {
   home: boolean;
   active_in_tautulli: boolean;
   libraries: string[] | null;
+  libraries_never_opened: string[] | null;
   allow_sync: boolean | null;
   plays: number;
   recent_plays: number;
@@ -266,12 +267,16 @@ const STATUS: Record<Reviewed["status"], { label: string; tone: string }> = {
 function AccessReview() {
   const nav = useNav();
   const data = useApi<{ inactive_days: number; people: Reviewed[] }>("/access-review");
-  const [filter, setFilter] = useState<"all" | "attention">("attention");
+  const [filter, setFilter] = useState<"all" | "attention" | "unopened">("attention");
   if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Reviewing who uses their access" />;
   const { inactive_days, people } = data.data;
   const attention = people.filter((p) => p.status === "inactive" || p.status === "never");
-  const shown = filter === "all" ? people : attention;
+  /* People who do use the server and have never once opened something you
+     share with them. Someone who watches nothing at all is the question
+     above, not this one, so they are left out of it. */
+  const unopened = people.filter((p) => p.status === "active" && (p.libraries_never_opened?.length ?? 0) > 0);
+  const shown = filter === "all" ? people : filter === "unopened" ? unopened : attention;
   return (
     <>
       <p className="muted small">
@@ -284,11 +289,20 @@ function AccessReview() {
         <button className={filter === "attention" ? "chip on" : "chip"} onClick={() => setFilter("attention")}>
           Needs a look {attention.length}
         </button>
+        <button className={filter === "unopened" ? "chip on" : "chip"} onClick={() => setFilter("unopened")}>
+          Never opened a library {unopened.length}
+        </button>
         <button className={filter === "all" ? "chip on" : "chip"} onClick={() => setFilter("all")}>
           Everyone {people.length}
         </button>
       </div>
-      {shown.length === 0 && <p className="muted">Everyone with access is using it.</p>}
+      {shown.length === 0 && (
+        <p className="muted">
+          {filter === "unopened"
+            ? "Everyone watching uses every library you share with them."
+            : "Everyone with access is using it."}
+        </p>
+      )}
       <div className="mini-list">
         {shown.map((p) => (
           <div key={p.user_id} className="mini">
@@ -318,6 +332,11 @@ function AccessReview() {
                     ? "No libraries shared"
                     : p.libraries.join(", ")}
               </p>
+              {p.status === "active" && (p.libraries_never_opened?.length ?? 0) > 0 && (
+                <p className="muted small">
+                  Never opened: {p.libraries_never_opened!.join(", ")}
+                </p>
+              )}
             </div>
           </div>
         ))}

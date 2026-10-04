@@ -1273,6 +1273,18 @@ def access_review(admin: AdminUser, db: Db) -> dict:
             ).group_by(History.user_id)
         ).all()
     }
+    # Which libraries each person has ever played from. "Do they still watch"
+    # is one question; "which of the libraries you share with them have they
+    # never once opened" is a different and more actionable one, and the answer
+    # to it is already here.
+    opened: dict[int, set[int]] = {}
+    for r in db.execute(
+        select(History.user_id, History.section_id)
+        .where(History.section_id.is_not(None))
+        .group_by(History.user_id, History.section_id)
+    ).all():
+        opened.setdefault(r.user_id, set()).add(int(r.section_id))
+
     banned_by_user: dict[int, int] = {}
     for (uid,) in db.execute(select(BannedDevice.user_id)).all():
         if uid is not None:
@@ -1285,6 +1297,11 @@ def access_review(admin: AdminUser, db: Db) -> dict:
             ids = _json.loads(u.shared_libraries) if u.shared_libraries else None
         except ValueError:
             ids = None
+        shared_ids = None if ids is None else [int(i) for i in ids if str(i).isdigit()]
+        never_opened = (
+            None if shared_ids is None
+            else [libraries.get(i, f"Library {i}") for i in shared_ids if i not in opened.get(u.user_id, set())]
+        )
         last = s.last_play if s else None
         idle = (now - last) // 86400 if last else None
         if u.deleted_in_tautulli:
@@ -1302,7 +1319,8 @@ def access_review(admin: AdminUser, db: Db) -> dict:
             "email": u.email,
             "home": bool(u.is_home_user),
             "active_in_tautulli": bool(u.is_active),
-            "libraries": None if ids is None else [libraries.get(int(i), f"Library {i}") for i in ids if str(i).isdigit()],
+            "libraries": None if shared_ids is None else [libraries.get(i, f"Library {i}") for i in shared_ids],
+            "libraries_never_opened": never_opened,
             "allow_sync": u.allow_sync,
             "plays": s.plays if s else 0,
             "recent_plays": int(s.recent or 0) if s else 0,

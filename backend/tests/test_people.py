@@ -155,8 +155,9 @@ def test_access_review(client):
         db.add(User(user_id=2, username="gone quiet", shared_libraries=json.dumps(["1"]), is_active=True))
         db.add(User(user_id=3, username="never", is_active=True))
         db.add(User(user_id=4, username="removed", deleted_in_tautulli=True))
-        db.add(History(row_id=1, user_id=1, started=now - 86400, machine_id="a"))
-        db.add(History(row_id=2, user_id=2, started=now - 200 * 86400, machine_id="b"))
+        # Busy watches films and has never once opened the TV library.
+        db.add(History(row_id=1, user_id=1, started=now - 86400, machine_id="a", section_id=1))
+        db.add(History(row_id=2, user_id=2, started=now - 200 * 86400, machine_id="b", section_id=1))
         db.add(BannedDevice(machine_id="b", user_id=2))
     data = client.get("/api/access-review").json()
     people = {p["username"]: p for p in data["people"]}
@@ -166,6 +167,10 @@ def test_access_review(client):
     assert people["gone quiet"]["status"] == "inactive" and people["gone quiet"]["idle_days"] == 200
     assert people["gone quiet"]["banned_devices"] == 1
     assert people["never"]["libraries"] is None and people["never"]["status"] == "never"
+    # Sharing a library is not the same as them using it.
+    assert people["busy"]["libraries_never_opened"] == ["TV"]
+    assert people["gone quiet"]["libraries_never_opened"] == []
+    assert people["never"]["libraries_never_opened"] is None
     client.post("/api/auth/users", json={"username": "viewer1", "password": "a-long-enough-password", "role": "viewer"})
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"username": "viewer1", "password": "a-long-enough-password"})

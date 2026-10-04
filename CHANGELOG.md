@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.62.0 - 2026-10-04
+
+### Added
+- Access review answers a second question: which of the libraries you share with somebody have they never once
+  opened. "Do they still watch" was already there, and this is the more actionable half of it. A chip lists the
+  people who do use the server and have never touched something shared with them, and each of them says which.
+
+### Changed
+- History works on a phone. It was the one page that did not: nine columns in a sideways scroller with a hundred
+  touch targets under 32 pixels. Below 700 pixels the same rows stack into labelled blocks, and because hiding the
+  header would have taken the sorting with it, the sort moves into the bar above.
+- Links and checkboxes are big enough to hit at phone width everywhere else too, which was the same twenty pixel
+  target repeated down every list in the app.
+
 ## 0.61.0 - 2026-10-03
 
 ### Added

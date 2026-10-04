@@ -1254,6 +1254,94 @@ code {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+/* A table of nine columns on a phone was a horizontal scroller full of
+ * targets too small to hit. The same markup stacks instead: one block per
+ * play, each cell labelled from the column it came from. */
+.only-narrow {
+  display: none;
+}
+@media (max-width: 700px) {
+  .only-narrow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .inline-select {
+    display: inline-block;
+    width: auto;
+    margin-top: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .table.stacks,
+  .table.stacks tbody,
+  .table.stacks tr,
+  .table.stacks td {
+    display: block;
+    width: auto;
+  }
+  /* The header is where the sorting lived, so it moves to the view bar. */
+  .table.stacks thead {
+    display: none;
+  }
+  .table.stacks tbody tr.loc-row {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table.stacks tbody tr.loc-row td {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-height: 32px;
+    padding: 2px 0;
+    border: 0;
+    text-align: left;
+  }
+  /* The label pushes everything else right, so a cell holding two pills keeps
+     them together instead of spreading them across the row. */
+  .table.stacks tbody tr.loc-row td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    margin-right: auto;
+    color: var(--ink-2);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  /* The title is the row, so it reads as a heading rather than a field. */
+  .table.stacks tbody tr.loc-row td[data-label="Title"] {
+    display: block;
+    font-weight: 600;
+  }
+  .table.stacks tbody tr.loc-row td[data-label="Title"]::before {
+    display: none;
+  }
+  .table.stacks tbody tr.loc-row.selected td:first-child {
+    box-shadow: none;
+  }
+  .table.stacks tbody tr.loc-row.selected {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .table.stacks .play-detail-row td {
+    padding: 0;
+  }
+  /* Every list in the app links out through one of these, and at this width
+     they were all a twenty pixel target. */
+  .linkish {
+    min-height: 32px;
+    min-width: 32px;
+  }
+  .seg {
+    min-height: 32px;
+  }
+  /* .check input sets width: auto, so this has to be as specific to win. */
+  input[type="checkbox"],
+  .check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 /* ---- settings ---------------------------------------------------------- */
 
 select {
