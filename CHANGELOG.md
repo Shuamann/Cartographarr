@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.65.0 - 2026-10-04
+
+### Added
+- Space, on the Library overview: what each library takes, how many files, and what it has gained or lost over the
+  week and the month. Nothing anywhere recorded when a file arrived, so the scan now writes down what each library
+  holds once a day and the change is measured from that. The page says how many days it has so far rather than
+  claiming a figure it cannot support, and a library with no history reads as "no history yet" rather than
+  "unchanged", which are different answers.
+- How much room is left, on the Storage page. Read from the disks the media is mounted on, grouped by the device
+  underneath, so two stores on one share get one answer between them and are told they are sharing it. The bar
+  turns when a disk passes 90%. Nothing to show when the media is not mounted into the container, which is a normal
+  way to run this and not an error.
+
 ## 0.64.0 - 2026-10-04
 
 ### Added

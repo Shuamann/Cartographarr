@@ -308,6 +308,7 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
           <dd>{o.stalls_recorded.toLocaleString()}</dd>
         </div>
       </dl>
+      <Space />
       <h3>By resolution</h3>
       <div className="mini-list">
         {o.resolutions.map((r) => (
@@ -330,6 +331,93 @@ function OverviewSection({ onOpen }: { onOpen: (s: SectionId) => void }) {
     </>
   );
 }
+type SpaceReport = {
+  libraries: {
+    section_id: number;
+    name: string;
+    files: number;
+    size: number;
+    change_week: number | null;
+    files_week: number | null;
+    change_month: number | null;
+  }[];
+  total: number;
+  recorded_from: string | null;
+  recorded_days: number;
+};
+
+/* Gained or lost, in words.
+ *
+ * Null is not zero. "Nothing has changed" and "nobody wrote down what it was"
+ * are different answers, and a library that reads as unchanged when the truth
+ * is that there is no history yet is the kind of wrong that gets believed. */
+function moved(bytes: number | null): { text: string; tone: string } {
+  if (bytes === null) return { text: "no history yet", tone: "muted small" };
+  // Under a gigabyte either way is a file being replaced, not the library
+  // growing, and saying "up 0.2 GB" every week is noise.
+  if (Math.abs(bytes) < 1e9) return { text: "about the same", tone: "muted small" };
+  return bytes > 0
+    ? { text: `up ${size(bytes)}`, tone: "muted small space-up" }
+    : { text: `down ${size(-bytes)}`, tone: "muted small space-down" };
+}
+
+/* What the libraries take and what is left on the disks.
+ *
+ * Free space belongs to the disk, not the library: two libraries on one share
+ * have one answer between them, so it is reported per mount with the
+ * libraries that live there named, and never added up across mounts. */
+function Space() {
+  const data = useApi<SpaceReport>("/library/space");
+  if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
+  if (!data.data) return null;
+  const s = data.data;
+  if (s.libraries.length === 0) return null;
+  const biggest = Math.max(...s.libraries.map((l) => l.size), 1);
+
+  return (
+    <>
+      <h3>Space</h3>
+      <p className="muted small">
+        What each library takes, and what it has gained or lost. How much room is left belongs to the disk rather than
+        the library, since two libraries on one share have one answer between them, so it is under Storage.
+      </p>
+      <div className="mini-list">
+        {s.libraries.map((l) => {
+          const week = moved(l.change_week);
+          return (
+            <div key={l.section_id} className="mini">
+              <div className="min0">
+                <div className="row-between">
+                  <strong>{l.name}</strong>
+                  <span className="muted small">{size(l.size)}</span>
+                </div>
+                <span className="progress space-bar">
+                  <span className="progress-fill" style={{ width: `${(l.size / biggest) * 100}%` }} />
+                </span>
+                <p className="muted small">
+                  {l.files.toLocaleString()} files{" · "}
+                  <span className={week.tone}>{week.text} this week</span>
+                  {l.files_week !== null && l.files_week !== 0
+                    ? `, ${l.files_week > 0 ? "+" : ""}${l.files_week.toLocaleString()} files`
+                    : ""}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {s.recorded_days < 8 && (
+        <p className="muted small">
+          {s.recorded_days === 0
+            ? "Nothing is written down yet. The library scan notes what each library holds once a day, so what was gained or lost can be shown from tomorrow."
+            : `${s.recorded_days} ${s.recorded_days === 1 ? "day" : "days"} written down so far, from ${s.recorded_from}. A week of them makes the weekly figure a real one.`}
+        </p>
+      )}
+    </>
+  );
+}
+
 function Transcodes({ days }: { days: number }) {
   const nav = useNav();
   const data = useApi<{
@@ -1860,6 +1948,13 @@ type Store = {
   average_bitrate: number | null;
   stalls_per_100: number | null;
   transcode_percent: number | null;
+  // Read from the disk this store is on, or null when the media is not
+  // mounted into this container.
+  path: string | null;
+  free: number | null;
+  total: number | null;
+  used: number | null;
+  shared_with: string[];
 };
 
 type StorePoint = {
@@ -1940,6 +2035,7 @@ function StorageSection({ days }: { days: number }) {
           viewers outside the house usually are not the disk.
         </p>
       )}
+      <Disks stores={stores} />
       <table className="table">
         <thead>
           <tr>
@@ -2015,6 +2111,60 @@ function StorageSection({ days }: { days: number }) {
       </table>
       <StoreTrends />
     </>
+  );
+}
+
+/* How much room is left, from the disks themselves.
+ *
+ * Above the table rather than a column in it, because free space belongs to
+ * the disk and several stores can sit on one: as a column it would print the
+ * same four terabytes on three rows and invite somebody to add them up. */
+function Disks({ stores }: { stores: Store[] }) {
+  // One card per disk, whichever stores point at it.
+  const byPath = new Map<string, { path: string; free: number; total: number; used: number; on: string[] }>();
+  for (const s of stores) {
+    if (!s.path || s.total === null || s.free === null || s.used === null) continue;
+    const row = byPath.get(s.path) ?? { path: s.path, free: s.free, total: s.total, used: s.used, on: [] };
+    row.on.push(s.store);
+    byPath.set(s.path, row);
+  }
+  const disks = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+
+  if (disks.length === 0) {
+    return (
+      <p className="muted small">
+        How much room is left is read from the disks the media sits on, which are not mounted into this container.
+        Add them under Settings, Library, Tidying files and it appears here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mini-list space-disks">
+      {disks.map((d) => {
+        const full = d.total ? (d.used / d.total) * 100 : 0;
+        return (
+          <div key={d.path} className="mini space-disk">
+            <div className="min0">
+              <div className="row-between">
+                <strong>{d.path}</strong>
+                <span className={full >= 90 ? "pill warn" : "pill"}>{size(d.free)} free</span>
+              </div>
+              <span className="progress space-bar">
+                <span
+                  className={full >= 90 ? "progress-fill full" : "progress-fill"}
+                  style={{ width: `${Math.min(100, full)}%` }}
+                />
+              </span>
+              <p className="muted small">
+                {size(d.used)} of {size(d.total)} used ({full.toFixed(0)}%)
+                {d.on.length > 1 ? ` · shared by ${d.on.join(", ")}` : ` · ${d.on[0]}`}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

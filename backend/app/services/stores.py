@@ -97,6 +97,7 @@ def summary(days: int = 30) -> dict[str, Any]:
             ).all()
         )
     stores: dict[str, dict[str, Any]] = {}
+    examples: dict[str, list[str]] = {}
     for rating_key, path, size, bitrate in files:
         root = root_of(path, depth) or UNKNOWN
         label = named.get(root) or root
@@ -104,6 +105,11 @@ def summary(days: int = 30) -> dict[str, Any]:
             "store": label, "roots": set(), "files": 0, "size": 0, "bitrate_total": 0, "bitrate_files": 0,
             "plays": 0, "remote_plays": 0, "transcodes": 0, "stalls": 0,
         })
+        # A few paths per store, so the disk underneath can be found. More
+        # than one because the file a scan read may have moved since.
+        shown = examples.setdefault(label, [])
+        if len(shown) < 4:
+            shown.append(path)
         store["roots"].add(root)
         store["files"] += 1
         store["size"] += int(size or 0)
@@ -130,6 +136,14 @@ def summary(days: int = 30) -> dict[str, Any]:
             "transcode_percent": round(store["transcodes"] / store["plays"] * 100) if store["plays"] else None,
         })
     out.sort(key=lambda s: -s["size"])
+    # How much room is left, from the disks themselves. Per device rather
+    # than per store, so two stores on one share read the same answer once.
+    from app.services import space
+
+    room = space.disks(examples)
+    for row in out:
+        row.update(room.get(row["store"]) or {"path": None, "free": None, "total": None,
+                                              "used": None, "shared_with": []})
     return {"stores": out, "days": days, "depth": depth}
 
 

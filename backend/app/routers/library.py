@@ -48,6 +48,15 @@ def overview(_: AdminUser, db: Db) -> dict:
     }
 
 
+@router.get("/space")
+def space(_: AdminUser, db: Db) -> dict:
+    """What each library takes, what it has gained or lost, and what is left
+    on the disks it sits on."""
+    from app.services import space as space_service
+
+    return space_service.report(db)
+
+
 @router.get("/transcodes")
 def transcodes(_: AdminUser, db: Db, days: int = Days) -> dict:
     return library.transcode_causes(db, days)

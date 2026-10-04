@@ -189,6 +189,12 @@ def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[d
     except ValueError as exc:
         raise HTTPException(400, redact(exc)) from exc
 
+    if {"media_roots", "media_path_map"} & set(values):
+        # Which disk a library is on was worked out from the old paths.
+        from app.services import space
+
+        space.forget_mounts()
+
     changes = {
         key: (
             {"changed": True}

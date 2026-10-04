@@ -1342,6 +1342,26 @@ code {
   }
 }
 
+/* A disk filling up is the one number here somebody acts on, so it is a bar
+   rather than a line of text, and it turns when there is little left. */
+.space-bar {
+  height: 6px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+.space-disk .progress-fill.full {
+  background: var(--warn);
+}
+.space-disks {
+  margin-bottom: 14px;
+}
+.space-up {
+  color: var(--ok);
+}
+.space-down {
+  color: var(--warn);
+}
+
 /* ---- settings ---------------------------------------------------------- */
 
 select {

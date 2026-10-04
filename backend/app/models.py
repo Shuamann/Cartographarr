@@ -642,6 +642,34 @@ class TravelFlag(Base):
     """Set when an ignore pattern closed this flag, rather than a person."""
 
 
+class LibrarySize(Base):
+    """What a library held, once a day.
+
+    Space used is a sum of the files and can be worked out any time. Space
+    gained or lost cannot: nothing anywhere records when a file arrived, and
+    the library scan overwrites what it finds. So the only way to know whether
+    a library grew this week is to have written down what it was last week,
+    which is what this is.
+
+    One row per library per day, written by the scan and overwritten by each
+    later scan the same day. Thirty rows a year per library; it never needs
+    pruning.
+    """
+
+    __tablename__ = "library_sizes"
+    __table_args__ = (Index("ix_library_size_day", "section_id", "on_day", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    section_id: Mapped[int] = mapped_column(Integer)
+    on_day: Mapped[str] = mapped_column(String(10))
+    """The server's own date, as YYYY-MM-DD, because that is the day somebody
+    means when they ask what it was a week ago."""
+
+    files: Mapped[int] = mapped_column(Integer, default=0)
+    bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    at: Mapped[datetime | None] = mapped_column()
+
+
 class Replacement(Base):
     """A file being replaced through Radarr or Sonarr, from the release chosen
     to the import confirmed or denied. See services/replacements.py."""

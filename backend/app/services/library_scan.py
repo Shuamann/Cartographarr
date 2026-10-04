@@ -133,8 +133,40 @@ async def scan(client) -> dict[str, Any]:
                 rows.extend(found)
 
     counts = await asyncio.to_thread(_store, rows, started)
+    await asyncio.to_thread(_record_sizes, started)
     return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
             "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+
+
+def _record_sizes(started: datetime) -> None:
+    """Write down what each library holds today.
+
+    Nothing records when a file arrived, so whether a library grew this week
+    can only be answered by having written down what it was last week. This is
+    that. One row per library per day, the day's later scans overwriting the
+    earlier ones, so it is the last word on each day rather than the first.
+    """
+    MediaItem, LibrarySize = models.MediaItem, models.LibrarySize
+    day = started.astimezone().strftime("%Y-%m-%d") if started.tzinfo else started.strftime("%Y-%m-%d")
+    with session_scope() as db:
+        rows = db.execute(
+            select(
+                MediaItem.section_id,
+                func.count().label("files"),
+                func.coalesce(func.sum(MediaItem.file_size), 0).label("bytes"),
+            )
+            .where(MediaItem.media_type.in_(("movie", "episode")), MediaItem.section_id.is_not(None), in_library())
+            .group_by(MediaItem.section_id)
+        ).all()
+        for row in rows:
+            existing = db.execute(
+                select(LibrarySize).where(LibrarySize.section_id == row.section_id, LibrarySize.on_day == day)
+            ).scalar_one_or_none()
+            if existing is None:
+                db.add(LibrarySize(section_id=row.section_id, on_day=day, files=row.files,
+                                   bytes=int(row.bytes or 0), at=started))
+            else:
+                existing.files, existing.bytes, existing.at = row.files, int(row.bytes or 0), started
 
 
 def _store(rows: list[dict[str, Any]], started: datetime) -> dict[str, int]:
