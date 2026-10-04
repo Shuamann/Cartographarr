@@ -1,3 +1,4 @@
+import { askConfirm, askText } from "../components/Ask";
 import Loading from "../components/Loading";
 import { useMemo, useState } from "react";
 import FilterBar from "../components/FilterBar";
@@ -173,7 +174,14 @@ export default function Reports() {
   const savedRow = typeof openId === "number" ? saved.data?.find((r) => r.id === openId) : undefined;
 
   async function save(asNew: boolean) {
-    const name = prompt("Name this report", asNew || !savedRow ? (spec.name === BLANK.name ? "" : spec.name) : savedRow.name);
+    const name = await askText({
+      title: asNew || !savedRow ? "Save this report" : "Rename this report",
+      body: "Saved reports are shared with everyone who can run them.",
+      label: "Name",
+      initial: asNew || !savedRow ? (spec.name === BLANK.name ? "" : spec.name) : savedRow.name,
+      required: true,
+      confirm: "Save",
+    });
     if (!name?.trim()) return;
     const body = { ...spec, name: name.trim(), filters: filtersToSave(filters, spec.range) };
     try {
@@ -191,7 +199,13 @@ export default function Reports() {
   }
 
   async function remove() {
-    if (!savedRow || !confirm(`Delete the saved report "${savedRow.name}"?`)) return;
+    if (!savedRow) return;
+    if (!(await askConfirm({
+      title: `Delete the saved report "${savedRow.name}"?`,
+      body: "Everyone who could open it loses it.",
+      confirm: "Delete",
+      danger: true,
+    }))) return;
     await api.del(`/reports/saved/${savedRow.id}`);
     saved.reload();
     open(BLANK);

@@ -1,3 +1,4 @@
+import { askConfirm, askText, tell } from "../components/Ask";
 import { useEffect, useMemo, useState } from "react";
 import CountryList from "../components/CountryList";
 import ModeSwitch from "../components/ModeSwitch";
@@ -124,7 +125,12 @@ export default function RulesRoute({
   const locked = setting("enforce_dry_run")?.source === "environment" && setting("enforce_dry_run")?.value === true;
 
   async function remove(rule: Rule) {
-    if (!confirm(`Delete "${rule.name}"?`)) return;
+    if (!(await askConfirm({
+      title: `Delete "${rule.name}"?`,
+      body: "Matches already in the Log stay there.",
+      confirm: "Delete",
+      danger: true,
+    }))) return;
     await api.del(`/rules/${rule.id}`);
     rules.reload();
   }
@@ -136,7 +142,17 @@ export default function RulesRoute({
 
   async function setRecordOnly(rule: Rule, recordOnly: boolean) {
     const effects = consequences(rule.actions ?? []);
-    if (!recordOnly && effects && !confirm(`Let "${rule.name}" act? It will ${effects}, not just record matches.`)) return;
+    if (
+      !recordOnly &&
+      effects &&
+      !(await askConfirm({
+        title: `Let "${rule.name}" act?`,
+        body: `It will ${effects}, not just record matches.`,
+        confirm: "Let it act",
+        danger: true,
+      }))
+    )
+      return;
     await api.put(`/rules/${rule.id}`, { record_only: recordOnly });
     rules.reload();
   }
@@ -413,7 +429,16 @@ function BanListCard({ onRulesChanged }: { onRulesChanged: () => void }) {
   const banMode = useApi<{ record_only: boolean; dry_run_locked: boolean }>(nav.isAdmin ? "/bans/settings" : null);
 
   async function setBanRecordOnly(recordOnly: boolean) {
-    if (!recordOnly && !confirm("Let the ban list act? Streams from banned devices will be stopped, not just recorded.")) return;
+    if (
+      !recordOnly &&
+      !(await askConfirm({
+        title: "Let the ban list act?",
+        body: "Streams from banned devices will be stopped, not just recorded.",
+        confirm: "Let it act",
+        danger: true,
+      }))
+    )
+      return;
     await api.put("/bans/settings", { record_only: recordOnly });
     banMode.reload();
   }
@@ -424,18 +449,27 @@ function BanListCard({ onRulesChanged }: { onRulesChanged: () => void }) {
     const list = convertible.data ?? [];
     const custom = list.filter((r) => r.message).length;
     const disabled = list.filter((r) => !r.enabled).length;
-    const ok = window.confirm(
-      `Move ${list.length} rule${list.length === 1 ? "" : "s"} into the ban list?
-
-` +
-        `Their devices are banned and the rules are deleted, so each device is managed from one place.` +
-        (custom ? `
-
-${custom} of them had their own message; banned devices all see the ban message from Settings.` : "") +
-        (disabled ? `
-
-${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ? "its" : "their"} devices are not banned, the rule is just removed.` : ""),
-    );
+    const ok = await askConfirm({
+      title: `Move ${list.length} rule${list.length === 1 ? "" : "s"} into the ban list?`,
+      body: (
+        <>
+          <p>Their devices are banned and the rules are deleted, so each device is managed from one place.</p>
+          {custom > 0 && (
+            <p>
+              {custom} of them had their own message; banned devices all see the ban message from Settings.
+            </p>
+          )}
+          {disabled > 0 && (
+            <p>
+              {disabled} {disabled === 1 ? "is" : "are"} switched off, so {disabled === 1 ? "its" : "their"} devices
+              are not banned, the rule is just removed.
+            </p>
+          )}
+        </>
+      ),
+      confirm: "Move them",
+      danger: true,
+    });
     if (!ok) return;
     setConverting(true);
     try {
@@ -506,12 +540,19 @@ ${disabled} ${disabled === 1 ? "is" : "are"} switched off, so ${disabled === 1 ?
                     <button
                       className="tab"
                       onClick={async () => {
-                        const reason = window.prompt(`Reason for banning ${b.label ?? b.machine_id}, for the log:`, b.reason ?? "");
+                        const reason = await askText({
+                          title: `Why is ${b.label ?? b.machine_id} banned?`,
+                          body: "Kept with the ban, and written to the Log.",
+                          label: "Reason",
+                          placeholder: "Optional",
+                          initial: b.reason ?? "",
+                          confirm: "Save",
+                        });
                         if (reason === null) return;
                         try {
                           await setBanReason(b.machine_id, reason);
                         } catch (err) {
-                          window.alert((err as Error).message);
+                          void tell("That did not work", (err as Error).message);
                         }
                       }}
                     >

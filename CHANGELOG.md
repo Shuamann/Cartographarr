@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.66.0 - 2026-10-04
+
+### Changed
+- The app asks its own questions. Thirty one places called the browser's confirm, prompt or alert, which arrive in
+  the wrong typeface in the wrong place, say "127.0.0.1:6277 says" above the question, cannot show a warning in red
+  or a file size, and on some browsers carry a tickbox that silently turns every later question into a no. There is
+  one dialog now, in the app's own style, and a test that stops another creeping back in.
+- Three of those questions are gone rather than replaced. Searching for a replacement, tagging a title for later,
+  and tagging a batch of them all asked about something reversible and said so in their own text, which makes a
+  step that is only ever clicked through, and teaches people to click through the ones that matter. Downloading a
+  chosen release no longer asks either: the picker already shows the release and now says what will happen to it.
+
 ## 0.65.0 - 2026-10-04
 
 ### Added

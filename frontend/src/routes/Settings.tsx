@@ -1,3 +1,4 @@
+import { askConfirm } from "../components/Ask";
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
 import { ACCENTS, SCHEMES, applyAccent, contrast, setScheme, type Parts, type Scheme } from "../theme/accent";
@@ -1740,7 +1741,12 @@ function Accounts() {
   }
 
   async function remove(user: AppUser) {
-    if (!confirm(`Delete the account "${user.username}"?`)) return;
+    if (!(await askConfirm({
+      title: `Delete the account "${user.username}"?`,
+      body: "They are signed out everywhere and cannot sign in again.",
+      confirm: "Delete",
+      danger: true,
+    }))) return;
     setError(null);
     try {
       await api.del(`/auth/users/${user.id}`);

@@ -1,3 +1,4 @@
+import { askConfirm, tell } from "./Ask";
 import { useState } from "react";
 import { api, useApi, type TravelFlag } from "../lib/api";
 import SignalDetail from "./SignalDetail";
@@ -41,7 +42,11 @@ export default function TravelFlags({
   }
 
   async function stopIgnoring(pattern: Ignore) {
-    if (!window.confirm(`Stop ignoring ${pattern.label} for ${pattern.user_name}? Signals it closed reopen.`)) return;
+    if (!(await askConfirm({
+      title: `Stop ignoring ${pattern.label} for ${pattern.user_name}?`,
+      body: "Signals it closed reopen.",
+      confirm: "Stop ignoring",
+    }))) return;
     await api.del(`/signal-ignores/${pattern.id}`);
     changed();
   }
@@ -68,12 +73,16 @@ export default function TravelFlags({
               className="tab"
               title="Mark them all reviewed, so the next signal stands out"
               onClick={async () => {
-                if (!window.confirm(`Mark all ${rows.length} signals as reviewed?`)) return;
+                if (!(await askConfirm({
+                  title: `Mark all ${rows.length} signals as reviewed?`,
+                  body: "They stay on the list, but the next new one stands out.",
+                  confirm: "Mark them reviewed",
+                }))) return;
                 try {
                   await api.post("/travel-flags/review-all", {});
                   changed();
                 } catch (err) {
-                  window.alert((err as Error).message);
+                  void tell("That did not work", (err as Error).message);
                 }
               }}
             >

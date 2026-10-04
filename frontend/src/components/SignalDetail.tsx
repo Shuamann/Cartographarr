@@ -1,3 +1,4 @@
+import { askConfirm, askText } from "./Ask";
 import Loading from "./Loading";
 import { displayTitle } from "../lib/titles";
 import { useState } from "react";
@@ -75,12 +76,13 @@ export default function SignalDetail({ id, onChanged }: { id: number; onChanged?
   async function setStatus(status: "new" | "reviewed" | "ignored") {
     let reason = "";
     if (status === "ignored") {
-      const answer = window.prompt(
-        `Ignore signals for ${s.user_name} between ${s.pattern_label}?\n\n` +
-          `This one closes, so do ${s.similar} similar signal${s.similar === 1 ? "" : "s"} already found, ` +
-          `and new ones are recorded as ignored. You can undo it.\n\nWhy is this expected (optional)?`,
-        "",
-      );
+      const answer = await askText({
+        title: `Ignore signals for ${s.user_name} between ${s.pattern_label}?`,
+        body: `This one closes, so do ${s.similar} similar signal${s.similar === 1 ? "" : "s"} already found, and new ones are recorded as ignored. You can undo it.`,
+        label: "Why is this expected?",
+        placeholder: "Optional",
+        confirm: "Ignore them",
+      });
       if (answer === null) return;
       reason = answer;
     }
@@ -100,7 +102,11 @@ export default function SignalDetail({ id, onChanged }: { id: number; onChanged?
 
   async function stopIgnoring() {
     if (!s.ignore) return;
-    if (!window.confirm(`Stop ignoring ${s.pattern_label} for ${s.user_name}? Signals it closed reopen.`)) return;
+    if (!(await askConfirm({
+      title: `Stop ignoring ${s.pattern_label} for ${s.user_name}?`,
+      body: "Signals it closed reopen.",
+      confirm: "Stop ignoring",
+    }))) return;
     setBusy(true);
     try {
       const r = await api.del<{ reopened: number }>(`/signal-ignores/${s.ignore.id}`);

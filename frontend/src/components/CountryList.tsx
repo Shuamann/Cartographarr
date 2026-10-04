@@ -1,3 +1,4 @@
+import { askConfirm } from "./Ask";
 import { useState } from "react";
 import { api, useApi } from "../lib/api";
 import ModeSwitch from "./ModeSwitch";
@@ -179,9 +180,17 @@ export default function CountryList() {
                 <input
                   type="checkbox"
                   checked={allowList}
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const on = e.target.checked;
-                    if (on && !window.confirm("Turn the list around? Everywhere NOT listed is flagged instead.")) return;
+                    if (
+                      on &&
+                      !(await askConfirm({
+                        title: "Turn the list around?",
+                        body: "Everywhere NOT listed is flagged instead.",
+                        confirm: "Turn it around",
+                      }))
+                    )
+                      return;
                     act(() => api.put("/geoblocks/settings", { allow_list: on }));
                   }}
                 />
@@ -211,8 +220,17 @@ export default function CountryList() {
           <ModeSwitch
             recordOnly={d.record_only}
             locked={d.dry_run_locked}
-            onChange={(recordOnly) => {
-              if (!recordOnly && !window.confirm("Let the country list act? Streams from countries set to stop will be ended.")) return;
+            onChange={async (recordOnly) => {
+              if (
+                !recordOnly &&
+                !(await askConfirm({
+                  title: "Let the country list act?",
+                  body: "Streams from countries set to stop will be ended, not just recorded.",
+                  confirm: "Let it act",
+                  danger: true,
+                }))
+              )
+                return;
               act(() => api.put("/geoblocks/settings", { record_only: recordOnly }));
             }}
           />

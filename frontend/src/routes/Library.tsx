@@ -1,3 +1,4 @@
+import { askConfirm, askText } from "../components/Ask";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
@@ -857,7 +858,19 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     const dropped =
       t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
     const warning = dropped > 0 ? `\n\n${dropped} track${dropped === 1 ? "" : "s"} will be dropped.` : "";
-    if (!confirm(`Tidy ${title}?${warning}\n\nThe file is read and written once, the result is checked against the original for length and picture, and only then does it replace it. The picture is never re-encoded.`)) return;
+    if (!(await askConfirm({
+      title: `Tidy ${title}?`,
+      body: (
+        <>
+          {warning ? <p className="warn-text">{warning.trim()}</p> : null}
+          <p>
+            The file is read and written once, the result is checked against the original for length and picture, and
+            only then does it replace it. The picture is never re-encoded.
+          </p>
+        </>
+      ),
+      confirm: "Tidy it",
+    }))) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -1100,12 +1113,12 @@ function ArrActions({
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [picking, setPicking] = useState(false);
 
+  /* No confirmation here any more. Searching only downloads a release the
+     quality profile already rates higher, tagging writes a label, and neither
+     deletes anything: the old dialog said so itself, which makes it a step
+     that is only ever clicked through. What happens instead is that the
+     button says what it is doing and the answer appears under it. */
   async function run(action: "search" | "tag") {
-    const question =
-      action === "search"
-        ? `Ask ${arr.label} to search for a replacement for ${title}?\n\nIt only downloads a release your quality profile rates higher than the current file. Nothing is deleted.`
-        : `Tag ${title} "cartographarr-replace" in ${arr.label}, to find and pick a release by hand later?`;
-    if (!confirm(question)) return;
     setBusy(action);
     setMessage(null);
     try {
@@ -1331,10 +1344,7 @@ function ReleasePicker({
   }, []);
 
   async function queue(release: Release) {
-    const how = release.held
-      ? `${label} does not rate it as an upgrade, so once downloaded it waits in Library, Remediation queue for you to confirm or deny.`
-      : `${label} rates it as an upgrade, so it will import it as soon as it is downloaded, without waiting for you.`;
-    if (!confirm(`Download this replacement for ${title}?\n\n${release.title}\n\n${how}`)) return;
+
     setError(null);
     // Asking the service can take a few seconds, and until now the dialog sat
     // there looking like nothing had happened, which is how a file gets asked
@@ -1774,10 +1784,15 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
   const service = r.service === "sonarr" ? "Sonarr" : "Radarr";
 
   async function decide(confirmIt: boolean) {
-    const question = confirmIt
-      ? `Import the new file for ${r.title}? ${service} replaces the current file (into its recycle bin, if you have one set).`
-      : `Deny this replacement for ${r.title}? The download is deleted and the release is blocked in ${service}.`;
-    if (!confirm(question)) return;
+    const ok = await askConfirm({
+      title: confirmIt ? `Import the new file for ${r.title}?` : `Deny this replacement for ${r.title}?`,
+      body: confirmIt
+        ? `${service} replaces the current file, into its recycle bin if you have one set.`
+        : `The download is deleted and the release is blocked in ${service}.`,
+      confirm: confirmIt ? "Import it" : "Deny it",
+      danger: !confirmIt,
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -2347,7 +2362,12 @@ function OldStalls() {
         className="btn"
         disabled={busy}
         onClick={async () => {
-          if (!window.confirm(`Forget ${old.data!.count} stalls recorded before ${old.data!.since}? This cannot be undone.`)) return;
+          if (!(await askConfirm({
+            title: `Forget ${old.data!.count} stalls recorded before ${old.data!.since}?`,
+            body: "This cannot be undone.",
+            confirm: "Forget them",
+            danger: true,
+          }))) return;
           setBusy(true);
           setError(null);
           try {
@@ -2460,7 +2480,8 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
 
   async function tag() {
     const keys = [...chosen];
-    if (!confirm(`Tag ${keys.length} ${keys.length === 1 ? "title" : "titles"} in Radarr or Sonarr for replacement?\n\nNothing is downloaded and nothing is deleted. The tag is a shortlist you can work through later.`)) return;
+    // Nothing is downloaded and nothing is deleted: the tag is a shortlist.
+    // There is nothing here to be sure about.
     setBusy(true);
     setMessage(null);
     try {
@@ -2855,8 +2876,14 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
               <button
                 className="linkish small"
                 title="Stop this file being suggested, whichever question is asked"
-                onClick={() => {
-                  const why = window.prompt(`Keep ${f.title} and stop suggesting it? A reason, for the Log:`, "");
+                onClick={async () => {
+                  const why = await askText({
+                    title: `Keep ${f.title} and stop suggesting it?`,
+                    body: "It stays in the library and stops appearing in this list. You can undo it later.",
+                    label: "Reason, for the Log",
+                    placeholder: "Optional",
+                    confirm: "Keep it",
+                  });
                   if (why === null) return;
                   act(() => api.post(`/library/cleanup/${f.rating_key}/keep`, { reason: why }));
                 }}

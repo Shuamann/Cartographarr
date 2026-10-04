@@ -1,3 +1,4 @@
+import { askConfirm, tell } from "../components/Ask";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
 import type { FilterState } from "../lib/filters";
@@ -220,12 +221,16 @@ export default function PeopleRoute({
                 className="chip"
                 title="Clear the new flag on all of them, so the next new device stands out"
                 onClick={async () => {
-                  if (!confirm(`Mark all ${newCount} devices as reviewed?`)) return;
+                  if (!(await askConfirm({
+                    title: `Mark all ${newCount} devices as reviewed?`,
+                    body: "They stay in the list, but the next new one stands out.",
+                    confirm: "Mark them reviewed",
+                  }))) return;
                   try {
                     await api.post("/devices/review-all", {});
                     devices.reload();
                   } catch (err) {
-                    window.alert((err as Error).message);
+                    void tell("That did not work", (err as Error).message);
                   }
                 }}
               >
@@ -397,7 +402,11 @@ function UserProfile({
   const streaming = (live?.sessions ?? []).filter((s) => Number(s.user_id) === userId);
 
   async function restore() {
-    if (!confirm(`Restore ${name} in Tautulli? History Tautulli erased when they were deleted does not come back.`)) return;
+    if (!(await askConfirm({
+      title: `Restore ${name} in Tautulli?`,
+      body: "History Tautulli erased when they were deleted does not come back.",
+      confirm: "Restore",
+    }))) return;
     setBusy(true);
     setError(null);
     try {

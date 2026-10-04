@@ -1,3 +1,4 @@
+import AskHost, { askConfirm, tell } from "./components/Ask";
 import BanDialog, { type BanRequest } from "./components/BanDialog";
 import Loading from "./components/Loading";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -200,23 +201,31 @@ function SignedIn({
   }
 
   async function unbanIpAddress(address: string): Promise<boolean> {
-    if (!window.confirm(`Unban ${address}? Streams from it will be allowed again.`)) return false;
+    if (!(await askConfirm({
+      title: `Unban ${address}?`,
+      body: "Streams from it will be allowed again.",
+      confirm: "Unban",
+    }))) return false;
     try {
       await unbanAddress(address);
       return true;
     } catch (err) {
-      window.alert((err as Error).message);
+      void tell("That did not work", (err as Error).message);
       return false;
     }
   }
 
   async function unbanMachine(machineId: string, label: string): Promise<boolean> {
-    if (!window.confirm(`Unban ${label}? It will be able to stream again.`)) return false;
+    if (!(await askConfirm({
+      title: `Unban ${label}?`,
+      body: "It will be able to stream again.",
+      confirm: "Unban",
+    }))) return false;
     try {
       await unban(machineId);
       return true;
     } catch (err) {
-      window.alert((err as Error).message);
+      void tell("That did not work", (err as Error).message);
       return false;
     }
   }
@@ -257,6 +266,7 @@ function SignedIn({
         }}
       >
       <div className="app">
+        <AskHost />
         <BanDialog request={banRequest} onClose={() => setBanRequest(null)} />
         <header className="topbar">
           <Brand />

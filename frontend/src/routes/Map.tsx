@@ -1,3 +1,4 @@
+import { askText } from "../components/Ask";
 import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
@@ -1566,7 +1567,13 @@ function BlockCountry({ code, name }: { code: string; name: string | null }) {
         className="tab"
         disabled={state === "saving" || state === "done"}
         onClick={async () => {
-          const reason = window.prompt(`Why add ${name || code} to the country list? Streams from there will be recorded.`, "");
+          const reason = await askText({
+            title: `Add ${name || code} to the country list?`,
+            body: "Streams from there will be recorded.",
+            label: "Why",
+            placeholder: "Optional",
+            confirm: "Add it",
+          });
           if (reason === null) return;
           setState("saving");
           try {
