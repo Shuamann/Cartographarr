@@ -45,7 +45,7 @@ import { EMPTY, type FilterState } from "./lib/filters";
 import { NavContext, type LibraryTarget } from "./lib/nav";
 import { unban, unbanAddress } from "./lib/bans";
 
-import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
+import { ADMIN_TABS, TABS, type PeopleFilter, type Tab, tabLabel } from "./lib/tabs";
 
 export default function App() {
   /* Wrapped here as well as around the active tab. The inner one keeps a
@@ -65,7 +65,7 @@ function Everything() {
   const [tab, setTab] = useState<Tab>(() => {
     let wanted = new URLSearchParams(window.location.search).get("tab");
     // Users and Devices became one tab. Old bookmarks still land somewhere.
-    if (wanted === "Users" || wanted === "Devices") wanted = "People";
+    if (wanted === "Users" || wanted === "Devices" || wanted === "Endpoints") wanted = "People";
     return (TABS as readonly string[]).includes(wanted ?? "") ? (wanted as Tab) : "Home";
   });
 
@@ -289,7 +289,7 @@ function SignedIn({
                 ref={t === active ? (el) => el?.scrollIntoView({ block: "nearest", inline: "nearest" }) : undefined}
                 onClick={() => setTab(t)}
               >
-                {t}
+                {tabLabel(t)}
                 {t === "Settings" && updateAvailable && <span className="update-dot" title="Update available" />}
               </button>
             ))}

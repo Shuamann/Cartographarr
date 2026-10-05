@@ -43,7 +43,7 @@ function destinations(isAdmin: boolean): { tab: Tab; note: string }[] {
   return [
     { tab: "Dashboard", note: "What is happening now" },
     { tab: "Map", note: "Where it is being watched from" },
-    { tab: "People", note: "Who is watching, and on what" },
+    { tab: "People", note: "Who is watching, on what, and from where" },
     { tab: "Library", note: "Files worth attention" },
     { tab: "Issues", note: "What viewers have reported" },
     { tab: "Settings", note: "Services, rules of the house, this page" },

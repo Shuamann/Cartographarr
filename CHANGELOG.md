@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.79.0 - 2026-10-05
+
+### Added
+- Addresses are a list of their own, beside Users and Devices. The detail view for an address already existed and
+  already worked; there was simply no way in to it, which is why clicking an address anywhere went to the map
+  instead. Five hundred of them in 75 ms, saying who used each, from where, on how many devices, and whether it is
+  banned, including by a range rather than by name.
+
+### Changed
+- The People tab is called Endpoints, because it is about three things and not one: a person, a device and an
+  address are three ways of asking the same question. Only the word changes. Every existing link, bookmark and
+  stored tab keeps working, and a URL asking for Endpoints works too.
+
 ## 0.78.0 - 2026-10-05
 
 ### Added

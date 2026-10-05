@@ -1139,6 +1139,95 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
     }
 
 
+@router.get("/addresses")
+def addresses(db: Db, scope: ViewerScope, limit: int = Query(500, ge=1, le=2000),
+              search: str | None = None, new_only: bool = False) -> list:
+    """Every address anyone has played from, newest first.
+
+    The third thing this tab is about. A person, a device and an address are
+    three ways of asking the same question, and only two of them had a list.
+    """
+    from app.models import BannedAddress
+
+    only = [History.user_id == scope.plex_user_id] if scope is not None else []
+    where = [History.ip_address.is_not(None), *only]
+    if search:
+        where.append(History.ip_address.like(f"%{search}%"))
+
+    rows = db.execute(
+        select(
+            History.ip_address,
+            plays(History).label("plays"),
+            func.count(func.distinct(History.user_id)).label("people"),
+            func.count(func.distinct(History.machine_id)).label("devices"),
+            func.max(History.started).label("last_seen"),
+            func.min(History.started).label("first_seen"),
+            func.max(History.location).label("location"),
+        )
+        .where(*where)
+        .group_by(History.ip_address)
+        .order_by(desc(func.max(History.started)))
+        .limit(limit)
+    ).all()
+
+    ips = [r.ip_address for r in rows]
+    places = {
+        loc.ip: loc
+        for loc in db.execute(select(IpLocation).where(IpLocation.ip.in_(ips))).scalars()
+    } if ips else {}
+    now = datetime.now(UTC)
+    banned = {
+        b.address
+        for b in db.execute(
+            select(BannedAddress).where(
+                (BannedAddress.expires_at.is_(None)) | (BannedAddress.expires_at > now)
+            )
+        ).scalars()
+    }
+    # One name per address, for a list that should read as people and places
+    # rather than as numbers.
+    names = dict(
+        db.execute(
+            select(History.ip_address, func.max(User.friendly_name))
+            .join(User, User.user_id == History.user_id)
+            .where(History.ip_address.in_(ips))
+            .group_by(History.ip_address)
+        ).all()
+    ) if ips else {}
+
+    out = []
+    for r in rows:
+        loc = places.get(r.ip_address)
+        out.append({
+            "ip_address": r.ip_address,
+            "plays": r.plays,
+            "users": r.people,
+            "devices": r.devices,
+            "last_seen": r.last_seen,
+            "first_seen": r.first_seen,
+            "location": r.location,
+            "who": names.get(r.ip_address),
+            "city": loc.city if loc else None,
+            "country": loc.country if loc else None,
+            "asn_org": loc.asn_org if loc else None,
+            "is_hosting": bool(loc.is_hosting) if loc else None,
+            # Banned exactly, or inside a range that is banned.
+            "banned": r.ip_address in banned or any("/" in b and _inside(r.ip_address, b) for b in banned),
+        })
+    if new_only:
+        out = [a for a in out if a["banned"]]
+    return out
+
+
+def _inside(ip: str, block: str) -> bool:
+    import ipaddress
+
+    try:
+        return ipaddress.ip_address(ip) in ipaddress.ip_network(block, strict=False)
+    except ValueError:
+        return False
+
+
 @router.get("/addresses/{ip}")
 def address_detail(ip: str, db: Db, scope: ViewerScope) -> dict:
     """One IP address: where it is, whose network, and everyone and every

@@ -38,7 +38,22 @@ export type Selection =
   | { kind: "device"; id: string }
   | { kind: "address"; id: string };
 
-type Mode = "users" | "devices";
+type Mode = "users" | "devices" | "addresses";
+
+type AddressRow = {
+  ip_address: string;
+  plays: number;
+  users: number;
+  devices: number;
+  last_seen: number | null;
+  location: string | null;
+  who: string | null;
+  city: string | null;
+  country: string | null;
+  asn_org: string | null;
+  is_hosting: boolean | null;
+  banned: boolean;
+};
 type Sort = "last_seen" | "plays" | "name";
 
 export default function PeopleRoute({
@@ -57,6 +72,9 @@ export default function PeopleRoute({
   const live = useApi<Activity>("/activity");
 
   const [mode, setMode] = useState<Mode>(initial?.kind === "device" ? "devices" : "users");
+  // The third list. Asked for only when it is the one being looked at: it is
+  // a group-by over the whole of history and nobody opens this tab for it.
+  const addresses = useApi<AddressRow[]>(mode === "addresses" ? "/addresses?limit=500" : null, [mode]);
   const [selected, setSelected] = useState<Selection | null>(initial ?? null);
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(initial?.kind === "user" ? [initial.id] : []),
@@ -140,6 +158,20 @@ export default function PeopleRoute({
           : (b.last_seen ?? 0) - (a.last_seen ?? 0),
     );
 
+  const addressRows = (addresses.data ?? [])
+    .filter((a) => {
+      if (onlyBanned && !a.banned) return false;
+      if (!q) return true;
+      return [a.ip_address, a.who, a.city, a.country, a.asn_org].some((h) => h && h.toLowerCase().includes(q));
+    })
+    .sort((a, b) =>
+      sort === "plays"
+        ? b.plays - a.plays
+        : sort === "name"
+          ? a.ip_address.localeCompare(b.ip_address)
+          : (b.last_seen ?? 0) - (a.last_seen ?? 0),
+    );
+
   const deviceRows = (devices.data ?? [])
     .filter((d) => {
       if (onlyNew && !d.is_new_unreviewed) return false;
@@ -175,7 +207,7 @@ export default function PeopleRoute({
 
   return (
     <div className="people">
-      <h1 className="spoken">People</h1>
+      <h1 className="spoken">Endpoints</h1>
       <aside className="people-list">
         <div className="people-tools">
           <input
@@ -192,6 +224,9 @@ export default function PeopleRoute({
               </button>
               <button className={mode === "devices" ? "seg on" : "seg"} onClick={() => setMode("devices")}>
                 Devices {devices.data?.length ?? ""}
+              </button>
+              <button className={mode === "addresses" ? "seg on" : "seg"} onClick={() => setMode("addresses")}>
+                Addresses {addresses.data?.length ?? ""}
               </button>
             </div>
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort">
@@ -325,8 +360,35 @@ export default function PeopleRoute({
               );
             })}
 
+          {mode === "addresses" &&
+            addressRows.map((a) => {
+              const here = selected?.kind === "address" && selected.id === a.ip_address;
+              return (
+                <button
+                  key={a.ip_address}
+                  className={here ? "device-row flat on" : "device-row flat"}
+                  onClick={() => setSelected({ kind: "address", id: a.ip_address })}
+                >
+                  <span className="clip">
+                    {a.ip_address}
+                    <span className="muted small person-owner">
+                      {[a.who, a.city].filter(Boolean).join(" · ") || a.country || "Unknown"}
+                    </span>
+                  </span>
+                  <span className="muted small">
+                    {a.plays.toLocaleString()} · {ago(a.last_seen)}
+                  </span>
+                  {a.is_hosting && <span className="pill vpn">VPN</span>}
+                  {a.banned && <span className="pill banned">banned</span>}
+                </button>
+              );
+            })}
+
           {mode === "users" && users.data && userRows.length === 0 && <p className="muted pad-s">Nobody matches.</p>}
           {mode === "devices" && devices.data && deviceRows.length === 0 && <p className="muted pad-s">No device matches.</p>}
+          {mode === "addresses" && addresses.data && addressRows.length === 0 && (
+            <p className="muted pad-s">No address matches.</p>
+          )}
         </div>
       </aside>
 
