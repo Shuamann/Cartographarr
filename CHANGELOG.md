@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.76.1 - 2026-10-05
+
+### Fixed
+- The posters and list switch does something at the show and season levels. It was above both of them and changed
+  nothing, because they were drawn as rows either way.
+
+### Changed
+- A file in the list view carries its poster, and the rows line up. It was a checkbox floating beside three stacked
+  lines with no picture, nothing separating one row from the next, and a line of air between every line of every
+  row, which over sixty rows is most of the page. A row is a third shorter and five fit where four did.
+
 ## 0.76.0 - 2026-10-05
 
 ### Fixed

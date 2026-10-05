@@ -893,10 +893,32 @@ code {
   gap: 4px;
 }
 
+/* One file in the list. It was a checkbox floating beside three stacked lines
+   with no poster, nothing separating one row from the next and nothing lining
+   up between them. */
 .big-row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.big-row:last-child {
+  border-bottom: 0;
+}
+.big-row:hover {
+  background: var(--surface-2);
+}
+.big-row .min0 {
+  gap: 3px;
+}
+/* Default paragraph margins put a line of air between every line of a row,
+   which on sixty rows is sixty rows of air. */
+.big-row .min0 > p {
+  margin: 0;
+}
+.big-row .min0 > .linkish {
+  font-size: var(--text-md);
 }
 
 .big-row > .file-row,
@@ -905,7 +927,7 @@ code {
 }
 
 .big-pick {
-  padding-top: 14px;
+  flex: 0 0 auto;
 }
 
 /* Choosing tracks on the file itself: two columns, one row per track. */

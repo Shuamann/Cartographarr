@@ -2875,16 +2875,21 @@ function Browse({
               <p className="muted small count-line">
                 {showList.data.total.toLocaleString()} {showList.data.total === 1 ? "show" : "shows"}.
               </p>
-              <div className="mini-list">
+              <div className={asTiles ? "poster-wall" : "mini-list"}>
                 {showList.data.items.map((s) => (
                   <button
                     key={s.rating_key}
-                    className="mini mini-button"
+                    className={asTiles ? "poster-tile" : "mini mini-button"}
                     onClick={() => setPlace({ show: s.rating_key, season: null, title: s.title })}
                   >
-                    <img className="row-poster" src={poster(s.rating_key, 80)} alt="" loading="lazy" />
+                    <img
+                      className={asTiles ? undefined : "row-poster"}
+                      src={poster(s.rating_key, asTiles ? 200 : 80)}
+                      alt=""
+                      loading="lazy"
+                    />
                     <div className="min0">
-                      <strong>{s.title}</strong>
+                      <strong className={asTiles ? "poster-name" : undefined}>{s.title}</strong>
                       <p className="muted small">
                         {s.seasons} {s.seasons === 1 ? "season" : "seasons"}
                         {" \u00b7 "}
@@ -2910,21 +2915,21 @@ function Browse({
           {!seasonList.data && <Loading label="Reading the seasons" />}
           {seasonList.error && <p className="note bad-note" role="alert">{seasonList.error}</p>}
           {seasonList.data && (
-            <div className="mini-list">
+            <div className={asTiles ? "poster-wall" : "mini-list"}>
               {seasonList.data.seasons.map((s) => (
                 <button
                   key={s.season}
-                  className="mini mini-button"
+                  className={asTiles ? "poster-tile" : "mini mini-button"}
                   onClick={() => setPlace({ ...place, season: s.season, title: place.title ?? seasonList.data!.title })}
                 >
                   <img
-                    className="row-poster"
-                    src={poster(s.rating_key ?? place.show ?? 0, 80)}
+                    className={asTiles ? undefined : "row-poster"}
+                    src={poster(s.rating_key ?? place.show ?? 0, asTiles ? 200 : 80)}
                     alt=""
                     loading="lazy"
                   />
                   <div className="min0">
-                    <strong>Season {s.season}</strong>
+                    <strong className={asTiles ? "poster-name" : undefined}>Season {s.season}</strong>
                     <p className="muted small">
                       {s.episodes} {s.episodes === 1 ? "episode" : "episodes"}
                       {" \u00b7 "}
@@ -2971,6 +2976,7 @@ function Browse({
                   onChange={(e) => choose(row.rating_key, e.target.checked)}
                 />
               </label>
+              <img className="row-poster" src={poster(row.rating_key, 80)} alt="" loading="lazy" />
               <div className="min0">
                 <button className="linkish" onClick={() => setOpen(row.rating_key)}>
                   <strong>{row.title}</strong>
