@@ -4374,6 +4374,12 @@ label.locked .pill {
   margin: var(--space-3) 0;
 }
 
+/* The things you can do about one request. */
+.request-links {
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
 /* A show or a season in a list. Neither has a row of its own in the library,
    so the art comes off one of its episodes. */
 .row-poster {

@@ -13,7 +13,7 @@ import { useIsAvailable } from "./Gated";
  * the same facts, links and actions, because both render this.
  */
 
-const LINKS: { key: string; label: string }[] = [
+export const LINKS: { key: string; label: string }[] = [
   { key: "plex", label: "Plex" },
   { key: "imdb", label: "IMDb" },
   { key: "tmdb", label: "TMDB" },

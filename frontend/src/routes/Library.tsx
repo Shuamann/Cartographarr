@@ -1,3 +1,5 @@
+import BrandIcon from "../components/BrandIcon";
+import { LINKS } from "../components/StreamDetail";
 import { askConfirm, askText } from "../components/Ask";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { when } from "../components/DataTable";
@@ -103,6 +105,7 @@ type RequestRow = {
   available_days: number | null;
   watched_by_others: number;
   file_size: number | null;
+  links?: Record<string, string>;
   // Whether the library has a file under that key at all.
   in_library?: boolean;
   matched_by_id?: boolean;
@@ -644,6 +647,26 @@ function Requests() {
                 {r.watched_by_others ? ` · watched by ${r.watched_by_others} other${r.watched_by_others === 1 ? "" : "s"}` : " · watched by nobody"}
                 {r.file_size ? ` · ${size(r.file_size)}` : ""}
               </p>
+              {/* Somewhere to go from the row. A missing id means no button
+                  rather than one that goes nowhere. */}
+              <div className="row wrap linkrow request-links">
+                {nav.filterTo && (
+                  <button
+                    className="ms-btn"
+                    onClick={() =>
+                      nav.filterTo?.("History", { rating_key: r.rating_key, ratingKeyLabel: r.title ?? "" })
+                    }
+                  >
+                    History
+                  </button>
+                )}
+                {LINKS.filter((l) => r.links?.[l.key]).map((l) => (
+                  <a key={l.key} className="ms-btn" href={r.links![l.key]} target="_blank" rel="noreferrer">
+                    <BrandIcon name={l.key} />
+                    {l.label}
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         ))}

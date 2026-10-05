@@ -178,3 +178,29 @@ def test_a_title_whose_key_changed_is_still_named(client, monkeypatch):
     assert r["requests"] == []
     assert r["missing"][0]["title"] == "Renumbered"
     assert r["missing"][0]["matched_by_id"] is True
+
+
+def test_a_request_carries_somewhere_to_go(client, monkeypatch):
+    """A row named a film and offered nothing to do about it. A missing id
+    means no button rather than one that goes nowhere."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=601, media_type="movie", title="Has every id",
+                         imdb_id="tt0111161", tmdb_id="278", file_size=5_000_000_000, section_id=1))
+
+    requests_from(monkeypatch, [a_request(601, tmdb=278), a_request(70001, tmdb=999)])
+    r = client.get("/api/library/requests?fresh=true").json()
+
+    here = r["requests"][0]["links"]
+    assert here["imdb"].endswith("/tt0111161/")
+    assert here["tmdb"].endswith("/movie/278")
+    assert "trakt" in here
+
+    # Nothing in the library: no Plex link, because a key Plex does not know
+    # lands on an error, but the id still opens the outside world.
+    gone = r["missing"][0]["links"]
+    assert "plex" not in gone and "imdb" not in gone
+    assert gone["tmdb"].endswith("/movie/999")

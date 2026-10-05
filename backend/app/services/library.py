@@ -883,6 +883,42 @@ async def unwatched_requests(db: Session | None = None, max_requests: int = 2000
     return await asyncio.to_thread(match_requests, requests)
 
 
+def _request_links(item: MediaItem | None, tmdb_id: Any, media_type: str | None, rating_key: int) -> dict[str, str]:
+    """Where a request can be opened. Built from what is already known, so a
+    missing id means no button rather than one that goes nowhere."""
+    from urllib.parse import quote
+
+    from app.integrations.seerr import seerr
+    from app.services import capabilities
+    from app.settings_store import current
+
+    settings = current()
+    links: dict[str, str] = {}
+    kind = "tv" if (media_type or "").lower() in ("tv", "show", "season", "episode") else "movie"
+
+    # Only worth offering when the library actually has it: a Plex link to a
+    # key Plex no longer knows lands on an error.
+    if item is not None:
+        server = settings.plex_machine_identifier or (capabilities.get().get("machine_identifier") or "")
+        if server:
+            links["plex"] = (
+                f"https://app.plex.tv/desktop/#!/server/{server}"
+                f"/details?key=%2Flibrary%2Fmetadata%2F{item.rating_key}"
+            )
+        if item.imdb_id:
+            links["imdb"] = f"https://www.imdb.com/title/{item.imdb_id}/"
+
+    tmdb = tmdb_id or (item.tmdb_id if item is not None else None)
+    if tmdb:
+        links["tmdb"] = f"https://www.themoviedb.org/{kind}/{tmdb}"
+        if seerr.configured():
+            links["seerr"] = f"{seerr.link_base}/{kind}/{tmdb}"
+    title = item.title if item is not None else None
+    if title:
+        links["trakt"] = f"https://app.trakt.tv/search?query={quote(title)}"
+    return links
+
+
 def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
     from app.db import session_scope
 
@@ -987,6 +1023,7 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
                 "available_days": int((now - added_ts) / 86400) if added_ts else None,
                 "watched_by_others": len(seen_by - {user_id}),
                 "file_size": named.file_size if named is not None else None,
+                "links": _request_links(named, media.get("tmdbId"), media.get("mediaType"), key),
             }
             row["requested_by_all"] = [row["requested_by"]] if row["requested_by"] else []
             merged[key] = row

@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.78.0 - 2026-10-05
+
+### Added
+- Every row under Requested, never watched has somewhere to go: its history here, and Plex, IMDb, TMDB, Trakt and
+  Seerr. Built from what is already known, so a missing id means no button rather than one that goes nowhere. A row
+  with no file behind it gets no Plex button, because a key Plex does not know lands on an error, but its ids still
+  open the outside world.
+
 ## 0.77.0 - 2026-10-05
 
 ### Fixed
