@@ -112,10 +112,15 @@ def test_record_only_is_per_rule_and_new_rules_start_recording_only(client):
     # A rule saved before the switch existed follows the old global setting.
     assert enforcer.record_only(Rule(id=99, name="old", record_only=None)) is True
 
-    assert client.get("/api/bans/settings").json()["record_only"] is True
+    # The ban list acts out of the box, unlike a rule. Somebody opened a
+    # dialog, named one device, typed a reason and chose how long; reading that
+    # as "record it and let the stream carry on" is the feature not working.
+    assert client.get("/api/bans/settings").json()["record_only"] is False
+    assert client.put("/api/bans/settings", json={"record_only": True}).json()["record_only"] is True
     assert client.put("/api/bans/settings", json={"record_only": False}).json()["record_only"] is False
     summaries = [e["summary"] for e in client.get("/api/log?kind=changes").json()]
     assert "Set rule 'No transcodes' to act" in summaries
+    assert "Set the ban list to record only" in summaries
     assert "Set the ban list to act" in summaries
 
 

@@ -467,6 +467,12 @@ def _record(rule: Rule, session: Session, dry_run: bool, result: str) -> None:
 
 BAN_RULE_NAME = "Banned devices"
 ADDRESS_RULE_NAME = "Banned addresses"
+
+# The ids the built-in rules are given, so cooldowns stay stable between
+# sweeps. They are not rows; nothing but this file reads them.
+DEVICE_BAN_ID = 0
+ADDRESS_BAN_ID = -100
+
 COUNTRY_RULE_NAME = "Blocked countries"
 
 
@@ -482,9 +488,20 @@ def record_only(rule: Rule) -> bool:
     if dry_run_locked():
         return True
     settings = current()
-    if rule.id == 0:
-        value = settings.ban_record_only
-    elif rule.id < 0:  # the country list
+    if rule.id in (DEVICE_BAN_ID, ADDRESS_BAN_ID):
+        # Both halves of the ban list answer to the ban list's own switch.
+        # Addresses used to fall through to the country list's, because they
+        # were only tested for being negative and the country rules are
+        # negative too, so a banned address never stopped anything unless the
+        # country list happened to be acting as well.
+        #
+        # Unset means act. A ban is not a rule: somebody opened a dialog, named
+        # one device or one address, typed a reason and chose how long. Reading
+        # that as "record it and let the stream carry on" is not a safe
+        # default, it is the feature quietly not working. The environment lock
+        # above still overrides it, which is what that is for.
+        return bool(settings.ban_record_only)
+    if rule.id < 0:  # the country list
         value = settings.geo_block_record_only
     else:
         value = rule.record_only
@@ -512,7 +529,7 @@ def ban_rule() -> Rule | None:
         return None
     settings = current()
     return Rule(
-        id=0,
+        id=DEVICE_BAN_ID,
         name=BAN_RULE_NAME,
         enabled=True,
         action="terminate",
@@ -557,7 +574,7 @@ def address_ban_rule() -> Rule | None:
     # twice to get that.
     message = settings.address_ban_message.strip() or settings.ban_message
     return Rule(
-        id=-100,
+        id=ADDRESS_BAN_ID,
         name=ADDRESS_RULE_NAME,
         enabled=True,
         action="terminate",

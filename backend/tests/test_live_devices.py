@@ -140,3 +140,88 @@ def test_a_ban_made_mid_stream_knows_who_and_what_it_banned(client):
         row = db.get(BannedDevice, machine)
         assert row.label == "PS5-099", "not a slice of the machine id"
         assert row.user_id == 7, "a ban with no user counts against nobody"
+
+
+def test_the_ban_list_answers_to_the_ban_list_switch(client):
+    """Both halves of it, devices and addresses.
+
+    The address rule is given a negative id so its cooldown stays stable, and
+    record_only only checked for a negative id before deciding something was
+    the country list. So a banned address took the country list's record only
+    setting, and with the country list flagging rather than stopping, which is
+    where it sensibly starts, a banned address never stopped a stream.
+    """
+    from app.services import enforcer
+    from app.settings_store import save
+
+    claim(client)
+    save({"ban_record_only": False, "geo_block_record_only": True, "enforce_dry_run": False})
+
+    addresses = enforcer.Rule(
+        id=enforcer.ADDRESS_BAN_ID, name=enforcer.ADDRESS_RULE_NAME, enabled=True,
+        action="terminate", message="", conditions="{}", actions="[]",
+    )
+    devices = enforcer.Rule(
+        id=enforcer.DEVICE_BAN_ID, name=enforcer.BAN_RULE_NAME, enabled=True,
+        action="terminate", message="", conditions="{}", actions="[]",
+    )
+    country = enforcer.Rule(
+        id=-1, name=enforcer.COUNTRY_RULE_NAME, enabled=True,
+        action="terminate", message="", conditions="{}", actions="[]",
+    )
+
+    assert not enforcer.record_only(devices), "the ban list is set to act"
+    assert not enforcer.record_only(addresses), "and addresses are the ban list"
+    assert enforcer.record_only(country), "the country list is still only recording"
+
+    # And the other way round, so neither is wired to the wrong switch.
+    save({"ban_record_only": True, "geo_block_record_only": False})
+    assert enforcer.record_only(devices) and enforcer.record_only(addresses)
+    assert not enforcer.record_only(country)
+
+
+def a_ban_rule(which="device"):
+    from app.services import enforcer
+
+    return enforcer.Rule(
+        id=enforcer.DEVICE_BAN_ID if which == "device" else enforcer.ADDRESS_BAN_ID,
+        name=enforcer.BAN_RULE_NAME if which == "device" else enforcer.ADDRESS_RULE_NAME,
+        enabled=True, action="terminate", message="", conditions="{}", actions="[]",
+    )
+
+
+def test_a_ban_acts_on_a_fresh_install(client):
+    """Out of the box, with nothing configured, a ban stops the stream.
+
+    ban_record_only starts unset, and unset used to fall through to
+    enforce_dry_run, which starts true. So on a default install every ban only
+    recorded what it would have done and every banned device kept playing,
+    which is the feature silently not working rather than a safe default.
+    """
+    from app.services import enforcer
+
+    claim(client)
+    for which in ("device", "address"):
+        assert not enforcer.record_only(a_ban_rule(which)), which
+
+
+def test_the_environment_lock_still_wins(client):
+    """Set as an env var, enforce_dry_run is a safety lock over everything."""
+    from unittest.mock import patch
+
+    from app.services import enforcer
+
+    claim(client)
+    with patch.object(enforcer, "dry_run_locked", return_value=True):
+        assert enforcer.record_only(a_ban_rule("device"))
+        assert enforcer.record_only(a_ban_rule("address"))
+
+
+def test_asking_for_record_only_is_still_honoured(client):
+    from app.services import enforcer
+    from app.settings_store import save
+
+    claim(client)
+    save({"ban_record_only": True})
+    assert enforcer.record_only(a_ban_rule("device"))
+    assert enforcer.record_only(a_ban_rule("address"))

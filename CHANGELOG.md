@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.69.0 - 2026-10-04
+
+### Fixed
+- Bans are enforced. Two separate faults were stopping them, and between them they explain a banned device or
+  address carrying on playing.
+- The ban list now acts unless you say otherwise. Its switch started unset, and unset fell through to the old global
+  dry run flag, which starts on, so on a default install every ban only recorded what it would have done. A ban is
+  not a rule: somebody opened a dialog, named one device, typed a reason and chose how long, and reading that as
+  "record it and let the stream carry on" is the feature quietly not working. The environment safety lock still
+  overrides it, which is what that is for, and asking for record only is still honoured.
+- A banned address took the country list's record only setting instead of the ban list's. The address rule is given
+  a negative id so its cooldown stays stable between sweeps, and the code decided what a rule was by testing only
+  whether that id was negative, which the country rules are too. So a banned address never stopped anything unless
+  the country list happened to be set to act as well.
+
 ## 0.68.1 - 2026-10-04
 
 ### Fixed
