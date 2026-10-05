@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.68.1 - 2026-10-04
+
+### Fixed
+- A ban made while a device was streaming for the first time recorded a slice of the machine id as its name and
+  attached the ban to nobody, so it did not count against that person anywhere the app counts bans per person.
+  Banning never needed the device to exist and still does not, but now that a streaming device is written down the
+  ban gets its real name and its user. Covered by a test.
+
 ## 0.68.0 - 2026-10-04
 
 ### Fixed

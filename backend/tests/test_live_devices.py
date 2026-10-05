@@ -116,3 +116,27 @@ def test_a_session_without_a_user_is_skipped(client):
     tracker.observe([{**a_session(key="s3"), "machine_id": None}], now=1_000_010.0)
     with session_scope() as db:
         assert db.query(Device).count() == 0
+
+
+def test_a_ban_made_mid_stream_knows_who_and_what_it_banned(client):
+    """Banning never needed the device to exist: the endpoint falls back to a
+    slice of the machine id. But the fallback is a meaningless string and a
+    ban attached to nobody, and a ban with no user does not count against that
+    person anywhere the app counts bans per person.
+    """
+    from app.db import session_scope
+    from app.models import BannedDevice
+    from app.services import tracker
+
+    claim(client)
+    tracker._tracks.clear()
+    machine = "ps5-099-abcdef0123456789"
+
+    # The device is playing, which is when somebody reaches for Ban.
+    tracker.observe([a_session(machine=machine, user=7)], now=1_000_000.0)
+    assert client.post("/api/bans", json={"machine_id": machine}).status_code == 200
+
+    with session_scope() as db:
+        row = db.get(BannedDevice, machine)
+        assert row.label == "PS5-099", "not a slice of the machine id"
+        assert row.user_id == 7, "a ban with no user counts against nobody"
