@@ -1769,6 +1769,31 @@ function RemediationQueue() {
   );
 }
 
+/* What a download client said, with the nothing taken out.
+ *
+ * Radarr passes its script's status line straight through, and it reads
+ * "PAR Status: FAILURE - Unpack Status: NONE - Move Status: NONE - Script
+ * Status: {scriptStatus} - Delete Status: NONE - Mark Status: NONE". One of
+ * those six fields is the answer, four say nothing happened, and one is a
+ * placeholder nobody filled in. Keeping only the fields that say something
+ * leaves "PAR Status: FAILURE", which is the message.
+ *
+ * Anything that is not in that shape is left exactly as it came. */
+const NOTHING = /^(none|ok|success|n\/a|-|)$/i;
+
+export function readable(message: string | null | undefined): string | null {
+  if (!message) return null;
+  const parts = message.split(" - ");
+  if (parts.length < 2) return message;
+  const kept = parts.filter((part) => {
+    const value = part.includes(":") ? part.slice(part.indexOf(":") + 1).trim() : part.trim();
+    // A placeholder that never got substituted is not information.
+    if (/^\{.*\}$/.test(value)) return false;
+    return !NOTHING.test(value);
+  });
+  return kept.length ? kept.join(" \u00b7 ") : null;
+}
+
 function PastReplacement({ r }: { r: Replacement }) {
   const [open, setOpen] = useState(false);
   const status = REPLACEMENT_STATUS[r.status];
@@ -1778,19 +1803,31 @@ function PastReplacement({ r }: { r: Replacement }) {
         <div className="min0">
           <span className="pill">replacing</span> <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
           <p className="muted small release-title">{r.release?.title}</p>
-          {r.status === "failed" && r.message && <p className="small danger-text">{r.message}</p>}
+          {r.status === "failed" && readable(r.message) && (
+            <p className="small danger-text">{readable(r.message)}</p>
+          )}
         </div>
         <span className="muted small">
           {r.updated_at ? new Date(/[zZ]|[+-]\d\d:\d\d$/.test(r.updated_at) ? r.updated_at : `${r.updated_at}Z`).toLocaleDateString() : ""}
           {r.resolved_by ? ` \u00b7 ${r.resolved_by}` : ""}
         </span>
       </button>
-      {open && <ReplacementRow r={r} onChanged={() => undefined} />}
+      {open && <ReplacementRow r={r} onChanged={() => undefined} heading={false} />}
     </div>
   );
 }
 
-function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: () => void }) {
+function ReplacementRow({
+  r: stored,
+  onChanged,
+  heading = true,
+}: {
+  r: Replacement;
+  onChanged: () => void;
+  /* False when this is already inside a row that drew the title, the kind and
+     the release name, which is every row in History. */
+  heading?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // What Radarr or Sonarr says right now: its queue entry and history, asked
@@ -1815,7 +1852,12 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
   }
 
   useEffect(() => {
-    if (!active) return;
+    // A failed one is not going to change by itself, so it is asked once
+    // rather than every ten seconds, and asked without being told to.
+    if (!active) {
+      if (r.status === "failed" && !fresh) refresh();
+      return;
+    }
     refresh();
     const timer = setInterval(refresh, 10000);
     return () => clearInterval(timer);
@@ -1870,9 +1912,13 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
     <div className="replacement">
       <div className="row-between">
         <div className="min0">
-          <span className="pill">replacing</span> <strong>{r.title}</strong>{" "}
-          <span className={status.tone}>{status.label}</span>
-          <p className="muted small release-title">{r.release?.title}</p>
+          {heading && (
+            <>
+              <span className="pill">replacing</span> <strong>{r.title}</strong>{" "}
+              <span className={status.tone}>{status.label}</span>
+              <p className="muted small release-title">{r.release?.title}</p>
+            </>
+          )}
         </div>
         {r.status === "ready" && (
           <div className="row">
@@ -1889,11 +1935,9 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
             Cancel
           </button>
         )}
-        {r.status === "failed" && (
-          <button className="tab" onClick={refresh} disabled={checking}>
-            {checking ? "Checking\u2026" : "Show what happened"}
-          </button>
-        )}
+        {/* "Show what happened" used to sit here and call refresh, which is
+            what the Refresh button below it already did. A failed row asks
+            once when it opens instead, so what happened is simply there. */}
       </div>
       {stepOf(r.status) >= 0 && (
         <ol className="steps">
@@ -1929,15 +1973,15 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
           {checking ? "Checking\u2026" : "Refresh"}
         </button>
       </div>
-      {fresh?.live.queue?.messages && fresh.live.queue.messages.length > 0 && (
-        <p className="muted small">{fresh.live.queue.messages.join("; ")}</p>
+      {fresh?.live.queue?.messages && readable(fresh.live.queue.messages.join(" - ")) && (
+        <p className="muted small">{readable(fresh.live.queue.messages.join(" - "))}</p>
       )}
       {fresh && fresh.live.events.length > 0 && (
         <ul className="arr-events">
           {fresh.live.events.map((e, i) => (
             <li key={i} className={e.type?.toLowerCase().includes("fail") ? "bad" : undefined}>
               <span className="muted small">{e.date ? new Date(e.date).toLocaleString() : ""}</span> <strong>{e.label}</strong>
-              {e.message && <span className="small"> {e.message}</span>}
+              {readable(e.message) && <span className="small"> {readable(e.message)}</span>}
             </li>
           ))}
         </ul>
@@ -1977,9 +2021,15 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
           {r.candidate?.rejections?.length ? ` ${service} says: ${r.candidate.rejections.join("; ")}.` : ""}
         </p>
       )}
-      {r.message && !(r.candidate?.rejections ?? []).some((x) => r.message?.includes(x)) && (
-        <p className="muted small">{r.message}</p>
-      )}
+      {/* The message is in the closed row and in the events, both of which
+          read better than this did. Only shown here when neither of those is
+          on screen to carry it. */}
+      {readable(r.message) &&
+        !(fresh && fresh.live.events.length > 0) &&
+        r.status !== "failed" &&
+        !(r.candidate?.rejections ?? []).some((x) => r.message?.includes(x)) && (
+          <p className="muted small">{readable(r.message)}</p>
+        )}
       {error && <p className="note bad-note" role="alert">{error}</p>}
     </div>
   );

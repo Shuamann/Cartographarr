@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.70.0 - 2026-10-04
+
+### Changed
+- A failed replacement says what went wrong once, in English. The reason appeared three times on one row, and the
+  reason itself was the download client's raw status line: six fields, four of them saying NONE, one an unresolved
+  placeholder. Only the fields that say something are kept, so a row that read "PAR Status: FAILURE - Unpack Status:
+  NONE - Move Status: NONE - Script Status: {scriptStatus} - Delete Status: NONE - Mark Status: NONE" now reads
+  "PAR Status: FAILURE".
+- Opening a finished replacement no longer repeats its own heading. The row that expands drew the title, the kind
+  and the release name, and the panel it expanded into drew all three again.
+- One button instead of two that did the same thing. "Show what happened" and "Refresh" both just asked the service
+  again; a failed row asks once when it is opened, so what happened is simply there, and Refresh is the only button.
+
 ## 0.69.1 - 2026-10-04
 
 ### Changed
