@@ -500,6 +500,130 @@ The rows still answer to `row.file_size` and the like, so everything that
 reads them is unchanged."""
 
 
+def shows(
+    db: Session,
+    days: int,
+    section_id: int | None = None,
+    search: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Every show, from its episodes.
+
+    There is no row for a show: it has no file and takes up no room, so the
+    scan does not store one. What it has is episodes that all name the same
+    grandparent, which is the show, so the show is a GROUP BY rather than a
+    thing to go and fetch.
+    """
+    from app.services.library_scan import in_library
+
+    where = [
+        MediaItem.media_type == "episode",
+        MediaItem.grandparent_rating_key.is_not(None),
+        in_library(),
+    ]
+    if section_id is not None:
+        where.append(MediaItem.section_id == section_id)
+    if search:
+        where.append(func.lower(MediaItem.grandparent_title).like(f"%{search.lower()}%"))
+
+    rows = db.execute(
+        select(
+            MediaItem.grandparent_rating_key.label("rating_key"),
+            func.max(MediaItem.grandparent_title).label("title"),
+            func.max(MediaItem.section_id).label("section_id"),
+            func.count().label("episodes"),
+            func.count(func.distinct(MediaItem.parent_media_index)).label("seasons"),
+            func.coalesce(func.sum(MediaItem.file_size), 0).label("file_size"),
+            func.coalesce(func.sum(MediaItem.duration), 0).label("ms"),
+            func.min(MediaItem.year).label("year"),
+        )
+        .where(*where)
+        .group_by(MediaItem.grandparent_rating_key)
+    ).all()
+
+    # Plays are counted against episodes, so a show's plays are its episodes'.
+    since, _ = _since(days)
+    played = dict(
+        db.execute(
+            select(MediaItem.grandparent_rating_key, count_plays(History))
+            .join(History, History.rating_key == MediaItem.rating_key)
+            .where(MediaItem.media_type == "episode", History.started >= since,
+                   MediaItem.grandparent_rating_key.is_not(None))
+            .group_by(MediaItem.grandparent_rating_key)
+        ).all()
+    )
+
+    sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
+    out = [
+        {
+            "rating_key": r.rating_key,
+            "title": r.title or f"Show {r.rating_key}",
+            "episodes": r.episodes,
+            "seasons": r.seasons,
+            "file_size": int(r.file_size or 0),
+            "hours": round((r.ms or 0) / 3_600_000, 2),
+            "year": r.year,
+            "section_id": r.section_id,
+            "library": sections.get(r.section_id),
+            "plays": int(played.get(r.rating_key) or 0),
+        }
+        for r in rows
+    ]
+    out.sort(key=lambda s: (s["title"] or "").lower())
+    return {"items": out[:limit], "total": len(out)}
+
+
+def seasons(db: Session, show_key: int, days: int) -> dict[str, Any]:
+    """One show's seasons, from the same place."""
+    from app.services.library_scan import in_library
+
+    where = [
+        MediaItem.media_type == "episode",
+        MediaItem.grandparent_rating_key == show_key,
+        in_library(),
+    ]
+    rows = db.execute(
+        select(
+            MediaItem.parent_media_index.label("season"),
+            func.count().label("episodes"),
+            func.coalesce(func.sum(MediaItem.file_size), 0).label("file_size"),
+            func.coalesce(func.sum(MediaItem.duration), 0).label("ms"),
+            func.max(MediaItem.grandparent_title).label("title"),
+            func.max(MediaItem.section_id).label("section_id"),
+        )
+        .where(*where)
+        .group_by(MediaItem.parent_media_index)
+        .order_by(MediaItem.parent_media_index)
+    ).all()
+    if not rows:
+        return {"title": None, "rating_key": show_key, "seasons": []}
+
+    since, _ = _since(days)
+    played = dict(
+        db.execute(
+            select(MediaItem.parent_media_index, count_plays(History))
+            .join(History, History.rating_key == MediaItem.rating_key)
+            .where(MediaItem.grandparent_rating_key == show_key, History.started >= since)
+            .group_by(MediaItem.parent_media_index)
+        ).all()
+    )
+    return {
+        "rating_key": show_key,
+        "title": rows[0].title,
+        "section_id": rows[0].section_id,
+        "seasons": [
+            {
+                "season": r.season,
+                "episodes": r.episodes,
+                "file_size": int(r.file_size or 0),
+                "hours": round((r.ms or 0) / 3_600_000, 2),
+                "plays": int(played.get(r.season) or 0),
+            }
+            for r in rows
+        ],
+    }
+
+
 def browse(
     db: Session,
     days: int,
@@ -512,6 +636,8 @@ def browse(
     media_type: str | None = None,
     problem: str | None = None,
     search: str | None = None,
+    show: int | None = None,
+    season: int | None = None,
     limit: int = 120,
 ) -> dict[str, Any]:
     """The library as something to look through, with what is wrong on each.
@@ -541,6 +667,12 @@ def browse(
         where.append(MediaItem.file_bitrate >= min_bitrate_kbps)
     if search:
         where.append(func.lower(MediaItem.full_title).like(f"%{search.lower()}%"))
+    # One show, or one season of it, for browsing television the way it is
+    # arranged rather than as twenty six thousand loose episodes.
+    if show is not None:
+        where.append(MediaItem.grandparent_rating_key == show)
+    if season is not None:
+        where.append(MediaItem.parent_media_index == season)
     rows = db.execute(select(*BROWSE_COLUMNS).where(*where)).all()
     plays = play_stats(db, days)
     stalls = stall_stats(db, days)

@@ -2533,7 +2533,37 @@ function poster(ratingKey: number, width = 200): string {
   return `/api/media/${ratingKey}/image?width=${width}&height=${Math.round(width * 1.5)}`;
 }
 
+type Show = {
+  rating_key: number;
+  title: string;
+  episodes: number;
+  seasons: number;
+  file_size: number;
+  hours: number;
+  year: number | null;
+  library: string | null;
+  plays: number;
+};
+
+type SeasonList = {
+  rating_key: number;
+  title: string | null;
+  seasons: { season: number; episodes: number; file_size: number; hours: number; plays: number }[];
+};
+
+/* Where in the library we are looking.
+ *
+ * Films are a flat list and always were. Television is not: it is shows, each
+ * with seasons, each with episodes, and browsing it as twenty six thousand
+ * loose episodes was the only way in. The scan stores no row for a show or a
+ * season, because neither has a file, but every episode carries the keys and
+ * numbers that say where it belongs, so the shape was in the data already. */
+type Place = { show: number | null; season: number | null; title: string | null };
+
+const NOWHERE: Place = { show: null, season: null, title: null };
+
 function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string> }) {
+  const [place, setPlace] = useState<Place>(NOWHERE);
   const [sort, setSort] = useState(() => localStorage.getItem("browse.sort") ?? "per_hour");
   const [kind, setKind] = useState(() => localStorage.getItem("browse.kind") ?? "movie");
   const [problem, setProblem] = useState(() => localStorage.getItem("browse.problem") ?? "");
@@ -2561,7 +2591,28 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
   if (sectionId) query.set("section_id", sectionId);
   if (language) query.set("language", language);
   if (search.trim()) query.set("search", search.trim());
-  const data = useApi<BrowseList>(`/library/browse?${query}`, [days, sort, kind, problem, resolution, sectionId, language, search, perHour]);
+  if (place.show !== null) query.set("show", String(place.show));
+  if (place.season !== null) query.set("season", String(place.season));
+
+  // Episodes are only asked for once a season is open. Above that the lists
+  // are shows and seasons, which are their own shape.
+  const showing = kind === "episode" && place.season === null;
+  const data = useApi<BrowseList>(
+    showing ? null : `/library/browse?${query}`,
+    [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season],
+  );
+  const showList = useApi<{ items: Show[]; total: number }>(
+    kind === "episode" && place.show === null
+      ? `/library/shows?days=${days}${sectionId ? `&section_id=${sectionId}` : ""}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}`
+      : null,
+    [days, kind, sectionId, search, place.show],
+  );
+  const seasonList = useApi<SeasonList>(
+    kind === "episode" && place.show !== null && place.season === null
+      ? `/library/shows/${place.show}?days=${days}`
+      : null,
+    [days, place.show, place.season],
+  );
 
   function choose(key: number, on: boolean) {
     const next = new Set(chosen);
@@ -2626,7 +2677,13 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
         </label>
         <label>
           Kind
-          <select value={kind} onChange={(e) => remember("kind", e.target.value, setKind)}>
+          <select
+            value={kind}
+            onChange={(e) => {
+              setPlace(NOWHERE);
+              remember("kind", e.target.value, setKind);
+            }}
+          >
             <option value="movie">Films</option>
             <option value="episode">Episodes</option>
             <option value="">Both</option>
@@ -2701,9 +2758,106 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
         </div>
       </div>
 
-      {!data.data && <Loading label="Reading the library" />}
+      {/* Where you are, and the way back. Only for television: films are a
+          flat list and always were. */}
+      {kind === "episode" && place.show !== null && (
+        <nav className="row wrap trail" aria-label="Where you are">
+          <button className="linkish" onClick={() => setPlace(NOWHERE)}>
+            All shows
+          </button>
+          <span className="muted" aria-hidden="true">
+            /
+          </span>
+          {place.season === null ? (
+            <strong>{place.title ?? "Show"}</strong>
+          ) : (
+            <>
+              <button
+                className="linkish"
+                onClick={() => setPlace({ ...place, season: null })}
+              >
+                {place.title ?? "Show"}
+              </button>
+              <span className="muted" aria-hidden="true">
+                /
+              </span>
+              <strong>Season {place.season}</strong>
+            </>
+          )}
+        </nav>
+      )}
+
+      {/* The shows. */}
+      {kind === "episode" && place.show === null && (
+        <>
+          {!showList.data && <Loading label="Reading the shows" />}
+          {showList.error && <p className="note bad-note" role="alert">{showList.error}</p>}
+          {showList.data && (
+            <>
+              <p className="muted small count-line">
+                {showList.data.total.toLocaleString()} {showList.data.total === 1 ? "show" : "shows"}.
+              </p>
+              <div className="mini-list">
+                {showList.data.items.map((s) => (
+                  <button
+                    key={s.rating_key}
+                    className="mini mini-button"
+                    onClick={() => setPlace({ show: s.rating_key, season: null, title: s.title })}
+                  >
+                    <div className="min0">
+                      <strong>{s.title}</strong>
+                      <p className="muted small">
+                        {s.seasons} {s.seasons === 1 ? "season" : "seasons"}
+                        {" \u00b7 "}
+                        {s.episodes.toLocaleString()} {s.episodes === 1 ? "episode" : "episodes"}
+                        {" \u00b7 "}
+                        {size(s.file_size)}
+                        {s.library ? ` \u00b7 ${s.library}` : ""}
+                        {s.plays ? ` \u00b7 ${s.plays.toLocaleString()} plays in ${days} days` : ""}
+                      </p>
+                    </div>
+                    <span className="muted small">Open</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Its seasons. */}
+      {kind === "episode" && place.show !== null && place.season === null && (
+        <>
+          {!seasonList.data && <Loading label="Reading the seasons" />}
+          {seasonList.error && <p className="note bad-note" role="alert">{seasonList.error}</p>}
+          {seasonList.data && (
+            <div className="mini-list">
+              {seasonList.data.seasons.map((s) => (
+                <button
+                  key={s.season}
+                  className="mini mini-button"
+                  onClick={() => setPlace({ ...place, season: s.season, title: place.title ?? seasonList.data!.title })}
+                >
+                  <div className="min0">
+                    <strong>Season {s.season}</strong>
+                    <p className="muted small">
+                      {s.episodes} {s.episodes === 1 ? "episode" : "episodes"}
+                      {" \u00b7 "}
+                      {size(s.file_size)}
+                      {s.plays ? ` \u00b7 ${s.plays.toLocaleString()} plays in ${days} days` : ""}
+                    </p>
+                  </div>
+                  <span className="muted small">Open</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {!showing && !data.data && <Loading label="Reading the library" />}
       {data.data && (
-        <p className="note">
+        <p className="muted small count-line">
           {data.data.total.toLocaleString()} {data.data.total === 1 ? "title" : "titles"}, {size(data.data.size)}.
           {data.data.items.length < data.data.total ? ` Showing the first ${data.data.items.length}.` : ""}
         </p>

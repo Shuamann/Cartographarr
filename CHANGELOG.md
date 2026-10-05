@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.74.0 - 2026-10-05
+
+### Added
+- Television is browsed as show, season, episode. Browse offered twenty six thousand loose episodes and no way to
+  say "that show". There is no row for a show or a season, because neither has a file, but every episode carries
+  the keys and numbers that say where it belongs, so both levels are a grouping rather than something to fetch: 567
+  shows out of the episodes in under two hundred milliseconds.
+- A trail across the top says where you are and gets you back out. Films are untouched: they are a flat list and
+  always were.
+
 ## 0.73.0 - 2026-10-05
 
 ### Added

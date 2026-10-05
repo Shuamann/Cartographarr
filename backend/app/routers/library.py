@@ -57,6 +57,19 @@ def space(_: AdminUser, db: Db) -> dict:
     return space_service.report(db)
 
 
+@router.get("/shows")
+def shows(_: AdminUser, db: Db, days: int = Days, section_id: int | None = None,
+          search: str | None = None) -> dict:
+    """Every show, built from its episodes."""
+    return library.shows(db, days, section_id=section_id, search=search)
+
+
+@router.get("/shows/{show_key}")
+def show_seasons(show_key: int, _: AdminUser, db: Db, days: int = Days) -> dict:
+    """One show's seasons."""
+    return library.seasons(db, show_key, days)
+
+
 @router.get("/transcodes")
 def transcodes(_: AdminUser, db: Db, days: int = Days) -> dict:
     return library.transcode_causes(db, days)
@@ -330,6 +343,8 @@ async def browse_library(
     media_type: str | None = "movie",
     problem: str | None = None,
     search: str | None = None,
+    show: int | None = None,
+    season: int | None = None,
     limit: int = Query(60, ge=1, le=500),
 ) -> dict:
     """The library as something to look through, sorted by what is wrong."""
@@ -342,7 +357,7 @@ async def browse_library(
             return library.browse(
                 db, days, sort=sort, min_gb_per_hour=min_gb_per_hour, min_bitrate_kbps=min_bitrate_kbps,
                 resolution=resolution, section_id=section_id, language=language, media_type=media_type,
-                problem=problem, search=search, limit=limit,
+                problem=problem, search=search, show=show, season=season, limit=limit,
             )
 
     return await asyncio.to_thread(look)

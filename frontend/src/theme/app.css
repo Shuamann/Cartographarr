@@ -4352,6 +4352,17 @@ label.locked .pill {
   margin: var(--space-3) 0;
 }
 
+/* Where you are in the library, and the way back out. */
+.trail {
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  font-size: var(--text-md);
+}
+.trail .linkish {
+  font-size: inherit;
+}
+
 /* The Log's filters. Each one is a label above its control so the row reads
    as a sentence rather than a line of unlabelled boxes. */
 .log-filters {
