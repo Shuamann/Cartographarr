@@ -504,7 +504,7 @@ function BanListCard({ onRulesChanged }: { onRulesChanged: () => void }) {
           <span className="muted">When </span>the device is on the ban list
           <span className="muted"> then </span>stop the stream, with the ban message from Settings.
         </p>
-        <p className="muted small">Ban a device here, or from People, a stream card or the map.</p>
+        <p className="muted small">Ban a device here, or from Endpoints, a stream card or the map.</p>
         {(convertible.data?.length ?? 0) > 0 && (
           <div className="note warn-note convert-note">
             <span>

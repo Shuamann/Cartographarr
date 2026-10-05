@@ -3,7 +3,7 @@ import Globe from "../components/Globe";
 import Loading from "../components/Loading";
 import { useApi, type Activity } from "../lib/api";
 import { useNav } from "../lib/nav";
-import type { Tab } from "../lib/tabs";
+import { tabLabel, type Tab } from "../lib/tabs";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Home: where to go next.
@@ -74,7 +74,7 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
           <nav className="home-nav" aria-label="Where to go">
             {destinations(nav.isAdmin).map(({ tab, note }) => (
               <button key={tab} className="home-nav-item" onClick={() => onNavigate(tab)}>
-                <span className="home-nav-label">{tab}</span>
+                <span className="home-nav-label">{tabLabel(tab)}</span>
                 <span className="home-nav-note">{note}</span>
                 {tab === "Issues" && d.open_issues > 0 && <span className="home-nav-count">{d.open_issues}</span>}
               </button>

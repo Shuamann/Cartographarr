@@ -26,9 +26,10 @@ rather than the player name, because anyone can rename "Living Room TV".
   a planet instead of flattening it.
 - **Live activity** on the dashboard and the map, with the same card in both:
   what is playing, how, from where, and buttons to stop it or ban the device
-- **People**: every user and their devices in one list. Open anyone for where
-  they watch from, what they watch, their devices, their history and what has
-  happened to them. Open a device to see every account that has used it.
+- **Endpoints**: everyone, every device and every address, in three lists.
+  Open anyone for where they watch from, what they watch, their devices, their
+  history and what has happened to them. Open a device to see every account
+  that has used it, or an address to see everyone and everything behind it.
 - **Ban list**: one list of devices that may not stream
 - **Rules** built from dropdowns, with all/any groups inside each other, for
   anything the ban list does not cover: no remote 4K, no transcodes at night,
@@ -182,7 +183,7 @@ purpose, so a broken proxy config cannot lock you out.
 
 ## Banning a device
 
-Hit **Ban device** on a stream, on the map, or on the device in **People**. It
+Hit **Ban device** on a stream, on the map, or on the device in **Endpoints**. It
 asks for a reason, then adds the device to the ban list. **Unban** is in the
 same places. On the Rules page the ban list can also ban a device found by
 name, owner or id, for an hour, a day, a week, 30 days or for good. A timed ban
@@ -205,7 +206,7 @@ wait, so a device that keeps coming back cannot fill it.
 
 ## Banning an address
 
-**Ban address** on a stream card, or on the address's own page under People,
+**Ban address** on a stream card, or on the address's own page under Endpoints,
 does the same thing to the connection rather than the box. That is what you
 want when a device comes back under a new identifier, or when the household
 rather than one machine in it is the thing to stop.

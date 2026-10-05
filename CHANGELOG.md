@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.80.0 - 2026-10-05
+
+### Added
+- Any combination of people, devices and addresses narrows the list you are looking at. Which addresses has this
+  person played from, who has used this device, which devices were seen at this address, or all three at once. The
+  list you are on is not offered as a filter on itself, and picking two of one kind means either of them.
+
+### Fixed
+- The Endpoints rename only reached the nav. The Home tiles, the ban dialog, the Rules page, a notification and the
+  README all still said People. A tab is rendered through its label now, with a test to stop the two drifting again.
+- The sidebar was too narrow for an address and its owner, so the list scrolled sideways and put the first digit of
+  every address off the left edge. It is wider, it does not scroll sideways, and an address sits on two lines.
+
 ## 0.79.0 - 2026-10-05
 
 ### Added

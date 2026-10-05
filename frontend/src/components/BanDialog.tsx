@@ -69,7 +69,7 @@ export default function BanDialog({ request, onClose }: { request: BanRequest | 
           <p className="muted small">
             {request.kind === "address"
               ? "Any stream from this address is stopped. A range works too, typed as 203.0.113.0/24. You can unban it from the ban list on the Rules page."
-              : "Any stream from this device is stopped, or only recorded if the ban list is set to record only on the Rules page. You can unban it from People or the ban list."}
+              : "Any stream from this device is stopped, or only recorded if the ban list is set to record only on the Rules page. You can unban it from Endpoints or the ban list."}
           </p>
           {request.kind === "address" && scopes.length > 1 && (
             <label>

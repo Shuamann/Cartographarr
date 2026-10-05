@@ -2505,7 +2505,9 @@ label.locked .pill {
 
 .people {
   display: grid;
-  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  /* An address with a name and a place beside it needs more room than a
+     person's name did, and the column was sized when this list held names. */
+  grid-template-columns: minmax(330px, 460px) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -2513,6 +2515,9 @@ label.locked .pill {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* A row too wide for the column scrolled the whole list sideways, which put
+     the first character of every address off the left edge. */
+  overflow-x: hidden;
   border-right: 1px solid var(--border);
   background: var(--surface);
 }
@@ -2615,6 +2620,26 @@ label.locked .pill {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+}
+/* Picking a combination of people, devices and addresses. */
+.endpoint-filters {
+  gap: var(--space-2);
+}
+.endpoint-filters > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* An address carries more than a name: who used it, where it is, how often and
+   when. Two lines rather than one long one that cannot fit. */
+.address-row .clip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.address-row .person-owner {
+  margin: 0;
 }
 .device-row.flat {
   padding-left: 12px;

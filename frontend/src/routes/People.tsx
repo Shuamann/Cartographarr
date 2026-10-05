@@ -1,3 +1,4 @@
+import MultiSelect from "../components/MultiSelect";
 import { askConfirm, tell } from "../components/Ask";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
@@ -72,9 +73,45 @@ export default function PeopleRoute({
   const live = useApi<Activity>("/activity");
 
   const [mode, setMode] = useState<Mode>(initial?.kind === "device" ? "devices" : "users");
-  // The third list. Asked for only when it is the one being looked at: it is
-  // a group-by over the whole of history and nobody opens this tab for it.
-  const addresses = useApi<AddressRow[]>(mode === "addresses" ? "/addresses?limit=500" : null, [mode]);
+  /* A person, a device and an address are three ways of asking the same
+     question, so the useful question is usually a combination of them. Each
+     list is narrowed by the other two; the one you are looking at is not
+     offered as a filter on itself. */
+  const [pickUser, setPickUser] = useState<string[]>([]);
+  const [pickDevice, setPickDevice] = useState<string[]>([]);
+  const [pickAddress, setPickAddress] = useState<string[]>([]);
+  const picked = pickUser.length + pickDevice.length + pickAddress.length;
+
+  const params = (...pairs: [string, string[]][]) => {
+    const q = new URLSearchParams();
+    for (const [key, values] of pairs) for (const v of values) q.append(key, v);
+    const text = q.toString();
+    return text ? `&${text}` : "";
+  };
+
+  /* The full lists stay as they are: every name lookup on this page reads
+     them, and narrowing the options by the filter would make a choice
+     impossible to undo from the list it had just emptied. What is displayed
+     is its own query. */
+  const allAddresses = useApi<AddressRow[]>("/addresses?limit=500");
+  const shownUsers = useApi<PlexUser[]>(
+    mode === "users" && (pickDevice.length || pickAddress.length)
+      ? `/users?${params(["machine_id", pickDevice], ["ip_address", pickAddress]).slice(1)}`
+      : null,
+    [mode, pickDevice.join(), pickAddress.join()],
+  );
+  const shownDevices = useApi<Device[]>(
+    mode === "devices" && (pickUser.length || pickAddress.length)
+      ? `/devices?${params(["only_user_id", pickUser], ["ip_address", pickAddress]).slice(1)}`
+      : null,
+    [mode, pickUser.join(), pickAddress.join()],
+  );
+  const addresses = useApi<AddressRow[]>(
+    mode === "addresses"
+      ? `/addresses?limit=500${params(["user_id", pickUser], ["machine_id", pickDevice])}`
+      : null,
+    [mode, pickUser.join(), pickDevice.join()],
+  );
   const [selected, setSelected] = useState<Selection | null>(initial ?? null);
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(initial?.kind === "user" ? [initial.id] : []),
@@ -138,7 +175,7 @@ export default function PeopleRoute({
 
   const q = search.trim().toLowerCase();
 
-  const userRows = (users.data ?? [])
+  const userRows = (shownUsers.data ?? users.data ?? [])
     .filter((u) => {
       const own = devicesByUser.get(u.user_id) ?? [];
       if (onlyDeleted && !u.deleted_in_tautulli) return false;
@@ -172,7 +209,7 @@ export default function PeopleRoute({
           : (b.last_seen ?? 0) - (a.last_seen ?? 0),
     );
 
-  const deviceRows = (devices.data ?? [])
+  const deviceRows = (shownDevices.data ?? devices.data ?? [])
     .filter((d) => {
       if (onlyNew && !d.is_new_unreviewed) return false;
       if (onlyBanned && !bans.ids.has(d.machine_id)) return false;
@@ -217,6 +254,56 @@ export default function PeopleRoute({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {/* The list you are looking at is not offered as a filter on
+              itself: picking it would be the list. */}
+          <div className="row wrap endpoint-filters">
+            {mode !== "users" && (
+              <MultiSelect
+                label="Person"
+                selected={pickUser}
+                onChange={(next) => setPickUser(next.map(String))}
+                options={(users.data ?? []).map((u) => ({
+                  value: String(u.user_id),
+                  label: u.friendly_name || u.username || `User ${u.user_id}`,
+                }))}
+              />
+            )}
+            {mode !== "devices" && (
+              <MultiSelect
+                label="Device"
+                selected={pickDevice}
+                onChange={(next) => setPickDevice(next.map(String))}
+                options={(devices.data ?? []).map((d) => ({
+                  value: d.machine_id,
+                  label: `${d.player || "Unnamed"}${d.platform ? ` (${d.platform})` : ""}`,
+                }))}
+              />
+            )}
+            {mode !== "addresses" && (
+              <MultiSelect
+                label="Address"
+                selected={pickAddress}
+                onChange={(next) => setPickAddress(next.map(String))}
+                options={(allAddresses.data ?? []).map((a) => ({
+                  value: a.ip_address,
+                  label: `${a.ip_address}${a.city ? ` (${a.city})` : ""}`,
+                }))}
+              />
+            )}
+            {picked > 0 && (
+              <button
+                className="chip"
+                onClick={() => {
+                  setPickUser([]);
+                  setPickDevice([]);
+                  setPickAddress([]);
+                }}
+              >
+                Clear {picked}
+              </button>
+            )}
+          </div>
+
           <div className="row-between">
             <div className="segmented">
               <button className={mode === "users" ? "seg on" : "seg"} onClick={() => setMode("users")}>
@@ -366,7 +453,7 @@ export default function PeopleRoute({
               return (
                 <button
                   key={a.ip_address}
-                  className={here ? "device-row flat on" : "device-row flat"}
+                  className={here ? "device-row flat address-row on" : "device-row flat address-row"}
                   onClick={() => setSelected({ kind: "address", id: a.ip_address })}
                 >
                   <span className="clip">

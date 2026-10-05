@@ -653,7 +653,7 @@ async def _tell_about(new_devices: int, new_signals: int) -> None:
             parts.append(f"{new_signals} shared account signal{'s' if new_signals != 1 else ''}")
         await apprise_notifier.send(
             "Worth a look",
-            " and ".join(parts) + ". People shows the devices; the map and the signals list show the rest.",
+            " and ".join(parts) + ". Endpoints shows the devices; the map and the signals list show the rest.",
         )
     except Exception:  # noqa: BLE001 - a sync must not fail at saying so
         log.exception("could not send word about what the sync found")

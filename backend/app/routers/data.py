@@ -793,7 +793,12 @@ def location_plays(
 # ---- directories -----------------------------------------------------------
 
 @router.get("/users")
-def users(db: Db, scope: ViewerScope) -> list:
+def users(
+    db: Db,
+    scope: ViewerScope,
+    machine_id: list[str] | None = Query(None),
+    ip_address: list[str] | None = Query(None),
+) -> list:
     """Everyone who has ever had access, deleted or not.
 
     Plays and the last play come from history here rather than from Tautulli,
@@ -816,6 +821,12 @@ def users(db: Db, scope: ViewerScope) -> list:
     if scope is not None:
         # Private modes list only the viewer. Nobody else is named.
         stmt = stmt.where(User.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
+    # Only the people who have used these devices, from these addresses.
+    narrowed = _keys_from_history(db, "user", scope, machine_ids=machine_id, ips=ip_address)
+    if narrowed is not None:
+        if not narrowed:
+            return []
+        stmt = stmt.where(User.user_id.in_(sorted(narrowed)))
     return [
         {
             **{c.name: getattr(u, c.name) for c in User.__table__.columns},
@@ -1139,9 +1150,49 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
     }
 
 
+def _keys_from_history(
+    db,
+    want: str,
+    scope,
+    user_ids: list[int] | None = None,
+    machine_ids: list[str] | None = None,
+    ips: list[str] | None = None,
+) -> set | None:
+    """Which users, devices or addresses match the other two.
+
+    None when nothing was asked, which means "do not narrow". A set otherwise,
+    possibly empty, which means nothing matches and the list should be empty
+    rather than everything.
+    """
+    if not (user_ids or machine_ids or ips):
+        return None
+    column = {
+        "user": History.user_id,
+        "device": History.machine_id,
+        "address": History.ip_address,
+    }[want]
+    where = [column.is_not(None)]
+    if scope is not None:
+        where.append(History.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
+    if user_ids:
+        where.append(History.user_id.in_(user_ids))
+    if machine_ids:
+        where.append(History.machine_id.in_(machine_ids))
+    if ips:
+        where.append(History.ip_address.in_(ips))
+    return {row[0] for row in db.execute(select(column).where(*where).distinct()).all()}
+
+
 @router.get("/addresses")
-def addresses(db: Db, scope: ViewerScope, limit: int = Query(500, ge=1, le=2000),
-              search: str | None = None, new_only: bool = False) -> list:
+def addresses(
+    db: Db,
+    scope: ViewerScope,
+    limit: int = Query(500, ge=1, le=2000),
+    search: str | None = None,
+    new_only: bool = False,
+    user_id: list[int] | None = Query(None),
+    machine_id: list[str] | None = Query(None),
+) -> list:
     """Every address anyone has played from, newest first.
 
     The third thing this tab is about. A person, a device and an address are
@@ -1153,6 +1204,12 @@ def addresses(db: Db, scope: ViewerScope, limit: int = Query(500, ge=1, le=2000)
     where = [History.ip_address.is_not(None), *only]
     if search:
         where.append(History.ip_address.like(f"%{search}%"))
+    # Only the addresses these people and these devices have played from.
+    narrowed = _keys_from_history(db, "address", scope, user_ids=user_id, machine_ids=machine_id)
+    if narrowed is not None:
+        if not narrowed:
+            return []
+        where.append(History.ip_address.in_(sorted(narrowed)))
 
     rows = db.execute(
         select(
@@ -1490,12 +1547,25 @@ def access_review(admin: AdminUser, db: Db) -> dict:
 
 
 @router.get("/devices")
-def devices(db: Db, scope: ViewerScope, user_id: int | None = None, new_only: bool = False) -> list:
+def devices(
+    db: Db,
+    scope: ViewerScope,
+    user_id: int | None = None,
+    new_only: bool = False,
+    ip_address: list[str] | None = Query(None),
+    only_user_id: list[int] | None = Query(None),
+) -> list:
     stmt = select(Device).order_by(desc(Device.last_seen))
     if scope is not None:
         stmt = stmt.where(Device.user_id == (scope.plex_user_id if scope.plex_user_id is not None else -1))
     if user_id is not None:
         stmt = stmt.where(Device.user_id == user_id)
+    # Only the devices these people have used, from these addresses.
+    narrowed = _keys_from_history(db, "device", scope, user_ids=only_user_id, ips=ip_address)
+    if narrowed is not None:
+        if not narrowed:
+            return []
+        stmt = stmt.where(Device.machine_id.in_(sorted(narrowed)))
     if new_only:
         stmt = stmt.where(Device.is_new_unreviewed.is_(True))
     from app.models import BannedDevice
