@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.69.1 - 2026-10-04
+
+### Changed
+- Now playing fills the row it is given. Four cards was a fixed number, so a wide screen showed four streams, half
+  an empty strip and a tile saying one more was playing, which was the one thing there was obviously room for. The
+  strip already works out its own columns, so the number of cards is now the browser's own answer rather than a
+  second copy of the card width kept in the page code. Six streams on a wide monitor, two on a laptop, one row
+  either way.
+
 ## 0.69.0 - 2026-10-04
 
 ### Fixed

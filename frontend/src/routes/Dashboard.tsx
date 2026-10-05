@@ -1,6 +1,6 @@
 import Loading from "../components/Loading";
 import { displayTitle } from "../lib/titles";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
 import TravelFlags from "../components/TravelFlags";
 import StreamDetail from "../components/StreamDetail";
@@ -179,7 +179,31 @@ export default function DashboardRoute({
   );
 }
 
+/* What to show before the strip has been measured, and the least it will
+   ever show. The real number comes from the grid itself. */
 const VISIBLE = 4;
+
+/* How many columns the strip actually drew.
+ *
+ * The CSS fills the row by itself, so asking the browser what it did beats
+ * keeping the card width in two places and watching them drift. It answers
+ * with one length per column, so counting them is the whole measurement. */
+function useColumns(ref: React.RefObject<HTMLDivElement | null>, fallback: number) {
+  const [columns, setColumns] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const drawn = getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length;
+      setColumns(Math.max(1, drawn));
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [ref]);
+  return columns;
+}
 
 /* Live streams as their own strip across the top.
  *
@@ -203,6 +227,8 @@ function NowPlaying({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const strip = useRef<HTMLDivElement>(null);
+  const columns = useColumns(strip, VISIBLE);
 
   if (sessions.length === 0) {
     return (
@@ -215,7 +241,14 @@ function NowPlaying({
     );
   }
 
-  const shown = expanded ? sessions : sessions.slice(0, VISIBLE);
+  /* One full row, whatever the screen is.
+   *
+   * The "and N more" tile takes a slot of its own, so when something has to be
+   * hidden there is room for one fewer card. When everything fits there is no
+   * tile and no reason to hold a card back. */
+  const perRow = columns;
+  const fits = sessions.length <= perRow ? perRow : Math.max(1, perRow - 1);
+  const shown = expanded ? sessions : sessions.slice(0, fits);
   const hidden = sessions.length - shown.length;
   const current = sessions.find((s) => s.session_key === open) ?? null;
 
@@ -230,15 +263,15 @@ function NowPlaying({
           <span className="muted small">
             {transcoding ? `${transcoding} transcoding` : "all direct play"}
           </span>
-          {sessions.length > VISIBLE && (
+          {hidden > 0 || expanded ? (
             <button className="tab" onClick={() => setExpanded(!expanded)}>
               {expanded ? "Show fewer" : `Show all ${sessions.length}`}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      <div className="stream-strip">
+      <div className="stream-strip" ref={strip}>
         {shown.map((s) => (
           <StreamCard
             key={s.session_key}
