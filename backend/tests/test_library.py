@@ -221,7 +221,10 @@ def test_many_requests_do_not_freeze_the_app(client, monkeypatch):
     monkeypatch.setattr(seerr, "all_requests", many)
     started = clock.perf_counter()
     data = client.get("/api/library/requests?fresh=true").json()
-    assert len(data["requests"]) == 2000
+    # None of these has a file behind it, so they are all in the second list.
+    # What this test is about is getting through two thousand of them.
+    assert len(data["requests"]) + len(data["missing"]) == 2000
+    assert len(data["missing"]) == 2000
     assert clock.perf_counter() - started < 5
     client.get("/api/library/requests")
     assert calls["n"] == 1  # the second came from the cache

@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.76.0 - 2026-10-05
+
+### Fixed
+- Requested, never watched mixed two different problems. Rows reading "Item 45848" with no title and no size were
+  not requests nobody had watched: they are requests the service marks as available for a key the library has never
+  seen, which means the file is not there. They have their own list now, because "nobody watched it" and "it is not
+  here" ask for different things and the second is the more actionable.
+- Two people asking for the same film made two rows, which is why the same item appeared twice. One row per title
+  now, saying who else asked.
+- A title whose key changed in Plex is found by its id instead, so it reads as a film rather than a number.
+
 ## 0.75.0 - 2026-10-05
 
 ### Added

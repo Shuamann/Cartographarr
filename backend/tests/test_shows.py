@@ -100,3 +100,81 @@ def test_the_show_lists_are_admin_only(client):
     as_viewer(client, "all")
     assert client.get("/api/library/shows").status_code == 403
     assert client.get("/api/library/shows/900").status_code == 403
+
+
+def requests_from(monkeypatch, rows):
+    from app.integrations.seerr import seerr
+
+    monkeypatch.setattr(type(seerr), "configured", lambda self: True)
+
+    async def all_requests(limit=2000):
+        return rows
+
+    monkeypatch.setattr(seerr, "all_requests", all_requests)
+
+
+def a_request(key, who="shua", tmdb=None):
+    return {
+        "is4k": False,
+        "media": {"status": 5, "ratingKey": str(key), "mediaType": "movie",
+                  "mediaAddedAt": "2024-01-01T00:00:00Z", **({"tmdbId": tmdb} if tmdb else {})},
+        "requestedBy": {"plexUsername": who},
+    }
+
+
+def test_requests_with_no_file_are_their_own_list(client, monkeypatch):
+    """Seerr saying a request arrived, and the library having no such file, is
+    a different problem from nobody having watched it. Side by side they read
+    as the same thing, and the second is the more actionable one."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=501, media_type="movie", title="On the disk",
+                         file_size=4_000_000_000, section_id=1))
+
+    requests_from(monkeypatch, [a_request(501), a_request(45848)])
+    r = client.get("/api/library/requests?fresh=true").json()
+
+    assert [x["title"] for x in r["requests"]] == ["On the disk"]
+    assert r["requests"][0]["in_library"] is True and r["requests"][0]["file_size"] == 4_000_000_000
+    assert [x["rating_key"] for x in r["missing"]] == [45848]
+    assert r["missing"][0]["in_library"] is False and r["missing"][0]["title"] is None
+
+
+def test_two_people_asking_for_one_film_is_one_row(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=502, media_type="movie", title="Wanted twice",
+                         file_size=1_000_000_000, section_id=1))
+
+    requests_from(monkeypatch, [a_request(502, "alpha"), a_request(502, "beta"), a_request(502, "alpha")])
+    r = client.get("/api/library/requests?fresh=true").json()
+    assert len(r["requests"]) == 1
+    row = r["requests"][0]
+    assert row["requested_by"] == "alpha"
+    assert row["also_requested_by"] == ["beta"], "and not the same person twice"
+
+
+def test_a_title_whose_key_changed_is_still_named(client, monkeypatch):
+    """Plex can give the same film a new key. Seerr remembers the old one, and
+    the id finds it anyway, so the row reads as a film rather than a number."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=999, media_type="movie", title="Renumbered",
+                         tmdb_id="12345", file_size=2_000_000_000, section_id=1))
+
+    requests_from(monkeypatch, [a_request(45848, tmdb=12345)])
+    r = client.get("/api/library/requests?fresh=true").json()
+    # Still in the second list, because the library has nothing under that key,
+    # but it has a name now instead of "Item 45848".
+    assert r["requests"] == []
+    assert r["missing"][0]["title"] == "Renumbered"
+    assert r["missing"][0]["matched_by_id"] is True

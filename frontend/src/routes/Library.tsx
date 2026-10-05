@@ -103,6 +103,10 @@ type RequestRow = {
   available_days: number | null;
   watched_by_others: number;
   file_size: number | null;
+  // Whether the library has a file under that key at all.
+  in_library?: boolean;
+  matched_by_id?: boolean;
+  also_requested_by?: string[];
 };
 
 export type FileDetail = FileInfo & {
@@ -570,7 +574,10 @@ function FourKSection({ days }: { days: number }) {
 
 function Requests() {
   const nav = useNav();
-  const data = useApi<{ configured: boolean; requests: RequestRow[] }>("/library/requests");
+  const [lens, setLens] = useState<"watched" | "missing">("watched");
+  const data = useApi<{ configured: boolean; requests: RequestRow[]; missing: RequestRow[] }>(
+    "/library/requests",
+  );
   if (data.error) return <p className="note bad-note" role="alert">{data.error}</p>;
   if (!data.data) return <Loading label="Asking Seerr for requests" slowHint="Seerr is read a page of 100 requests at a time." />;
   if (!data.data.configured)
@@ -580,14 +587,33 @@ function Requests() {
         were never watched.
       </p>
     );
-  const rows = data.data.requests;
+  const missing = data.data.missing ?? [];
+  const rows = lens === "missing" ? missing : data.data.requests;
   return (
     <>
       <p className="muted">
-        Requests that are available and the person who asked has never played, longest available first. Requesters are
-        matched to Plex users by Plex username or email.
+        {lens === "watched"
+          ? "Requests that arrived and the person who asked has never played, longest available first. Requesters are matched to Plex users by Plex username or email."
+          : "Seerr has these marked as available, and the library has no file under that key. Either it was removed since, or the status is stale. These were mixed in with the list above, where they read as something nobody had watched."}
       </p>
-      {rows.length === 0 && <p className="muted">Everyone watched what they asked for.</p>}
+      {/* Two different problems. One is nobody watching what they asked for;
+          the other is the thing not being there at all, which is the more
+          actionable of the two and was indistinguishable from the first. */}
+      {missing.length > 0 && (
+        <div className="row chips">
+          <button className={lens === "watched" ? "chip on" : "chip"} onClick={() => setLens("watched")}>
+            Never watched {data.data.requests.length}
+          </button>
+          <button className={lens === "missing" ? "chip on" : "chip"} onClick={() => setLens("missing")}>
+            Not in the library {missing.length}
+          </button>
+        </div>
+      )}
+      {rows.length === 0 && (
+        <p className="muted">
+          {lens === "missing" ? "Everything Seerr says arrived is here." : "Everyone watched what they asked for."}
+        </p>
+      )}
       <div className="mini-list">
         {rows.map((r, i) => (
           <div key={`${r.rating_key}-${i}`} className="mini">
@@ -611,6 +637,9 @@ function Requests() {
                 ) : (
                   r.requested_by ?? "someone"
                 )}
+                {r.also_requested_by?.length
+                  ? ` and ${r.also_requested_by.length} other${r.also_requested_by.length === 1 ? "" : "s"}`
+                  : ""}
                 {r.available_days != null ? ` · available ${r.available_days} days` : ""}
                 {r.watched_by_others ? ` · watched by ${r.watched_by_others} other${r.watched_by_others === 1 ? "" : "s"}` : " · watched by nobody"}
                 {r.file_size ? ` · ${size(r.file_size)}` : ""}

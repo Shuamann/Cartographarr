@@ -922,7 +922,21 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
             for item in db.execute(select(MediaItem).where(MediaItem.rating_key.in_(keys[i : i + 500]))).scalars():
                 items[item.rating_key] = item
 
+        # A title Plex no longer has may still be findable by its TMDB id,
+        # which is the same film under a key that changed.
+        by_tmdb: dict[str, MediaItem] = {}
+        tmdb_wanted = {str(r.get("media", {}).get("tmdbId")) for r, _ in wanted if (r.get("media") or {}).get("tmdbId")}
+        if tmdb_wanted:
+            for item in db.execute(
+                select(MediaItem).where(MediaItem.tmdb_id.in_(sorted(tmdb_wanted)))
+            ).scalars():
+                if item.tmdb_id:
+                    by_tmdb.setdefault(str(item.tmdb_id), item)
+
         now = time.time()
+        # One row per title, not per request: two people asking for the same
+        # film is one film, and it was appearing twice.
+        merged: dict[int, dict[str, Any]] = {}
         out = []
         for r, key in wanted:
             media = r.get("media") or {}
@@ -941,9 +955,30 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
             except ValueError:
                 added_ts = None
             item = items.get(key)
-            out.append({
+            # Nothing in the library under that key. Seerr may still be right
+            # that it was here once, so the id is tried as well.
+            found_by_id = None
+            if item is None and (media.get("tmdbId") is not None):
+                found_by_id = by_tmdb.get(str(media.get("tmdbId")))
+            named = item or found_by_id
+
+            seen = merged.get(key)
+            if seen is not None:
+                # Another request for the same thing. Keep the row, add the
+                # person, and let the longest wait stand.
+                who_now = who.get("displayName") or who.get("plexUsername") or who.get("email")
+                if who_now and who_now not in seen["requested_by_all"]:
+                    seen["requested_by_all"].append(who_now)
+                continue
+
+            row = {
                 "rating_key": key,
-                "title": _title(item) if item is not None and item.title else None,
+                "title": _title(named) if named is not None and named.title else None,
+                # Whether the library actually has it. Seerr saying available
+                # and the library having nothing is a different problem from
+                # nobody having watched it, and the page says which.
+                "in_library": item is not None,
+                "matched_by_id": item is None and found_by_id is not None,
                 "media_type": media.get("mediaType"),
                 "tmdb_id": media.get("tmdbId"),
                 "requested_by": who.get("displayName") or who.get("plexUsername") or who.get("email"),
@@ -951,10 +986,26 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
                 "requested_at": r.get("createdAt"),
                 "available_days": int((now - added_ts) / 86400) if added_ts else None,
                 "watched_by_others": len(seen_by - {user_id}),
-                "file_size": item.file_size if item is not None else None,
-            })
+                "file_size": named.file_size if named is not None else None,
+            }
+            row["requested_by_all"] = [row["requested_by"]] if row["requested_by"] else []
+            merged[key] = row
+            out.append(row)
+
+    for row in out:
+        people = row.pop("requested_by_all", [])
+        if len(people) > 1:
+            row["requested_by"] = people[0]
+            row["also_requested_by"] = people[1:]
+
     out.sort(key=lambda x: -(x["available_days"] or 0))
-    return {"configured": True, "requests": out}
+    return {
+        "configured": True,
+        "requests": [r for r in out if r["in_library"]],
+        # Seerr says these arrived; the library has no such file. Either it was
+        # removed, or the status is stale.
+        "missing": [r for r in out if not r["in_library"]],
+    }
 
 
 def playback_summary(db: Session, days: int, user_id: int | None = None, machine_id: str | None = None) -> dict[str, Any]:
