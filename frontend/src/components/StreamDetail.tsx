@@ -23,6 +23,40 @@ const LINKS: { key: string; label: string }[] = [
   { key: "seerr", label: "Seerr" },
 ];
 
+/* What kind of thing is playing this.
+ *
+ * A category rather than a brand: a television, a phone, a desktop, a console
+ * or a browser. The shape is the useful part at this size, and it means no
+ * logos to keep current or to have opinions about.
+ */
+const PLATFORM_SHAPES: Record<string, string> = {
+  tv: "M3 5h18v11H3zm5 14h8v-1H8z",
+  mobile: "M7 2h10v20H7zm4 18h2v1h-2z",
+  desktop: "M3 4h18v11H3zm2 14h14v2H5z",
+  console: "M6 9h12a4 4 0 0 1 0 8H6a4 4 0 0 1 0-8zm1 2v4m-2-2h4",
+  browser: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2c4 0 6 8 0 8s-4-8 0-8z",
+};
+
+export function platformKind(platform: string | null | undefined, product: string | null | undefined): string {
+  const text = `${platform ?? ""} ${product ?? ""}`.toLowerCase();
+  if (/playstation|xbox|nintendo|ps4|ps5/.test(text)) return "console";
+  if (/roku|tizen|webos|tvos|apple tv|android tv|shield|chromecast|smart ?tv|fire ?tv/.test(text)) return "tv";
+  if (/android|ios|iphone|ipad|phone|tablet/.test(text)) return "mobile";
+  if (/chrome|firefox|safari|edge|opera|browser|web/.test(text)) return "browser";
+  return "desktop";
+}
+
+function PlatformIcon({ platform, product }: { platform?: string | null; product?: string | null }) {
+  const kind = platformKind(platform, product);
+  const d = PLATFORM_SHAPES[kind];
+  if (!d) return null;
+  return (
+    <svg className="platform-icon" width={15} height={15} viewBox="0 0 24 24" aria-label={kind} role="img">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function StreamDetail({
   session,
   onClose,
@@ -74,6 +108,17 @@ export default function StreamDetail({
 
   return (
     <article className={compact ? "stream-detail compact" : "stream-detail"}>
+      {/* The show, blurred, behind its own card. Decoration: everything on top
+          of it sits on a scrim so the text keeps its contrast whatever the
+          picture is. Falls back to the poster where there is no wide art, and
+          to nothing at all where there is neither. */}
+      {session.rating_key ? (
+        <div
+          className="stream-backdrop"
+          aria-hidden="true"
+          style={{ backgroundImage: `url(/api/media/${session.rating_key}/image?kind=art&width=900&height=506)` }}
+        />
+      ) : null}
       {onClose && (
         <button className="icon-btn stream-close" onClick={onClose} aria-label="Close">
           &times;
@@ -139,6 +184,7 @@ export default function StreamDetail({
         </Spec>
         <Spec label="Player">
           {banned && <span className="pill banned">banned</span>}
+          <PlatformIcon platform={session.platform} product={session.product} />
           <Jump
             onClick={session.machine_id && nav.openDevice ? () => nav.openDevice?.(session.machine_id as string) : undefined}
             title="Open this device"
@@ -177,7 +223,16 @@ export default function StreamDetail({
         {session.subtitle_decision && <Spec label="Subtitles">{decision(session.subtitle_decision)}</Spec>}
         <Spec label="Location">
           <span className="pill">{(session.location || "").toUpperCase() || "?"}</span>
-          <Jump onClick={canMap ? () => nav.showOnMap?.(session) : undefined} title="Show on the map">
+          {/* The address opens the address. It used to open the map, which
+              is its own button at the foot of this card. */}
+          <Jump
+            onClick={
+              session.ip_address && nav.openAddress
+                ? () => nav.openAddress?.(session.ip_address as string)
+                : undefined
+            }
+            title="Open this address"
+          >
             {[session.ip_address, where].filter(Boolean).join(" · ")}
           </Jump>
           {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}

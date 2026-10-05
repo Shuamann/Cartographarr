@@ -1598,6 +1598,9 @@ label.locked .pill {
 /* Everything the old Activity tab showed, opened under the strip rather than
  * on its own screen. */
 .stream-detail {
+  /* The backdrop and the scrim are positioned against this. */
+  position: relative;
+  isolation: isolate;
   position: relative;
   margin-top: 10px;
   padding: 14px;
@@ -2184,12 +2187,63 @@ label.locked .pill {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* Two pairs of label and value, packed left.
+ *
+ * The value columns used to be 1fr, so on a wide screen a dozen short facts
+ * were spread across two thousand pixels with the labels stranded at either
+ * end. Capped and packed, they read as a block; a very wide screen gets a
+ * third pair rather than three times the stretch. */
 .spec {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
-  gap: 6px 14px;
+  grid-template-columns: max-content minmax(0, 22ch) max-content minmax(0, 22ch);
+  justify-content: start;
+  gap: var(--space-2) var(--space-5);
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text);
+}
+@media (min-width: 1500px) {
+  .spec {
+    grid-template-columns: repeat(3, max-content minmax(0, 22ch));
+  }
+}
+@media (min-width: 1900px) {
+  .spec {
+    grid-template-columns: repeat(4, max-content minmax(0, 22ch));
+  }
+}
+
+/* What kind of thing is playing it. */
+.platform-icon {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+}
+
+/* The show behind its own card, blurred far enough that it is texture rather
+   than a picture competing with the words on top of it. */
+.stream-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  border-radius: inherit;
+  filter: blur(40px) saturate(1.15);
+  /* Texture, not a picture. Light mode has less contrast to spare, so it
+     takes less of it. */
+  opacity: 0.14;
+}
+:root[data-theme="dark"] .stream-backdrop {
+  opacity: 0.26;
+}
+/* The scrim. Without it the contrast depends on whatever the artwork is,
+   which is not a thing to leave to chance. */
+.stream-detail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(to right, var(--surface) 22%, rgb(from var(--surface) r g b / 0.9));
 }
 .spec dt {
   color: var(--ink-3);

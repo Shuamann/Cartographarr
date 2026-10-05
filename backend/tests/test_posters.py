@@ -15,8 +15,13 @@ def test_the_image_route_takes_no_database_session():
     """A session is a connection out of a small pool. This route talks to
     Tautulli, so it opens one only after the answer is back."""
     taken = inspect.signature(data_router.media_image).parameters
-    assert "db" not in taken, "the image route must not hold a session while it fetches"
-    assert set(taken) == {"rating_key", "width", "height"}
+    # Naming any of these would have FastAPI hand the route a session, which
+    # it would then hold across a call to Tautulli. Query parameters it takes
+    # besides those are its own business.
+    assert not {"db", "session", "Db"} & set(taken), (
+        "the image route must not hold a session while it fetches"
+    )
+    assert "rating_key" in taken
 
 
 def test_live_activity_takes_no_session_either():

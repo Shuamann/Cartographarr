@@ -329,14 +329,15 @@ a page of sixty of them is the difference between seven megabytes and one.
 PNG. It has to be `jpg`."""
 
 
-def _poster_file(rating_key: int, width: int, height: int) -> pathlib.Path:
+def _poster_file(rating_key: int, width: int, height: int, kind: str = "poster") -> pathlib.Path:
     # The extension is part of the name, so the PNGs cached by older builds
     # are simply not found and are replaced on the next request rather than
     # being served under the wrong type for ever.
-    return get_settings().data_dir / "posters" / f"{rating_key}-{width}x{height}.{POSTER_FORMAT}"
+    name = f"{rating_key}-{width}x{height}" + ("" if kind == "poster" else f"-{kind}")
+    return get_settings().data_dir / "posters" / f"{name}.{POSTER_FORMAT}"
 
 
-def _poster_art(rating_key: int) -> str | None:
+def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
     """The artwork path for an item, from the database, in its own session.
 
     Deliberately not the request's session: what follows is a call across the
@@ -349,6 +350,12 @@ def _poster_art(rating_key: int) -> str | None:
         item = db.get(MediaItem, rating_key)
         if item is None or item.title is None:
             return None
+        # The wide backdrop rather than the cover, for anything that wants
+        # something to sit behind text. Falls back to the poster, because an
+        # item without backdrop art is common and a card with no image at all
+        # is worse than a blurred poster.
+        if kind == "art":
+            return item.art or item.poster_thumb
         art = item.poster_thumb
         if (
             item.media_type in ("episode", "season")
@@ -360,7 +367,7 @@ def _poster_art(rating_key: int) -> str | None:
 
 
 @router.get("/media/{rating_key}/image")
-async def media_image(rating_key: int, width: int = 300, height: int = 450):
+async def media_image(rating_key: int, width: int = 300, height: int = 450, kind: str = "poster"):
     """Poster art, proxied through Tautulli and kept on disk.
 
     Plex image URLs need a token, so the browser cannot fetch them directly and
@@ -370,14 +377,15 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450):
     there afterwards: a library page full of posters should cost one fetch
     each, ever, not one fetch a visit.
     """
-    kept = _poster_file(rating_key, width, height)
+    kind = "art" if kind == "art" else "poster"
+    kept = _poster_file(rating_key, width, height, kind)
     if kept.exists():
         return FileResponse(kept, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
 
     if not is_configured():
         raise HTTPException(409, "Tautulli is not configured")
 
-    art = await asyncio.to_thread(_poster_art, rating_key)
+    art = await asyncio.to_thread(_poster_art, rating_key, kind)
     if art is None:
         # Playing now but newer than the last sync: the poster and the links
         # load at the same moment, so this cannot rely on the links request
@@ -385,7 +393,7 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450):
         from app.services.sync import cache_one
 
         await cache_one(rating_key)
-        art = await asyncio.to_thread(_poster_art, rating_key)
+        art = await asyncio.to_thread(_poster_art, rating_key, kind)
     if not art:
         art = await _backfill_poster_for(rating_key)
     if not art:

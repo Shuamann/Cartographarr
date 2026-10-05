@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.72.0 - 2026-10-05
+
+### Fixed
+- Clicking an address on a stream card opens that address. It opened the map, which is its own button at the foot of
+  the same card, so there was no way to get from a stream to the address behind it.
+
+### Changed
+- The stream card reads at a glance on a wide screen. Its facts grid had two stretching columns, so a dozen short
+  values were spread across two thousand pixels with their labels stranded at either end. The columns are capped and
+  packed left, and a wide screen gets a third and fourth pair of them rather than more stretch.
+- The show sits behind its own card, blurred far enough to be texture rather than a picture competing with the words
+  on top of it, over a scrim so the contrast does not depend on what the artwork happens to be. The image proxy can
+  now serve the wide backdrop art as well as the cover, cached separately and falling back to the cover.
+- The player says what kind of thing it is: a television, a phone, a desktop, a console or a browser. A category
+  rather than a brand, because the shape is the useful part at that size.
+
 ## 0.71.0 - 2026-10-05
 
 ### Added
