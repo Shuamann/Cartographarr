@@ -321,6 +321,15 @@ function StreamCard({
 
   return (
     <button className={selected ? "stream-card on" : "stream-card"} onClick={onClick}>
+      {/* The same blurred show as the opened card, so the strip and the panel
+          below it look like the same thing. Decoration only. */}
+      {session.rating_key ? (
+        <span
+          className="stream-backdrop"
+          aria-hidden="true"
+          style={{ backgroundImage: `url(/api/media/${session.rating_key}/image?kind=art&width=600&height=338)` }}
+        />
+      ) : null}
       {session.rating_key ? (
         <img
           className="stream-poster"

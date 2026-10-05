@@ -176,6 +176,9 @@ export default function StreamDetail({
         </div>
       </div>
 
+      {/* User, player and address first: they are the three things on this
+          card that go somewhere, so they are together and at the top rather
+          than scattered through the technical detail. */}
       <dl className="spec">
         <Spec label="User">
           <Jump onClick={session.user_id != null && nav.openUser ? () => nav.openUser?.(session.user_id as number) : undefined}>
@@ -192,6 +195,22 @@ export default function StreamDetail({
             {session.player}
             {session.platform ? ` (${session.platform})` : ""}
           </Jump>
+        </Spec>
+        <Spec label="Location">
+          <span className="pill">{(session.location || "").toUpperCase() || "?"}</span>
+          {/* The address opens the address. It used to open the map, which
+              is its own button at the foot of this card. */}
+          <Jump
+            onClick={
+              session.ip_address && nav.openAddress
+                ? () => nav.openAddress?.(session.ip_address as string)
+                : undefined
+            }
+            title="Open this address"
+          >
+            {[session.ip_address, where].filter(Boolean).join(" · ")}
+          </Jump>
+          {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
         </Spec>
         <Spec label="Product">{session.product}</Spec>
         <Spec label="Quality">
@@ -221,22 +240,6 @@ export default function StreamDetail({
           )}
         </Spec>
         {session.subtitle_decision && <Spec label="Subtitles">{decision(session.subtitle_decision)}</Spec>}
-        <Spec label="Location">
-          <span className="pill">{(session.location || "").toUpperCase() || "?"}</span>
-          {/* The address opens the address. It used to open the map, which
-              is its own button at the foot of this card. */}
-          <Jump
-            onClick={
-              session.ip_address && nav.openAddress
-                ? () => nav.openAddress?.(session.ip_address as string)
-                : undefined
-            }
-            title="Open this address"
-          >
-            {[session.ip_address, where].filter(Boolean).join(" · ")}
-          </Jump>
-          {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
-        </Spec>
         <Spec label="Network">
           {session.geo?.asn_org ?? "Unknown"}
           {session.relayed && Number(session.relayed) ? " · relayed" : ""}
@@ -355,12 +358,19 @@ function Jump({
   );
 }
 
+/* A label and its value, in one cell.
+ *
+ * They used to be loose dt and dd elements sharing the grid's columns, so a
+ * long value wrapped inside its column while the short ones left a gap and the
+ * block went ragged. Wrapping the pair lets the cells flow instead: a long one
+ * takes the room it needs and nothing breaks in the middle. A div between dl
+ * and its dt is allowed, and screen readers still read the pairs. */
 function Spec({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <>
+    <div className="spec-pair">
       <dt>{label}</dt>
       <dd>{children}</dd>
-    </>
+    </div>
   );
 }
 

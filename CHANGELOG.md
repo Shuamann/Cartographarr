@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.72.1 - 2026-10-05
+
+### Changed
+- A fact on the stream card is on one line again. Capping the columns stopped them stretching and started a long
+  address wrapping inside its cap while short values left a gap, which read worse than the stretch did. The columns
+  are sized to their contents and packed left now: one on a narrow card, two normally, three when there is the room,
+  and nothing breaks in the middle.
+- The user, the player and the address sit together at the top. They are the three things on the card that go
+  somewhere, and they were scattered through the technical detail.
+- The cards in the Now playing strip carry the blurred show as well, so the strip and the panel below it look like
+  the same thing.
+
 ## 0.72.0 - 2026-10-05
 
 ### Fixed

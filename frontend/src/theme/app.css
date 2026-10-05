@@ -1568,6 +1568,10 @@ label.locked .pill {
 }
 
 .stream-card {
+  /* The backdrop and its scrim are positioned against this. */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   gap: 12px;
   padding: 12px;
@@ -2187,29 +2191,58 @@ label.locked .pill {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Two pairs of label and value, packed left.
+/* The facts, as pairs that flow.
  *
  * The value columns used to be 1fr, so on a wide screen a dozen short facts
  * were spread across two thousand pixels with the labels stranded at either
- * end. Capped and packed, they read as a block; a very wide screen gets a
- * third pair rather than three times the stretch. */
+ * end. Capping them stopped the stretch and started a different problem: a
+ * long value wrapped inside its cap while the short ones left a gap. So a
+ * label and its value are one cell now, and the cells fill the row by
+ * themselves, as many as fit. */
 .spec {
   display: grid;
-  grid-template-columns: max-content minmax(0, 22ch) max-content minmax(0, 22ch);
+  /* One column on a narrow card, two on anything normal, three when there is
+     really the room. Sized to their contents and packed left, so the columns
+     are as wide as the longest fact and no wider: the old layout stretched
+     them to the full width of the card, which on an ultrawide put a dozen
+     short values two thousand pixels apart. */
+  grid-template-columns: minmax(0, 1fr);
   justify-content: start;
-  gap: var(--space-2) var(--space-5);
+  align-items: start;
+  gap: var(--space-2) var(--space-6);
   margin: 0;
   font-size: var(--text);
 }
-@media (min-width: 1500px) {
+@media (min-width: 700px) {
   .spec {
-    grid-template-columns: repeat(3, max-content minmax(0, 22ch));
+    grid-template-columns: repeat(2, max-content);
+  }
+  /* A fact belongs on one line. Only once there is room for it: on a phone it
+     would be a sideways scroll. */
+  .spec-pair dd {
+    white-space: nowrap;
   }
 }
-@media (min-width: 1900px) {
+@media (min-width: 1500px) {
   .spec {
-    grid-template-columns: repeat(4, max-content minmax(0, 22ch));
+    grid-template-columns: repeat(3, max-content);
   }
+}
+.spec-pair {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.spec-pair dt {
+  flex: 0 0 9ch;
+  /* The labels are small caps, so they want nudging down to sit on the same
+     line as the value beside them. */
+  padding-top: 1px;
+}
+.spec-pair dd {
+  flex: 1;
+  min-width: 0;
 }
 
 /* What kind of thing is playing it. */
@@ -2237,13 +2270,26 @@ label.locked .pill {
 }
 /* The scrim. Without it the contrast depends on whatever the artwork is,
    which is not a thing to leave to chance. */
-.stream-detail::before {
+.stream-detail::before,
+.stream-card::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   border-radius: inherit;
   background: linear-gradient(to right, var(--surface) 22%, rgb(from var(--surface) r g b / 0.9));
+}
+/* A tile is small, so the picture has less room to read in and needs more of
+   it. The scrim still covers the left, where the text is. */
+.stream-card::before {
+  background: linear-gradient(to right, var(--surface) 30%, rgb(from var(--surface) r g b / 0.72));
+}
+.stream-card .stream-backdrop {
+  filter: blur(22px) saturate(1.25);
+  opacity: 0.3;
+}
+:root[data-theme="dark"] .stream-card .stream-backdrop {
+  opacity: 0.45;
 }
 .spec dt {
   color: var(--ink-3);
