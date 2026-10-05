@@ -29,10 +29,38 @@ const KINDS = [
  * rules, devices, accounts, sharing, sign ins). Kept apart from Rules because
  * most of what lands here has nothing to do with a rule.
  */
+type Options = { rules: string[]; people: string[]; outcomes: string[]; areas: string[] };
+
+const BLANK_FILTERS = { start: "", end: "", who: "", rule: "", outcome: "", area: "", search: "" };
+
+const AREA_LABEL: Record<string, string> = {
+  settings: "Settings",
+  sync: "Sync",
+  device: "Devices",
+  rule: "Rules",
+  travel: "Sharing signals",
+  user: "Users",
+  account: "Accounts",
+  auth: "Sign in",
+  branding: "Branding",
+  sharing: "Sharing",
+  report: "Reports",
+  library: "Library",
+};
+
 export default function LogRoute({ onOpenUser }: { onOpenUser?: (userId: number) => void }) {
   const [kind, setKind] = useState<(typeof KINDS)[number]["value"]>("all");
-  const rows = useApi<Row[]>(`/log?kind=${kind}&limit=300`);
+  const [filters, setFilters] = useState(BLANK_FILTERS);
+  const options = useApi<Options>("/log/options");
+
+  const query = new URLSearchParams({ kind, limit: "300" });
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
+  const rows = useApi<Row[]>(`/log?${query.toString()}`);
   const [open, setOpen] = useState<string | null>(null);
+
+  const set = (key: keyof typeof BLANK_FILTERS) => (value: string) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+  const narrowed = Object.values(filters).filter(Boolean).length;
 
   return (
     <div className="pad scroll">
@@ -55,8 +83,82 @@ export default function LogRoute({ onOpenUser }: { onOpenUser?: (userId: number)
         Cartographarr. Open an entry for the detail.
       </p>
 
+      {/* A rule or an outcome is a question only a stream action can answer,
+          and an area only a change can, so picking one narrows the timeline to
+          that half rather than quietly ignoring the question. */}
+      <div className="row wrap log-filters">
+        <label className="log-filter">
+          <span className="muted small">From</span>
+          <input type="date" value={filters.start} onChange={(e) => set("start")(e.target.value)} />
+        </label>
+        <label className="log-filter">
+          <span className="muted small">To</span>
+          <input type="date" value={filters.end} onChange={(e) => set("end")(e.target.value)} />
+        </label>
+        <label className="log-filter">
+          <span className="muted small">Person</span>
+          <select value={filters.who} onChange={(e) => set("who")(e.target.value)}>
+            <option value="">Anyone</option>
+            {(options.data?.people ?? []).map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="log-filter">
+          <span className="muted small">Rule</span>
+          <select value={filters.rule} onChange={(e) => set("rule")(e.target.value)}>
+            <option value="">Any rule</option>
+            {(options.data?.rules ?? []).map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="log-filter">
+          <span className="muted small">Outcome</span>
+          <select value={filters.outcome} onChange={(e) => set("outcome")(e.target.value)}>
+            <option value="">Any outcome</option>
+            {(options.data?.outcomes ?? []).map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="log-filter">
+          <span className="muted small">Changed</span>
+          <select value={filters.area} onChange={(e) => set("area")(e.target.value)}>
+            <option value="">Anything</option>
+            {(options.data?.areas ?? []).map((a) => (
+              <option key={a} value={a}>
+                {AREA_LABEL[a] ?? a}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="log-filter grow">
+          <span className="muted small">Title</span>
+          <input
+            type="search"
+            value={filters.search}
+            placeholder="Search titles and changes"
+            onChange={(e) => set("search")(e.target.value)}
+          />
+        </label>
+        {narrowed > 0 && (
+          <button className="ms-btn" onClick={() => setFilters(BLANK_FILTERS)}>
+            Clear {narrowed}
+          </button>
+        )}
+      </div>
+
       {rows.error && <p className="note bad-note" role="alert">{rows.error}</p>}
-      {rows.data?.length === 0 && <p className="muted">Nothing yet.</p>}
+      {rows.data?.length === 0 && (
+        <p className="muted">{narrowed > 0 ? "Nothing matches those filters." : "Nothing yet."}</p>
+      )}
 
       <div className="log-list">
         {rows.data?.map((row) => {

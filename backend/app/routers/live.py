@@ -438,27 +438,128 @@ def enforcement_log(db: Db, scope: ViewerScope, limit: int = 100) -> list[dict]:
     ]
 
 
+def outcome_of(action: str | None, result: str | None, dry_run: bool | None) -> str:
+    """What the page's pill says for this row.
+
+    Kept here as well as in the page so that filtering by "stopped" selects
+    exactly the rows that read "stopped", rather than something close to it.
+    The two have to agree; a test holds them together.
+    """
+    actions = [a.strip() for a in (action or "").split(",")]
+    text = (result or "").lower()
+    if dry_run:
+        return "recorded only"
+    if text.startswith("refused") or "failed" in text:
+        return "refused"
+    if "terminate" in actions and "terminated" in text:
+        return "stopped"
+    if actions == ["log_only"]:
+        return "logged"
+    if {"notify", "webhook", "message_viewer"} & set(actions):
+        return "notified"
+    return "acted"
+
+
+LOG_OUTCOMES = ["stopped", "refused", "recorded only", "notified", "logged", "acted"]
+
+
+def _day_bounds(start: str | None, end: str | None) -> tuple[datetime | None, datetime | None]:
+    """A date means the whole of that day, in the server's own clock, which is
+    the clock every other time on the page is shown in."""
+    from datetime import time as _time
+
+    def parse(value: str | None, at_end: bool) -> datetime | None:
+        if not value:
+            return None
+        try:
+            day = datetime.strptime(value[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+        return datetime.combine(day, _time.max if at_end else _time.min)
+
+    return parse(start, False), parse(end, True)
+
+
+@router.get("/log/options")
+def log_options(db: Db, _: AdminUser) -> dict:
+    """What there is to filter by, so the page offers only what exists."""
+    from app.models import AuditLog
+
+    rules = [
+        name for (name,) in db.execute(
+            select(EnforcementLog.rule_name).where(EnforcementLog.rule_name.is_not(None)).distinct()
+        ).all()
+    ]
+    people = {
+        name
+        for (name,) in db.execute(
+            select(EnforcementLog.username).where(EnforcementLog.username.is_not(None)).distinct()
+        ).all()
+    }
+    for table in (EnforcementLog.actor, AuditLog.actor):
+        people |= {name for (name,) in db.execute(select(table).where(table.is_not(None)).distinct()).all()}
+    areas = [
+        action.split(".")[0]
+        for (action,) in db.execute(select(AuditLog.action).where(AuditLog.action.is_not(None)).distinct()).all()
+    ]
+    return {
+        "rules": sorted(rules, key=str.lower),
+        "people": sorted({p for p in people if p}, key=str.lower),
+        "outcomes": LOG_OUTCOMES,
+        "areas": sorted(set(areas)),
+    }
+
+
 @router.get("/log")
 def combined_log(
     db: Db,
     _: AdminUser,
     kind: str = "all",
     limit: int = 200,
+    start: str | None = None,
+    end: str | None = None,
+    who: str | None = None,
+    rule: str | None = None,
+    outcome: str | None = None,
+    area: str | None = None,
+    search: str | None = None,
 ) -> list[dict]:
     """Stream actions and admin changes on one timeline.
 
     Two tables because they record different things: a stream action keeps a
     snapshot of the stream, a change keeps what it was before. The page wants
     them in one list, so they are merged here, newest first.
+
+    A filter a table has nothing to answer with excludes it rather than being
+    ignored: asking for one rule has no sensible answer among settings
+    changes, so the changes half drops out instead of ignoring the question.
     """
     from app.models import AuditLog
 
     limit = max(1, min(limit, 1000))
+    since, until = _day_bounds(start, end)
     out: list[dict] = []
-    if kind in ("all", "streams"):
-        rows = db.execute(
-            select(EnforcementLog).order_by(desc(EnforcementLog.acted_at)).limit(limit)
-        ).scalars()
+
+    # A rule or an outcome is a question only a stream action can answer.
+    streams_only = bool(rule or outcome)
+    # An area is a question only a change can answer.
+    changes_only = bool(area)
+
+    if kind in ("all", "streams") and not changes_only:
+        stmt = select(EnforcementLog)
+        if since:
+            stmt = stmt.where(EnforcementLog.acted_at >= since)
+        if until:
+            stmt = stmt.where(EnforcementLog.acted_at <= until)
+        if who:
+            stmt = stmt.where(
+                (EnforcementLog.username == who) | (EnforcementLog.actor == who)
+            )
+        if rule:
+            stmt = stmt.where(EnforcementLog.rule_name == rule)
+        if search:
+            stmt = stmt.where(EnforcementLog.full_title.ilike(f"%{search}%"))
+        rows = db.execute(stmt.order_by(desc(EnforcementLog.acted_at)).limit(limit)).scalars()
         out += [
             {
                 "kind": "stream",
@@ -466,9 +567,24 @@ def combined_log(
                 **{c.name: getattr(row, c.name) for c in EnforcementLog.__table__.columns},
             }
             for row in rows
+            # Worked out from three columns, so it is filtered here rather
+            # than in SQL, on a page already capped at a thousand rows.
+            if not outcome or outcome_of(row.action, row.result, row.dry_run) == outcome
         ]
-    if kind in ("all", "changes"):
-        rows = db.execute(select(AuditLog).order_by(desc(AuditLog.created_at)).limit(limit)).scalars()
+
+    if kind in ("all", "changes") and not streams_only:
+        stmt = select(AuditLog)
+        if since:
+            stmt = stmt.where(AuditLog.created_at >= since)
+        if until:
+            stmt = stmt.where(AuditLog.created_at <= until)
+        if who:
+            stmt = stmt.where(AuditLog.actor == who)
+        if area:
+            stmt = stmt.where(AuditLog.action.startswith(f"{area}."))
+        if search:
+            stmt = stmt.where(AuditLog.summary.ilike(f"%{search}%"))
+        rows = db.execute(stmt.order_by(desc(AuditLog.created_at)).limit(limit)).scalars()
         out += [
             {
                 "kind": "change",
@@ -477,6 +593,7 @@ def combined_log(
             }
             for row in rows
         ]
+
     out.sort(key=lambda r: r["at"] or datetime.min, reverse=True)
     return out[:limit]
 

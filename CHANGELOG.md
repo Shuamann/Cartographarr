@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.71.0 - 2026-10-05
+
+### Added
+- Filters on the Log: a date range, a person, a rule, an outcome, the area a change touched, and a search over
+  titles and summaries. Three hundred entries on one timeline and the only control was which of the two tables to
+  read.
+- The dropdowns offer only what is actually in the log, so there is no picking a rule that never matched anything.
+
+### Changed
+- A filter one half of the timeline cannot answer narrows it to the other half rather than being ignored. Asking
+  for one rule has no sensible answer among settings changes, so the changes drop out; asking which area a change
+  touched drops the stream actions.
+- The outcome a filter selects is worked out the same way the page draws its pill, so picking "stopped" returns
+  exactly the rows that read "stopped". A test holds the two definitions together.
+
 ## 0.70.0 - 2026-10-04
 
 ### Changed

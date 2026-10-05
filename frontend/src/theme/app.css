@@ -4252,6 +4252,32 @@ label.locked .pill {
   margin: var(--space-3) 0;
 }
 
+/* The Log's filters. Each one is a label above its control so the row reads
+   as a sentence rather than a line of unlabelled boxes. */
+.log-filters {
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin: var(--space-3) 0;
+}
+.log-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-filter.grow {
+  flex: 1;
+  min-width: 180px;
+}
+.log-filter select,
+.log-filter input {
+  margin-top: 0;
+  width: auto;
+  min-width: 130px;
+}
+.log-filter.grow input {
+  width: 100%;
+}
+
 /* The queue holds two kinds of work in one list, so each row says which it
    is and they all sit the same way round. */
 .queue-row {
