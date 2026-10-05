@@ -1,5 +1,7 @@
 """Shared test fixtures."""
 
+import os
+
 import pytest
 
 @pytest.fixture()
@@ -19,6 +21,11 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("MAXMIND_LICENSE_KEY", "")
     monkeypatch.setenv("GEOIP_AUTO_UPDATE", "false")
     monkeypatch.setenv("ENFORCE_ENABLED", "false")
+    # No scheduler and no capability probe. Starting both, and watching the
+    # probe time out against a host that does not exist, was most of what a
+    # test spent its time on: about four hundred milliseconds each, across
+    # five hundred tests.
+    monkeypatch.setenv("RUN_BACKGROUND_JOBS", os.environ.get("TEST_BACKGROUND_JOBS", "false"))
 
     # Imported inside the fixture: the engine binds to DATA_DIR at import time.
     import importlib
@@ -89,3 +96,15 @@ def client(monkeypatch, tmp_path):
         yield c
 
     app.db.engine.dispose()
+
+
+@pytest.fixture()
+def scheduled_client(monkeypatch, tmp_path, request):
+    """The app with its scheduler running, for the few tests about scheduling.
+
+    Everything else takes the client fixture, which leaves the background work
+    off: starting a scheduler and watching a capability probe time out against
+    a host that does not exist was most of what a test spent its time on.
+    """
+    monkeypatch.setenv("TEST_BACKGROUND_JOBS", "true")
+    yield request.getfixturevalue("client")

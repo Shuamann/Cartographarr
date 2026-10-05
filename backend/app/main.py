@@ -232,6 +232,13 @@ async def lifespan(app: FastAPI):
         settings.geoip_update_interval_days,
     )
 
+    if not settings.run_background_jobs:
+        # No scheduler, no syncs, no probe. Everything still answers from what
+        # is already in the database.
+        log.info("%s started with background jobs off", settings.app_name)
+        yield
+        return
+
     scheduler = AsyncIOScheduler()
     # The syncs also run straight away. An interval job otherwise waits a full
     # interval before its first run, so after every restart or image update

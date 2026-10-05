@@ -89,7 +89,7 @@ def test_old_runs_are_pruned(client):
     assert len(client.get("/api/tasks/t_many/runs?limit=500").json()) == tasks.KEEP_RUNS
 
 
-def test_every_task_is_scheduled_and_none_paused(client):
+def test_every_task_is_scheduled_and_none_paused(scheduled_client):
     """A job added with next_run_time=None is paused. The rule sweep once was."""
     from app import tasks
 

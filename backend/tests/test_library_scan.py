@@ -105,7 +105,7 @@ def test_changed_files_are_read_again_and_removed_ones_drop_out(client):
     assert client.get("/api/library/overview").json()["titles"] == 1
 
 
-def test_scan_and_details_are_scheduled(client):
+def test_scan_and_details_are_scheduled(scheduled_client):
     from app import tasks
 
     for key in ("library_scan", "file_details"):

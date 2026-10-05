@@ -148,6 +148,15 @@ class Settings(BaseSettings):
     # ---- Live activity + enforcement --------------------------------------
     activity_poll_seconds: int = 5
 
+    run_background_jobs: bool = True
+    """Whether to start the scheduler and probe the server at boot.
+
+    False gives the app without any of its background work: no scheduler, no
+    syncs, no capability probe. Every page still answers from what is already
+    in the database. Meant for a second instance kept for reading, and for the
+    test suite, which otherwise paid for a scheduler and a failed network call
+    in every one of five hundred tests."""
+
     enforce_enabled: bool = True
     enforce_dry_run: bool = True
     """No longer set in the UI: each rule, and the ban list, has its own record

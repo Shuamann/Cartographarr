@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.73.0 - 2026-10-05
+
+### Added
+- RUN_BACKGROUND_JOBS, which starts the app without its scheduler, its syncs or its boot-time probe. Every page
+  still answers from what is already in the database. Meant for a second instance kept for reading, and for the
+  test suite.
+
+### Changed
+- The test suite runs in about half the time. Every one of five hundred tests started a scheduler, which then fired
+  a sync immediately, and waited out a capability probe against a host that does not exist: four hundred
+  milliseconds each, for work no test wanted. The handful of tests that are about scheduling ask for it explicitly.
+
 ## 0.72.1 - 2026-10-05
 
 ### Changed
