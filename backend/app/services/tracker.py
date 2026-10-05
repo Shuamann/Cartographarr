@@ -58,6 +58,10 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
 
     now = time.time() if now is None else now
     seen: set[str] = set()
+    # Streams that were not here last poll. Their devices are written down
+    # once, at the start, rather than on every poll for as long as the film
+    # lasts.
+    started: list[dict[str, Any]] = []
 
     for session in sessions:
         key = str(session.get("session_key"))
@@ -67,6 +71,7 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
         if track is None:
             track = Track(session_key=key, first_seen=now, last_seen=now, state=state, state_since=now)
             _tracks[key] = track
+            started.append(session)
             if state == BUFFERING:
                 _start_buffering(track, session, now)
         elif state != track.state:
@@ -88,6 +93,13 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
             track.row_id = streams.save(row, track.row_id)
             track.written_at = now
         track.row = row
+
+    # A device playing something exists, whether or not it has ever finished a
+    # play. The inventory is otherwise rebuilt from history, so until now the
+    # player name on the dashboard linked to a page that answered "No such
+    # device" for anything streaming for the first time.
+    if started:
+        streams.seen(started, now)
 
     if activity is not None:
         streams.sample(activity, sessions, now)

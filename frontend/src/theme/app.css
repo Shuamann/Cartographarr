@@ -4252,6 +4252,24 @@ label.locked .pill {
   margin: var(--space-3) 0;
 }
 
+/* The queue holds two kinds of work in one list, so each row says which it
+   is and they all sit the same way round. */
+.queue-row {
+  align-items: center;
+}
+.queue-head {
+  align-items: center;
+  gap: var(--space-2);
+}
+.queue-bar {
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+}
+.queue-bar p {
+  max-width: 70ch;
+}
+
 /* ---- choosing the accent --------------------------------------------------- */
 
 .accent-row {

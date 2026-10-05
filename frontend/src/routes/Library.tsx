@@ -844,6 +844,7 @@ type TidyJob = {
   saved_bytes: number | null;
   asked_by: string | null;
   steps: string[];
+  created_at?: string | null;
 };
 
 function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
@@ -1062,69 +1063,52 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
 
 /* What ffmpeg is doing now, and what it did lately. Shown only when there is
    something to say, so the page is unchanged for anyone not using it. */
-function TidyJobs({ scope }: { scope: "active" | "history" }) {
-  const jobs = useApi<TidyJob[]>("/library/tidy/jobs?limit=40", []);
-  // Why a job is sitting there rather than running, which is otherwise the
-  // sort of thing somebody watches for ten minutes before asking about.
-  const settings = useApi<{ key: string; value: unknown }[]>("/settings");
-  const waitForQuiet = (settings.data ?? []).some((s) => s.key === "tidy_when_quiet" && s.value === true);
-  const busy = (jobs.data ?? []).some((j) => j.status === "running" || j.status === "queued");
-  const again = useRef(jobs.reload);
-  again.current = jobs.reload;
+/* One job in the queue.
 
-  // Only while something is working: a finished list does not change by itself.
-  useEffect(() => {
-    if (!busy) return;
-    const timer = setInterval(() => again.current(), 3000);
-    return () => clearInterval(timer);
-  }, [busy]);
-
-  const working = (job: TidyJob) => job.status === "running" || job.status === "queued";
-  const rows = (jobs.data ?? []).filter((job) => (scope === "active" ? working(job) : !working(job)));
-  if (rows.length === 0) return null;
-
+   The list that drew these lives in RemediationQueue now, interleaved with the
+   replacements, because tidying a file and replacing it are the same question
+   asked about the same file and splitting them put one above the other for no
+   reason a person would recognise. */
+function TidyJobRow({ job, waitForQuiet, onChanged }: { job: TidyJob; waitForQuiet: boolean; onChanged: () => void }) {
+  const working = job.status === "running" || job.status === "queued";
   return (
-    <section className="tidy-jobs">
-      <h3 className="section-head">{scope === "active" ? "Tidying tracks" : "Tidied"}</h3>
-      <div className="mini-list">
-        {rows.map((job) => (
-          <div key={job.id} className="mini">
-            <div className="min0">
-              <strong>{job.title ?? `Item ${job.rating_key}`}</strong>
-              {job.status === "running" && (
-                <div className="download-progress" title={`${job.progress}%`}>
-                  <span style={{ width: `${Math.max(2, Math.min(100, job.progress))}%` }} />
-                </div>
-              )}
-              <p className="muted small">
-                {job.status === "running"
-                  ? `${job.progress}% - ${job.detail ?? "working"}`
-                  : job.status === "queued"
-                    ? waitForQuiet
-                      ? "Waiting for the streams to stop"
-                      : "Waiting its turn"
-                    : `${job.status}: ${job.detail ?? ""}`}
-                {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
-                {/* Who asked, because a rule acting on its own is the case
-                    somebody will want to go and look at. */}
-                {job.asked_by ? ` \u00b7 asked by ${job.asked_by}` : ""}
-              </p>
-            </div>
-            {(job.status === "running" || job.status === "queued") && (
-              <button
-                className="tab"
-                onClick={async () => {
-                  await api.post(`/library/tidy/jobs/${job.id}/cancel`, {});
-                  jobs.reload();
-                }}
-              >
-                Stop
-              </button>
-            )}
+    <div className="mini queue-row">
+      <div className="min0">
+        <div className="row wrap queue-head">
+          <span className="pill">tidying</span>
+          <strong className="clip">{job.title ?? `Item ${job.rating_key}`}</strong>
+        </div>
+        {job.status === "running" && (
+          <div className="download-progress" title={`${job.progress}%`}>
+            <span style={{ width: `${Math.max(2, Math.min(100, job.progress))}%` }} />
           </div>
-        ))}
+        )}
+        <p className="muted small">
+          {job.status === "running"
+            ? `${job.progress}% - ${job.detail ?? "working"}`
+            : job.status === "queued"
+              ? waitForQuiet
+                ? "Waiting for the streams to stop"
+                : "Waiting its turn"
+              : `${job.status}: ${job.detail ?? ""}`}
+          {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
+          {/* Who asked, because a rule acting on its own is the case somebody
+              will want to go and look at. */}
+          {job.asked_by ? ` \u00b7 asked by ${job.asked_by}` : ""}
+        </p>
       </div>
-    </section>
+      {working && (
+        <button
+          className="tab"
+          onClick={async () => {
+            await api.post(`/library/tidy/jobs/${job.id}/cancel`, {});
+            onChanged();
+          }}
+        >
+          Stop
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1216,6 +1200,7 @@ type Replacement = {
   rating_key: number;
   title: string | null;
   service: string;
+  created_at?: string | null;
   status: "queued" | "downloading" | "ready" | "importing" | "imported" | "imported_automatically" | "denied" | "failed";
   progress: number | null;
   message: string | null;
@@ -1691,71 +1676,99 @@ const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
  */
 function RemediationQueue() {
   const list = useApi<Replacement[]>("/library/replacements");
-  // Counted here as well as inside TidyJobs, because a tab saying Active 0
-  // above two running jobs is worse than no count at all.
   const tidy = useApi<TidyJob[]>("/library/tidy/jobs?limit=40");
+  // Why a job is sitting there rather than running, which is otherwise the
+  // sort of thing somebody watches for ten minutes before asking about.
+  const settings = useApi<{ key: string; value: unknown }[]>("/settings");
+  const waitForQuiet = (settings.data ?? []).some((s) => s.key === "tidy_when_quiet" && s.value === true);
   const [tab, setTab] = useState<"active" | "history">("active");
+
   const rows = list.data ?? [];
-  const current = rows.filter((r) => ACTIVE_STATUSES.includes(r.status));
-  const past = rows.filter((r) => !ACTIVE_STATUSES.includes(r.status));
   const jobs = tidy.data ?? [];
-  const running = jobs.filter((j) => j.status === "running" || j.status === "queued");
+  const working = (job: TidyJob) => job.status === "running" || job.status === "queued";
+  const current = rows.filter((r) => ACTIVE_STATUSES.includes(r.status));
+  const running = jobs.filter(working);
+
+  const again = useRef(() => {
+    list.reload();
+    tidy.reload();
+  });
+  again.current = () => {
+    list.reload();
+    tidy.reload();
+  };
+
+  // Only while something is working: a finished list does not change by itself.
+  const busy = current.length > 0 || running.length > 0;
   useEffect(() => {
-    if (current.length === 0) return;
-    const timer = setInterval(list.reload, 15000);
+    if (!busy) return;
+    const timer = setInterval(() => again.current(), 5000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current.length]);
+  }, [busy]);
+
   useEffect(() => {
-    const again = () => {
-      list.reload();
-      tidy.reload();
-    };
-    window.addEventListener(QUEUE_CHANGED, again);
-    return () => window.removeEventListener(QUEUE_CHANGED, again);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const go = () => again.current();
+    window.addEventListener(QUEUE_CHANGED, go);
+    return () => window.removeEventListener(QUEUE_CHANGED, go);
   }, []);
+
   if (list.error) return <p className="note bad-note" role="alert">{list.error}</p>;
   if (!list.data) return <Loading label="Reading the queue" />;
-  const shown = tab === "active" ? current : past;
-  const nothing = shown.length === 0 && (tab === "active" ? running.length : jobs.length - running.length) === 0;
+
+  /* One list rather than two.
+   *
+   * Tidying a file and replacing it are the same question asked about the same
+   * file, and they were in separate sections with separate headings, so what
+   * you queued a minute ago appeared above or below the other list depending
+   * only on which kind of work it was. Newest first, which is where somebody
+   * who just queued something looks. */
+  const active = tab === "active";
+  const entries = [
+    ...(active ? current : rows.filter((r) => !ACTIVE_STATUSES.includes(r.status))).map((r) => ({
+      key: `r${r.id}`,
+      at: r.created_at ?? "",
+      node: active ? <ReplacementRow r={r} onChanged={() => again.current()} /> : <PastReplacement r={r} />,
+    })),
+    ...(active ? running : jobs.filter((j) => !working(j))).map((job) => ({
+      key: `t${job.id}`,
+      at: job.created_at ?? "",
+      node: <TidyJobRow job={job} waitForQuiet={waitForQuiet} onChanged={() => again.current()} />,
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+
   return (
     <>
-      <div className="row-between">
-        <p className="muted">
-          Everything being done to a file: tracks being tidied, and copies being replaced. Radarr and Sonarr import an
-          upgrade by themselves; anything else waits here once downloaded, beside the current file, for you to confirm
-          or deny. Finished work moves to History.
+      <div className="row-between queue-bar">
+        <p className="muted small">
+          Everything being done to a file. Radarr and Sonarr import an upgrade by themselves; anything else waits here
+          for you to confirm or deny.
         </p>
         <div className="segmented">
-          <button className={tab === "active" ? "seg on" : "seg"} onClick={() => setTab("active")}>
+          <button className={active ? "seg on" : "seg"} onClick={() => setTab("active")}>
             Active {current.length + running.length}
           </button>
-          <button className={tab === "history" ? "seg on" : "seg"} onClick={() => setTab("history")}>
-            History {past.length + jobs.length - running.length}
+          <button className={!active ? "seg on" : "seg"} onClick={() => setTab("history")}>
+            History {rows.length - current.length + jobs.length - running.length}
           </button>
         </div>
       </div>
 
-      <TidyJobs scope={tab} />
-      {shown.length > 0 && <h3 className="section-head">{tab === "active" ? "Replacing files" : "Replaced"}</h3>}
-      {nothing && (
+      {entries.length === 0 && (
         <p className="muted">
-          {tab === "active"
+          {active
             ? "Nothing in progress. Open a file in any list and choose Tidy its tracks, or Find a replacement."
             : "Nothing finished yet."}
         </p>
       )}
       <div className="mini-list">
-        {shown.map((r) =>
-          tab === "active" ? <ReplacementRow key={r.id} r={r} onChanged={list.reload} /> : <PastReplacement key={r.id} r={r} />,
-        )}
+        {entries.map((e) => (
+          <div key={e.key}>{e.node}</div>
+        ))}
       </div>
     </>
   );
 }
 
-/* A finished replacement, one line, opening to its comparison. */
 function PastReplacement({ r }: { r: Replacement }) {
   const [open, setOpen] = useState(false);
   const status = REPLACEMENT_STATUS[r.status];
@@ -1763,7 +1776,7 @@ function PastReplacement({ r }: { r: Replacement }) {
     <div>
       <button className={open ? "mini mini-button on" : "mini mini-button"} onClick={() => setOpen(!open)} aria-expanded={open}>
         <div className="min0">
-          <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
+          <span className="pill">replacing</span> <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
           <p className="muted small release-title">{r.release?.title}</p>
           {r.status === "failed" && r.message && <p className="small danger-text">{r.message}</p>}
         </div>
@@ -1857,7 +1870,8 @@ function ReplacementRow({ r: stored, onChanged }: { r: Replacement; onChanged: (
     <div className="replacement">
       <div className="row-between">
         <div className="min0">
-          <strong>{r.title}</strong> <span className={status.tone}>{status.label}</span>
+          <span className="pill">replacing</span> <strong>{r.title}</strong>{" "}
+          <span className={status.tone}>{status.label}</span>
           <p className="muted small release-title">{r.release?.title}</p>
         </div>
         {r.status === "ready" && (

@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.68.0 - 2026-10-04
+
+### Fixed
+- Clicking the player name of something playing right now said "No such device". The device inventory is rebuilt
+  from finished plays, and a device playing for the first time has not finished one, so it had no page to open. A
+  device is now written down the moment it starts a stream. It also means a new device can be reviewed while it is
+  playing, rather than hours later, which is the moment worth knowing about.
+
+### Changed
+- The remediation queue is one list. Tidying a file and replacing it are the same question asked about the same
+  file, and they were two sections with two headings, so what you queued a minute ago sat above or below the other
+  list depending only on which kind of work it was. Newest first, each row saying which kind it is.
+- The queue's opening paragraph is a line. It was four lines of explanation above everything else on the page.
+
 ## 0.67.0 - 2026-10-04
 
 ### Changed

@@ -221,6 +221,59 @@ def save(row: dict[str, Any], row_id: int | None) -> int | None:
         return row_id
 
 
+def seen(sessions: list[dict[str, Any]], now: float | None = None) -> None:
+    """Record the devices in these live sessions, so one that has never
+    finished a play still has a page to open.
+
+    Deliberately narrow: it writes what is on screen now and nothing derived.
+    The play count and the earliest sighting are still the GROUP BY's job in
+    refresh_devices, which runs over the whole of history and is the authority.
+    Never raises, for the same reason save does not: the enforcer polls this.
+    """
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import Device
+
+    pairs = {
+        (s.get("machine_id"), s.get("user_id"))
+        for s in sessions
+        if s.get("machine_id") and s.get("user_id") is not None
+    }
+    if not pairs:
+        return
+    try:
+        stamp = int(time.time() if now is None else now)
+        with session_scope() as db:
+            # On a fresh install everything is unknown, and flagging the lot as
+            # new is noise rather than a signal. refresh_devices makes the same
+            # call for the same reason.
+            first_run = db.execute(select(Device.machine_id).limit(1)).first() is None
+            for s in sessions:
+                machine_id, user_id = s.get("machine_id"), s.get("user_id")
+                if not machine_id or user_id is None:
+                    continue
+                row = db.execute(
+                    select(Device).where(Device.machine_id == machine_id, Device.user_id == user_id)
+                ).scalar_one_or_none()
+                if row is None:
+                    db.add(Device(
+                        machine_id=machine_id, user_id=user_id, player=s.get("player"),
+                        platform=s.get("platform"), product=s.get("product"),
+                        first_seen=stamp, last_seen=stamp, play_count=0,
+                        is_new_unreviewed=not first_run,
+                    ))
+                    continue
+                # Only what this sighting actually knows. first_seen is never
+                # moved forward, and the review flag is left where it is.
+                row.last_seen = max(row.last_seen or 0, stamp)
+                for field in ("player", "platform", "product"):
+                    if s.get(field):
+                        setattr(row, field, s[field])
+    except Exception:  # noqa: BLE001
+        log.exception("could not record the devices that are streaming")
+
+
 def finish(row_id: int, ended: float, buffer_count: int, buffer_seconds: float) -> None:
     from app.db import session_scope
     from app.models import StreamSession
