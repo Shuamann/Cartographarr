@@ -57,9 +57,11 @@ def test_a_kept_poster_is_served_from_disk(client, tmp_path, monkeypatch):
 
 
 def test_fetching_posters_is_bounded():
-    """Four at a time: a wall of them should not become a flood Tautulli
-    answers slowly for everybody."""
-    assert data_router.POSTER_FETCHES._value == 4
+    """A wall of them should not become a flood Tautulli answers slowly for
+    everybody. The exact number is a judgement, so this pins the bound rather
+    than the figure: narrow enough to be polite, wide enough that opening a
+    show does not leave its seasons queued behind the shows."""
+    assert 4 <= data_router.POSTER_FETCHES._value <= 12
 
 
 def test_a_half_written_poster_is_never_served(tmp_path):

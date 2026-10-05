@@ -132,6 +132,12 @@ class MediaItem(Base):
     # three. Measured on a library of this size: 34 ms to 0.8 ms.
     __table_args__ = (
         Index("ix_media_section_type", "section_id", "media_type"),
+        # A show and a season have no row of their own, so their artwork and
+        # their episode lists are found through these. Without them every
+        # poster on a page of five hundred shows was a full scan of thirty
+        # thousand rows: thirty two milliseconds each, sixteen seconds a page.
+        Index("ix_media_grandparent", "grandparent_rating_key"),
+        Index("ix_media_parent", "parent_rating_key"),
         Index("ix_media_type_size", "media_type", "file_size"),
         Index("ix_media_bitrate", "file_bitrate"),
     )

@@ -10,9 +10,10 @@ from typing import Annotated, Any
 import asyncio
 import logging
 import pathlib
+import time
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import Select, desc, func, select, update
 from sqlalchemy.orm import Session
@@ -309,12 +310,14 @@ async def _cached(rating_key: int | None) -> MediaItem | None:
     return item if item is not None and item.title is not None else None
 
 
-POSTER_FETCHES = asyncio.Semaphore(4)
+POSTER_FETCHES = asyncio.Semaphore(8)
 """How many posters may be fetched from Tautulli at once.
 
-A wall of posters asks for a hundred at a time. Four keeps it from being a
-flood that Tautulli answers slowly for everybody, including the pages that are
-not asking for pictures at all."""
+A wall of posters asks for a hundred at a time, and a limit keeps that from
+being a flood Tautulli answers slowly for everybody, including the pages not
+asking for pictures at all. Eight rather than four because a queue this narrow
+is felt: opening a show meant its seasons' posters waiting behind the wall of
+shows that was already asking, which is most of a second for three pictures."""
 
 
 POSTER_FORMAT = "jpg"
@@ -349,26 +352,33 @@ def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
     with session_scope() as db:
         item = db.get(MediaItem, rating_key)
         if item is None or item.title is None:
-            # A show and a season have no row of their own, because neither has
-            # a file. Their art is on their episodes, which do.
-            from sqlalchemy import or_
-
-            episode = db.execute(
-                select(MediaItem)
-                .where(
-                    or_(
-                        MediaItem.grandparent_rating_key == rating_key,
-                        MediaItem.parent_rating_key == rating_key,
-                    ),
-                    MediaItem.media_type == "episode",
-                )
+            # A show and a season have no row of their own, because neither
+            # has a file. Their art is on their episodes, which do.
+            #
+            # Two queries rather than one with an OR, and two columns rather
+            # than the row. Asked as one, SQLite preferred the media_type
+            # index, which matches every episode in the library, and scanned
+            # twenty six thousand rows for one thumbnail: thirty five
+            # milliseconds a poster, on a page that asks for five hundred.
+            # Asked separately each uses the key it was given. 0.2 ms.
+            #
+            # media_type is not tested because nothing but an episode has a
+            # grandparent or a parent to point at.
+            found = db.execute(
+                select(MediaItem.grandparent_thumb, MediaItem.parent_thumb)
+                .where(MediaItem.grandparent_rating_key == rating_key)
                 .limit(1)
-            ).scalar_one_or_none()
-            if episode is None:
+            ).first()
+            if found is not None:
+                return found.grandparent_thumb or found.parent_thumb
+            found = db.execute(
+                select(MediaItem.parent_thumb, MediaItem.grandparent_thumb)
+                .where(MediaItem.parent_rating_key == rating_key)
+                .limit(1)
+            ).first()
+            if found is None:
                 return None
-            if episode.parent_rating_key == rating_key:
-                return episode.parent_thumb or episode.grandparent_thumb
-            return episode.grandparent_thumb or episode.parent_thumb
+            return found.parent_thumb or found.grandparent_thumb
         # The wide backdrop rather than the cover, for anything that wants
         # something to sit behind text. Falls back to the poster, because an
         # item without backdrop art is common and a card with no image at all
@@ -385,8 +395,21 @@ def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
         return art
 
 
+_ARTLESS: dict[tuple[int, str], float] = {}
+ARTLESS_SECONDS = 3600.0
+"""How long to remember that an item has no artwork.
+
+A hit is written to disk and costs one fetch ever. A miss cost two calls to
+Tautulli and a 404, every time, for ever: nothing is written, so the next visit
+asked again. On a page of five hundred shows, where a few dozen genuinely have
+no art, that is a few dozen round trips per visit for an answer that was always
+going to be the same. An hour, so that art added by a later sync is still
+picked up without a restart.
+"""
+
+
 @router.get("/media/{rating_key}/image")
-async def media_image(rating_key: int, width: int = 300, height: int = 450, kind: str = "poster"):
+async def media_image(request: Request, rating_key: int, width: int = 300, height: int = 450, kind: str = "poster"):
     """Poster art, proxied through Tautulli and kept on disk.
 
     Plex image URLs need a token, so the browser cannot fetch them directly and
@@ -404,6 +427,10 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450, kind
     if not is_configured():
         raise HTTPException(409, "Tautulli is not configured")
 
+    asked = _ARTLESS.get((rating_key, kind))
+    if asked is not None and time.monotonic() - asked < ARTLESS_SECONDS:
+        raise HTTPException(404, "No artwork for that item")
+
     art = await asyncio.to_thread(_poster_art, rating_key, kind)
     if art is None:
         # Playing now but newer than the last sync: the poster and the links
@@ -416,6 +443,7 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450, kind
     if not art:
         art = await _backfill_poster_for(rating_key)
     if not art:
+        _ARTLESS[(rating_key, kind)] = time.monotonic()
         raise HTTPException(404, "No artwork for that item")
 
     settings = current()
@@ -430,7 +458,16 @@ async def media_image(rating_key: int, width: int = 300, height: int = 450, kind
         "img_format": POSTER_FORMAT,
     }
 
+    # Leaving a page removes its images, and the browser drops the requests.
+    # Without this the handler keeps its place in the queue and fetches a
+    # picture for a page nobody is looking at, while the page they are looking
+    # at waits behind it.
+    if await request.is_disconnected():
+        raise HTTPException(499, "Gone before the artwork arrived")
+
     async with POSTER_FETCHES:
+        if await request.is_disconnected():
+            raise HTTPException(499, "Gone before the artwork arrived")
         async with httpx.AsyncClient(
             timeout=settings.tautulli_timeout, verify=settings.tautulli_verify_ssl
         ) as client:

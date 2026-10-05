@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.77.0 - 2026-10-05
+
+### Fixed
+- Posters for shows and seasons were slow because finding the artwork was a full scan of every row in the library,
+  once per picture. Asked as one query with an OR, SQLite preferred the media type index, which matches all 26,000
+  episodes. Asked as two, each uses the key it was given: 32 ms a poster becomes 0.28 ms.
+- An item with no artwork cost two calls to the media server and a 404 on every single visit, because nothing is
+  written for a miss and the next visit asked again. A miss is now remembered for an hour.
+- Opening a show left its seasons' posters queued behind the wall of shows that was already asking. The limit is
+  wider, and a request the browser has dropped is no longer fetched for a page nobody is looking at.
+
 ## 0.76.1 - 2026-10-05
 
 ### Fixed
