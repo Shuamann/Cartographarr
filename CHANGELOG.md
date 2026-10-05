@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.75.0 - 2026-10-05
+
+### Added
+- A title goes where it names. On a stream card the show opens that show, S01 opens that season and E07 opens that
+  episode, each landing in the library at the right level. A film opens itself.
+
+### Fixed
+- Opening a show showed the previous show's episodes underneath its seasons. The episode list is not asked for
+  above a season, but the last answer was still in hand and nothing told the page to stop drawing it.
+- Shows and seasons have posters. Neither has a row in the library, because neither has a file, so the art is taken
+  off one of their episodes, which do.
+
+### Changed
+- Slightly less blur on the artwork behind a card.
+
 ## 0.74.0 - 2026-10-05
 
 ### Added

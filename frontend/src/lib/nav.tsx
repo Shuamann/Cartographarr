@@ -11,11 +11,23 @@ import type { PeopleFilter, Tab } from "./tabs";
  * provides them once here instead. Anything left undefined is simply not
  * offered, which is how viewers do not get admin actions.
  */
+export type LibraryTarget = {
+  show?: number | null;
+  season?: number | null;
+  ratingKey?: number | null;
+  title?: string | null;
+  mediaType?: string | null;
+};
+
 export type Nav = {
   isAdmin: boolean;
   openUser?: (userId: number) => void;
   openDevice?: (machineId: string) => void;
   openAddress?: (ip: string) => void;
+  /* Open the library at a show, a season of it, or one episode. Any of the
+     three may be null: a film only has a rating key, and a show only has a
+     show. */
+  openLibrary?: (target: LibraryTarget) => void;
   showOnMap?: (session: LiveSession) => void;
   /* Ask, then add to the ban list. Resolves true if it was banned. */
   blockDevice?: (machineId: string, label: string) => Promise<boolean>;

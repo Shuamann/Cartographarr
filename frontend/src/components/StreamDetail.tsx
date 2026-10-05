@@ -57,6 +57,46 @@ function PlatformIcon({ platform, product }: { platform?: string | null; product
   );
 }
 
+/* S01 and E06 are one word on screen and two places in the library. */
+function EpisodeLinks({ session }: { session: LiveSession }) {
+  const nav = useNav();
+  const code = episodeCode(session) ?? session.parent_title ?? null;
+  const show = session.grandparent_rating_key ? Number(session.grandparent_rating_key) : null;
+  const season = session.parent_media_index == null ? null : Number(session.parent_media_index);
+  const name = session.title ?? null;
+
+  if (!nav.openLibrary || !code || !show || !/^S\d+E\d+$/.test(code)) {
+    return <>{[code, name].filter(Boolean).join(" · ")}</>;
+  }
+  const at = code.indexOf("E");
+  return (
+    <>
+      <button
+        className="linkish title-link"
+        title={`Open season ${season}`}
+        onClick={() => nav.openLibrary?.({ show, season, title: session.grandparent_title })}
+      >
+        {code.slice(0, at)}
+      </button>
+      <button
+        className="linkish title-link"
+        title="Open this episode"
+        onClick={() =>
+          nav.openLibrary?.({
+            show,
+            season,
+            ratingKey: session.rating_key ? Number(session.rating_key) : null,
+            title: session.grandparent_title,
+          })
+        }
+      >
+        {code.slice(at)}
+      </button>
+      {name ? ` · ${name}` : ""}
+    </>
+  );
+}
+
 export default function StreamDetail({
   session,
   onClose,
@@ -138,8 +178,36 @@ export default function StreamDetail({
         )}
 
         <div className="min0 stream-detail-main">
-          <h3>{heading}</h3>
-          {subheading && <p className="stream-sub">{subheading}</p>}
+          {/* The show on top and the episode beneath, each part going where it
+              names: the show, that season, that episode. */}
+          <h3>
+            {nav.openLibrary && episodic && session.grandparent_rating_key ? (
+              <button
+                className="linkish title-link"
+                title={`Open ${heading} in the library`}
+                onClick={() =>
+                  nav.openLibrary?.({ show: Number(session.grandparent_rating_key), title: heading })
+                }
+              >
+                {heading}
+              </button>
+            ) : nav.openLibrary && !episodic && session.rating_key ? (
+              <button
+                className="linkish title-link"
+                title="Find this in the library"
+                onClick={() => nav.openLibrary?.({ ratingKey: Number(session.rating_key), mediaType: "movie" })}
+              >
+                {heading}
+              </button>
+            ) : (
+              heading
+            )}
+          </h3>
+          {subheading && (
+            <p className="stream-sub">
+              <EpisodeLinks session={session} />
+            </p>
+          )}
           <p className="muted small">
             {[session.year, session.content_rating, session.library_name].filter(Boolean).join(" · ")}
           </p>

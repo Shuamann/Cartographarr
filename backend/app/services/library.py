@@ -585,6 +585,8 @@ def seasons(db: Session, show_key: int, days: int) -> dict[str, Any]:
     rows = db.execute(
         select(
             MediaItem.parent_media_index.label("season"),
+            # Its own key, so the season has a poster of its own.
+            func.max(MediaItem.parent_rating_key).label("rating_key"),
             func.count().label("episodes"),
             func.coalesce(func.sum(MediaItem.file_size), 0).label("file_size"),
             func.coalesce(func.sum(MediaItem.duration), 0).label("ms"),
@@ -614,6 +616,7 @@ def seasons(db: Session, show_key: int, days: int) -> dict[str, Any]:
         "seasons": [
             {
                 "season": r.season,
+                "rating_key": r.rating_key,
                 "episodes": r.episodes,
                 "file_size": int(r.file_size or 0),
                 "hours": round((r.ms or 0) / 3_600_000, 2),

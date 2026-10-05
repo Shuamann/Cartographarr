@@ -295,6 +295,10 @@ export type LiveSession = {
   title: string | null;
   parent_title: string | null;
   grandparent_title: string | null;
+  // Where the episode sits. Sent all along; the type simply did not say so.
+  grandparent_rating_key: number | null;
+  parent_media_index: number | null;
+  media_index: number | null;
   year: string | number | null;
   summary: string | null;
   content_rating: string | null;

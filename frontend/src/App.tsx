@@ -42,7 +42,7 @@ import Settings from "./routes/Settings";
 import Sharing from "./routes/Sharing";
 import type { LiveSession } from "./lib/api";
 import { EMPTY, type FilterState } from "./lib/filters";
-import { NavContext } from "./lib/nav";
+import { NavContext, type LibraryTarget } from "./lib/nav";
 import { unban, unbanAddress } from "./lib/bans";
 
 import { ADMIN_TABS, TABS, type PeopleFilter, type Tab } from "./lib/tabs";
@@ -137,6 +137,7 @@ function SignedIn({
   const [focusPlace, setFocusPlace] = useState<{ lat: number; lon: number } | null>(null);
   // Which user or device People opens on, when another page sent us there.
   const [focusPerson, setFocusPerson] = useState<Selection | null>(null);
+  const [focusLibrary, setFocusLibrary] = useState<LibraryTarget | null>(null);
   const [peopleFilter, setPeopleFilter] = useState<PeopleFilter | null>(null);
 
   function openPeople(filter?: PeopleFilter) {
@@ -157,6 +158,13 @@ function SignedIn({
   function openAddress(ip: string) {
     setFocusPerson({ kind: "address", id: ip });
     setTab("People");
+  }
+
+  // A title names a show, a season or one episode, and all three are places
+  // the library can now open at.
+  function openLibrary(target: LibraryTarget) {
+    setFocusLibrary(target);
+    setTab("Library");
   }
 
   // A profile's Map and History buttons: fresh filters narrowed to one
@@ -253,6 +261,7 @@ function SignedIn({
           openUser,
           openDevice,
           openAddress,
+          openLibrary,
           showOnMap,
           showPlace,
           blockDevice: isAdmin ? banMachine : undefined,
@@ -335,7 +344,9 @@ function SignedIn({
             )}
             {active === "Reports" && <Reports />}
             {active === "Home" && <Home onNavigate={setTab} />}
-            {active === "Library" && <Library />}
+            {active === "Library" && (
+              <Library focus={focusLibrary} onFocused={() => setFocusLibrary(null)} />
+            )}
             {active === "Issues" && <Issues />}
             {active === "Rules" && <Rules />}
             {active === "Log" && <Log onOpenUser={openUser} />}

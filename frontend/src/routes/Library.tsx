@@ -4,7 +4,7 @@ import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
 import { QUEUE_CHANGED, api, queueChanged, useApi } from "../lib/api";
-import { useNav } from "../lib/nav";
+import { useNav, type LibraryTarget } from "../lib/nav";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
 /* Library health: files judged by how they are actually watched.
@@ -181,9 +181,21 @@ function format(f: FileInfo): string {
     .join(" · ");
 }
 
-export default function Library() {
+export default function Library({
+  focus,
+  onFocused,
+}: {
+  /* Somewhere to open at, from a title clicked elsewhere. Consumed once: the
+     tab stays where the person leaves it afterwards. */
+  focus?: LibraryTarget | null;
+  onFocused?: () => void;
+} = {}) {
   const [section, setSection] = useState<SectionId>("overview");
   const [days, setDays] = useState(90);
+  useEffect(() => {
+    if (focus) setSection("browse");
+  }, [focus]);
+
   const current = SECTIONS.find((s) => s.id === section)!;
   const replacementList = useApi<Replacement[]>("/library/replacements");
   const tidyList = useApi<TidyJob[]>("/library/tidy/jobs?limit=30");
@@ -254,7 +266,7 @@ export default function Library() {
           )}
         </header>
         {section === "overview" && <OverviewSection onOpen={setSection} />}
-        {section === "browse" && <Browse days={days} inFlight={inFlight} />}
+        {section === "browse" && <Browse days={days} inFlight={inFlight} focus={focus} onFocused={onFocused} />}
         {section === "attention" && <Attention days={days} inFlight={inFlight} />}
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
@@ -2548,7 +2560,14 @@ type Show = {
 type SeasonList = {
   rating_key: number;
   title: string | null;
-  seasons: { season: number; episodes: number; file_size: number; hours: number; plays: number }[];
+  seasons: {
+    season: number;
+    rating_key: number | null;
+    episodes: number;
+    file_size: number;
+    hours: number;
+    plays: number;
+  }[];
 };
 
 /* Where in the library we are looking.
@@ -2562,7 +2581,17 @@ type Place = { show: number | null; season: number | null; title: string | null 
 
 const NOWHERE: Place = { show: null, season: null, title: null };
 
-function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string> }) {
+function Browse({
+  days,
+  inFlight,
+  focus,
+  onFocused,
+}: {
+  days: number;
+  inFlight: Map<number, string>;
+  focus?: LibraryTarget | null;
+  onFocused?: () => void;
+}) {
   const [place, setPlace] = useState<Place>(NOWHERE);
   const [sort, setSort] = useState(() => localStorage.getItem("browse.sort") ?? "per_hour");
   const [kind, setKind] = useState(() => localStorage.getItem("browse.kind") ?? "movie");
@@ -2577,6 +2606,26 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
+
+  /* Going where a title pointed.
+   *
+   * An episode arrives with its show and season, so the list opens there and
+   * the episode itself is opened in the panel. A film has only its key, so the
+   * flat list is already the right place and the panel is all that is needed.
+   * Consumed once, or going back to Browse later would keep teleporting. */
+  useEffect(() => {
+    if (!focus) return;
+    if (focus.show) {
+      remember("kind", "episode", setKind);
+      setPlace({ show: focus.show, season: focus.season ?? null, title: focus.title ?? null });
+    } else if (focus.mediaType === "movie") {
+      remember("kind", "movie", setKind);
+      setPlace(NOWHERE);
+    }
+    if (focus.ratingKey) setOpen(focus.ratingKey);
+    onFocused?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   function remember(key: string, value: string, set: (v: string) => void) {
     set(value);
@@ -2804,6 +2853,7 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
                     className="mini mini-button"
                     onClick={() => setPlace({ show: s.rating_key, season: null, title: s.title })}
                   >
+                    <img className="row-poster" src={poster(s.rating_key, 80)} alt="" loading="lazy" />
                     <div className="min0">
                       <strong>{s.title}</strong>
                       <p className="muted small">
@@ -2838,6 +2888,12 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
                   className="mini mini-button"
                   onClick={() => setPlace({ ...place, season: s.season, title: place.title ?? seasonList.data!.title })}
                 >
+                  <img
+                    className="row-poster"
+                    src={poster(s.rating_key ?? place.show ?? 0, 80)}
+                    alt=""
+                    loading="lazy"
+                  />
                   <div className="min0">
                     <strong>Season {s.season}</strong>
                     <p className="muted small">
@@ -2856,7 +2912,7 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
       )}
 
       {!showing && !data.data && <Loading label="Reading the library" />}
-      {data.data && (
+      {!showing && data.data && (
         <p className="muted small count-line">
           {data.data.total.toLocaleString()} {data.data.total === 1 ? "title" : "titles"}, {size(data.data.size)}.
           {data.data.items.length < data.data.total ? ` Showing the first ${data.data.items.length}.` : ""}
@@ -2875,7 +2931,7 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
         </div>
       )}
 
-      {!asTiles && (
+      {!showing && !asTiles && (
         <div className="file-list">
           {(data.data?.items ?? []).map((row) => (
             <div key={row.rating_key} className="big-row">
@@ -2915,7 +2971,7 @@ function Browse({ days, inFlight }: { days: number; inFlight: Map<number, string
         </div>
       )}
 
-      <div className="poster-wall" hidden={!asTiles}>
+      <div className="poster-wall" hidden={showing || !asTiles}>
         {(data.data?.items ?? []).map((tile) => (
           <button
             key={tile.rating_key}

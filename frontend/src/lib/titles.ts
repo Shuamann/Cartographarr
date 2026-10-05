@@ -49,3 +49,15 @@ export function displayTitle(x: Titled): string {
   const episode = x.title || (full.includes(" - ") ? full.slice(full.indexOf(" - ") + 3) : full);
   return [show, code, episode].filter(Boolean).join(" - ");
 }
+
+/* The same title, split where it can be acted on: the show, the season and
+ * episode code, and the episode's own name. Anything that is not an episode
+ * comes back as one piece, which is what it is. */
+export function titleParts(x: Titled): { show: string | null; code: string | null; episode: string } {
+  const code = episodeCode(x);
+  const full = x.full_title || x.title || "";
+  if (!code) return { show: null, code: null, episode: full };
+  const show = x.grandparent_title || (full.includes(" - ") ? full.split(" - ")[0] : null);
+  const episode = x.title || (full.includes(" - ") ? full.slice(full.indexOf(" - ") + 3) : full);
+  return { show, code, episode };
+}

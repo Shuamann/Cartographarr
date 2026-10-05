@@ -349,7 +349,26 @@ def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
     with session_scope() as db:
         item = db.get(MediaItem, rating_key)
         if item is None or item.title is None:
-            return None
+            # A show and a season have no row of their own, because neither has
+            # a file. Their art is on their episodes, which do.
+            from sqlalchemy import or_
+
+            episode = db.execute(
+                select(MediaItem)
+                .where(
+                    or_(
+                        MediaItem.grandparent_rating_key == rating_key,
+                        MediaItem.parent_rating_key == rating_key,
+                    ),
+                    MediaItem.media_type == "episode",
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if episode is None:
+                return None
+            if episode.parent_rating_key == rating_key:
+                return episode.parent_thumb or episode.grandparent_thumb
+            return episode.grandparent_thumb or episode.parent_thumb
         # The wide backdrop rather than the cover, for anything that wants
         # something to sit behind text. Falls back to the poster, because an
         # item without backdrop art is common and a card with no image at all

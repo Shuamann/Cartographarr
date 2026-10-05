@@ -2260,7 +2260,7 @@ label.locked .pill {
   background-size: cover;
   background-position: center;
   border-radius: inherit;
-  filter: blur(40px) saturate(1.15);
+  filter: blur(30px) saturate(1.15);
   /* Texture, not a picture. Light mode has less contrast to spare, so it
      takes less of it. */
   opacity: 0.14;
@@ -2285,7 +2285,7 @@ label.locked .pill {
   background: linear-gradient(to right, var(--surface) 30%, rgb(from var(--surface) r g b / 0.72));
 }
 .stream-card .stream-backdrop {
-  filter: blur(22px) saturate(1.25);
+  filter: blur(16px) saturate(1.25);
   opacity: 0.3;
 }
 :root[data-theme="dark"] .stream-card .stream-backdrop {
@@ -4350,6 +4350,30 @@ label.locked .pill {
 }
 .count-line {
   margin: var(--space-3) 0;
+}
+
+/* A show or a season in a list. Neither has a row of its own in the library,
+   so the art comes off one of its episodes. */
+.row-poster {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+/* A title that goes where it names. Inherits its size so a heading still
+   reads as a heading, and the two halves of S01E06 sit together. */
+.title-link {
+  font: inherit;
+  color: inherit;
+}
+.title-link:hover {
+  color: var(--accent);
+}
+.stream-sub .title-link {
+  color: var(--accent);
 }
 
 /* Where you are in the library, and the way back out. */
