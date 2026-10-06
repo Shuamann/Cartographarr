@@ -1052,21 +1052,47 @@ code {
   border-bottom: 1px solid var(--border);
 }
 
-/* Tidying: the steps on a file card, and what is running.
-   .mini spreads its children apart, which is wrong for a checkbox and its
-   label, so this row is packed from the left instead. */
+/* Tidying, opened from a file card. Each step is a line to tick with its
+   reason under it, not a box of text, and the tracks below are the card's own
+   track list with tick boxes rather than a second copy of it. */
+.tidy {
+  margin-top: var(--space-3);
+}
+.tidy > h4 {
+  margin: 0 0 var(--space-2);
+}
+.tidy-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
 .tidy-step {
+  display: flex;
   align-items: flex-start;
-  justify-content: flex-start;
+  gap: var(--space-2);
   cursor: pointer;
 }
-
-.tidy-step > .min0 {
-  flex: 1;
+.tidy-step input {
+  width: auto;
+  min-height: 0;
+  margin: 3px 0 0;
 }
-
-.tidy-step .check strong {
-  color: var(--ink);
+.tidy-step .min0 {
+  display: flex;
+  flex-direction: column;
+}
+.track-picks-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  margin-bottom: var(--space-1);
+}
+.track-picks-head h4 {
+  margin: 0;
 }
 
 .tidy-jobs {
@@ -3018,22 +3044,6 @@ label.locked .pill {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
-.file-card .kv {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px 18px;
-  margin: 0 0 12px;
-}
-.file-card .kv dt {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.file-card .kv dd {
-  margin: 2px 0 0;
-}
 .track-lists {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -3048,33 +3058,51 @@ label.locked .pill {
 .track-lists p {
   margin: 0 0 2px;
 }
-.file-path {
-  display: block;
-  margin: 0 0 12px;
-  padding: 6px 9px;
-  overflow-wrap: anywhere;
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  font-size: 12px;
+/* The facts sit in the card's own column of label and value pairs. */
+.file-facts {
+  margin: var(--space-3) 0;
+}
+/* A file's name keeps its start, which is the part that says which film. */
+.file-name {
+  display: inline-block;
+  max-width: 60ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+/* One or two things to do, at one height, and the quieter ones after them
+   as words rather than more buttons. */
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.arr-actions > p,
+.file-links {
+  margin: var(--space-2) 0 0;
+}
+.file-links {
+  display: flex;
+  gap: var(--space-4);
 }
 .finding-summary {
   margin: 2px 0 0;
   color: var(--ink);
 }
 .findings {
-  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
 }
-.findings h4 {
-  margin: 0 0 8px;
-  font-size: 13px;
-}
+/* A rule in the severity's colour down the side, and no box: the line says
+   how much it matters before anything is read. */
 .finding {
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 2px 0 2px var(--space-3);
   border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
 }
 .finding.high {
   border-left-color: var(--danger);
@@ -3083,7 +3111,30 @@ label.locked .pill {
   border-left-color: var(--warn);
 }
 .finding p {
-  margin: 6px 0 0;
+  margin: var(--space-1) 0 0;
+}
+.finding[open] {
+  padding-bottom: var(--space-2);
+}
+.finding-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+  cursor: pointer;
+}
+.finding-head::-webkit-details-marker {
+  display: none;
+}
+.finding .pill {
+  flex: 0 0 auto;
+  min-width: 11ch;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+.tidy > .note {
+  margin: 0 0 var(--space-3);
 }
 .arr-actions {
   margin-top: 10px;

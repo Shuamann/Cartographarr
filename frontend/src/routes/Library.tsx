@@ -764,142 +764,185 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
 }
 
 /* The card itself, given a file. Issues render it from their own payload
- * rather than asking for the same file twice. */
+ * rather than asking for the same file twice.
+ *
+ * Laid out the way the rest of the app reads: what is wrong first, then the
+ * facts as label and value on one line each, then the tracks once, then the
+ * one or two things worth doing. Tidying used to sit open in the middle, with
+ * a second copy of every track in it, so a file with nothing wrong was mostly
+ * a form. It opens when asked for, and while it is open its tick boxes are the
+ * track list rather than a second one. */
 export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
   const nav = useNav();
   const [showTitle, setShowTitle] = useState(false);
+  const [tidying, setTidying] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const plan = useApi<Tidy>(`/library/file/${f.rating_key}/tidy`, [f.rating_key]);
+  const tidyable = Boolean(plan.data && (plan.data.steps.length > 0 || plan.data.audio.length + plan.data.subtitles.length > 0));
+  const worth = f.findings.some((x) => x.severity !== "low");
+  const name = f.file_path ? f.file_path.split(/[\\/]/).pop() : null;
+
   return (
     <div className="file-card">
       {f.findings.length > 0 ? (
+        /* One line each: how much it matters and what it is. Four findings
+           written out in full were most of the card, so the why and the fix
+           open from the line rather than standing open all the time. */
         <section className="findings">
-          <h4>What is wrong, and how to fix it</h4>
           {f.findings.map((x) => (
-            <div key={x.key} className={`finding ${x.severity}`}>
-              <div className="row">
+            <details key={x.key} className={`finding ${x.severity}`}>
+              <summary className="finding-head">
                 <span className={x.severity === "high" ? "pill bad" : x.severity === "medium" ? "pill warn" : "pill"}>
                   {x.severity === "high" ? "Fix first" : x.severity === "medium" ? "Worth fixing" : "Tidy up"}
                 </span>
                 <strong>{x.title}</strong>
-              </div>
+              </summary>
               <p className="small">{x.detail}</p>
               <p className="small">
                 <span className="muted">Fix: </span>
                 {x.fix}
               </p>
               {x.arr && <p className="muted small">{x.arr}</p>}
-            </div>
+            </details>
           ))}
         </section>
       ) : (
         <p className="muted small">Nothing about this file itself stands out.</p>
       )}
-      {/* Outside the findings: a file can be worth replacing for taking up
-          room, not only for being broken. */}
-      <ArrActions ratingKey={f.rating_key} arr={f.arr} title={f.title} />
-      <TidyPanel ratingKey={f.rating_key} title={f.title} />
-      <dl className="kv">
-        <div>
-          <dt>Format</dt>
-          <dd>{fileFormat(f) || "Not checked yet"}</dd>
-        </div>
-        {f.store && (
-          <div>
-            <dt>Stored on</dt>
-            <dd>{f.store}</dd>
-          </div>
-        )}
-        <div>
-          <dt>Bitrate and size</dt>
-          <dd>{[mbps(f.file_bitrate), size(f.file_size), f.versions && f.versions > 1 ? `${f.versions} versions` : null].filter(Boolean).join(" · ")}</dd>
-        </div>
-        <div>
-          <dt>Played, last {days} days</dt>
-          <dd>
-            {f.plays} times by {f.users} {f.users === 1 ? "person" : "people"}, {f.remote_plays} remote, {f.transcodes} transcoded
-            {f.last_play ? `, last ${when(f.last_play)}` : ""}
-          </dd>
-        </div>
+
+      <dl className="spec file-facts">
+        <Fact label="Format">{fileFormat(f) || "Not checked yet"}</Fact>
+        <Fact label="Size">
+          {[size(f.file_size), mbps(f.file_bitrate), f.versions && f.versions > 1 ? `${f.versions} versions` : null]
+            .filter(Boolean)
+            .join(", ") || "Not known"}
+        </Fact>
+        {f.store && <Fact label="Stored">{f.store}</Fact>}
+        <Fact label="Played">
+          {f.plays
+            ? `${f.plays} ${f.plays === 1 ? "time" : "times"} by ${f.users} ${f.users === 1 ? "person" : "people"} in ${days} days` +
+              (f.remote_plays ? `, ${f.remote_plays} remote` : "") +
+              (f.transcodes ? `, ${f.transcodes} transcoded` : "") +
+              (f.last_play ? `, last ${when(f.last_play)}` : "")
+            : `Not in the last ${days} days`}
+        </Fact>
         {f.transcode_causes.length > 0 && (
-          <div>
-            <dt>Why it transcoded</dt>
-            <dd>{f.transcode_causes.map((c) => `${TRANSCODE_CAUSES[c.cause] ?? c.cause} (${c.streams})`).join(", ")}</dd>
-          </div>
+          <Fact label="Transcodes">
+            {f.transcode_causes.map((c) => `${TRANSCODE_CAUSES[c.cause] ?? c.cause} (${c.streams})`).join(", ")}
+          </Fact>
         )}
         {f.stall_causes.length > 0 && (
-          <div>
-            <dt>Stalls</dt>
-            <dd>{f.stall_causes.map((c) => `${STALL_CAUSES[c.cause] ?? c.cause} (${c.stalls})`).join(", ")}</dd>
-          </div>
+          <Fact label="Stalls">{f.stall_causes.map((c) => `${STALL_CAUSES[c.cause] ?? c.cause} (${c.stalls})`).join(", ")}</Fact>
         )}
         {f.platforms.length > 0 && (
-          <div>
-            <dt>Platforms</dt>
-            <dd>{f.platforms.map((p) => `${p.platform} ${p.plays}${p.transcodes ? ` (${p.transcodes} transcoded)` : ""}`).join(", ")}</dd>
-          </div>
+          <Fact label="Devices">
+            {f.platforms.map((p) => `${p.platform} ${p.plays}${p.transcodes ? ` (${p.transcodes} transcoded)` : ""}`).join(", ")}
+          </Fact>
+        )}
+        {/* The name, which says which file it is. The folders above it are in
+            the tooltip: a whole path on the card was the longest thing on it
+            and the least read. */}
+        {name && (
+          <Fact label="File">
+            <span className="file-name" title={f.file_path ?? undefined}>
+              {name}
+            </span>
+          </Fact>
         )}
       </dl>
 
-
-      <div className="track-lists">
-        <div>
-          <h4>Audio</h4>
-          {f.audio_tracks.length === 0 && <p className="muted small">None recorded.</p>}
-          {f.audio_tracks.map((t, i) => (
-            <p key={i} className="small">
-              {[
-                t.codec?.toUpperCase(),
-                // The layout says what the count cannot: 5.1(side) and
-                // 5.1(rear) are both six channels and not the same thing.
-                t.layout ?? (t.channels ? `${t.channels} ch` : null),
-                t.language ?? "no language",
-                t.bitrate ? `${t.bitrate} kbps` : null,
-                t.sample_rate ? `${Math.round(t.sample_rate / 100) / 10} kHz` : null,
-                t.default ? "default" : null,
-                t.title,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          ))}
+      {tidying && plan.data ? (
+        <TidyPanel ratingKey={f.rating_key} title={f.title} plan={plan.data} onClose={() => setTidying(false)} />
+      ) : (
+        <div className="track-lists">
+          <div>
+            <h4>Audio</h4>
+            {f.audio_tracks.length === 0 && <p className="muted small">None recorded.</p>}
+            {f.audio_tracks.map((t, i) => (
+              <p key={i} className="small">
+                {[
+                  t.codec?.toUpperCase(),
+                  // The layout says what the count cannot: 5.1(side) and
+                  // 5.1(rear) are both six channels and not the same thing.
+                  t.layout ?? (t.channels ? `${t.channels} ch` : null),
+                  t.language ?? "no language",
+                  t.bitrate ? `${t.bitrate} kbps` : null,
+                  t.sample_rate ? `${Math.round(t.sample_rate / 100) / 10} kHz` : null,
+                  t.default ? "default" : null,
+                  t.title,
+                ]
+                  .filter(Boolean)
+                  .join(" \u00b7 ")}
+              </p>
+            ))}
+          </div>
+          <div>
+            <h4>Subtitles</h4>
+            {f.subtitle_tracks.length === 0 && <p className="muted small">None.</p>}
+            {f.subtitle_tracks.map((t, i) => (
+              <p key={i} className="small">
+                {[
+                  t.codec?.toUpperCase(),
+                  t.language ?? "no language",
+                  // Subtitles carrying sound effects and speaker names. Anybody
+                  // who wants plain subtitles does not want these, and nothing
+                  // could tell them apart before.
+                  t.sdh ? "SDH" : null,
+                  t.forced ? "forced" : null,
+                  t.dub ? "for the dub" : null,
+                  t.location,
+                  t.default ? "default" : null,
+                  t.title,
+                ]
+                  .filter(Boolean)
+                  .join(" \u00b7 ")}
+              </p>
+            ))}
+          </div>
         </div>
-        <div>
-          <h4>Subtitles</h4>
-          {f.subtitle_tracks.length === 0 && <p className="muted small">None.</p>}
-          {f.subtitle_tracks.map((t, i) => (
-            <p key={i} className="small">
-              {[
-                t.codec?.toUpperCase(),
-                t.language ?? "no language",
-                // Subtitles carrying sound effects and speaker names. Anybody
-                // who wants plain subtitles does not want these, and nothing
-                // could tell them apart before.
-                t.sdh ? "SDH" : null,
-                t.forced ? "forced" : null,
-                t.dub ? "for the dub" : null,
-                t.location,
-                t.default ? "default" : null,
-                t.title,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {f.file_path && <code className="file-path">{f.file_path}</code>}
+      {!tidying && (
+        <ArrActions
+          ratingKey={f.rating_key}
+          arr={f.arr}
+          title={f.title}
+          primary={worth || !tidyable}
+          picking={picking}
+          onPick={setPicking}
+          extra={
+            tidyable ? (
+              <button className={worth ? "btn" : "btn primary"} onClick={() => setTidying(true)}>
+                Tidy the tracks
+              </button>
+            ) : null
+          }
+        />
+      )}
 
-      <div className="row wrap">
+      <p className="muted small file-links">
         {nav.filterTo && (
-          <button className="btn" onClick={() => nav.filterTo?.("History", { rating_key: f.rating_key, ratingKeyLabel: f.title })}>
+          <button
+            className="linkish"
+            onClick={() => nav.filterTo?.("History", { rating_key: f.rating_key, ratingKeyLabel: f.title })}
+          >
             Plays in History
           </button>
         )}
-        <button className="btn" onClick={() => setShowTitle(!showTitle)}>
-          {showTitle ? "Hide title card" : "Title card"}
+        <button className="linkish" onClick={() => setShowTitle(!showTitle)}>
+          {showTitle ? "Hide the title card" : "Title card"}
         </button>
-      </div>
+      </p>
       {showTitle && <MediaPanel ratingKey={f.rating_key} />}
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="spec-pair">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
@@ -957,8 +1000,17 @@ type TidyJob = {
   created_at?: string | null;
 };
 
-function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
-  const plan = useApi<Tidy>(`/library/file/${ratingKey}/tidy`, [ratingKey]);
+function TidyPanel({
+  ratingKey,
+  title,
+  plan: t,
+  onClose,
+}: {
+  ratingKey: number;
+  title: string;
+  plan: Tidy;
+  onClose: () => void;
+}) {
   const [chosen, setChosen] = useState<Set<string> | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -968,15 +1020,11 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
   const [keepSubs, setKeepSubs] = useState<Set<number> | null>(null);
   const [first, setFirst] = useState<number | null>(null);
 
-  if (plan.error || !plan.data) return null;
-  const t = plan.data;
-  const tracks = t.audio.length + t.subtitles.length;
-  if (t.steps.length === 0 && tracks === 0) return null;
   const picked = chosen ?? new Set(t.steps.map((s) => s.key));
   const audioKept = keepAudio ?? new Set(t.audio.map((a) => a.position));
   const subsKept = keepSubs ?? new Set(t.subtitles.map((x) => x.position));
-  const edited =
-    keepAudio !== null || keepSubs !== null || first !== null;
+  const edited = keepAudio !== null || keepSubs !== null || first !== null;
+  const dropped = t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
 
   function pick(key: string, on: boolean) {
     const next = new Set(picked);
@@ -993,23 +1041,30 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     (which === "audio" ? setKeepAudio : setKeepSubs)(next);
   }
 
+  /* Asked, because the answer can be no: this rewrites the whole file, and
+     dropping a track cannot be undone from here. */
   async function start() {
-    const dropped =
-      t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
-    const warning = dropped > 0 ? `\n\n${dropped} track${dropped === 1 ? "" : "s"} will be dropped.` : "";
-    if (!(await askConfirm({
-      title: `Tidy ${title}?`,
-      body: (
-        <>
-          {warning ? <p className="warn-text">{warning.trim()}</p> : null}
-          <p>
-            The file is read and written once, the result is checked against the original for length and picture, and
-            only then does it replace it. The picture is never re-encoded.
-          </p>
-        </>
-      ),
-      confirm: "Tidy it",
-    }))) return;
+    if (
+      !(await askConfirm({
+        title: `Tidy ${title}?`,
+        body: (
+          <>
+            {dropped > 0 ? (
+              <p className="warn-text">
+                {dropped} {dropped === 1 ? "track" : "tracks"} will be dropped.
+              </p>
+            ) : null}
+            <p>
+              The file is read and written once, the result is checked against the original for length and picture, and
+              only then does it replace it. The picture is never re-encoded.
+            </p>
+          </>
+        ),
+        confirm: "Tidy it",
+        danger: dropped > 0,
+      }))
+    )
+      return;
     setBusy(true);
     setMessage(null);
     try {
@@ -1037,136 +1092,125 @@ function TidyPanel({ ratingKey, title }: { ratingKey: number; title: string }) {
     : !t.local_path
       ? (
           <>
-            This container cannot open {t.file_path ?? "the file"}. Mount the share that holds it, then say where it
-            landed under <SettingsLink page={SETTINGS_PAGES.library}>Settings, Library and files</SettingsLink>.
+            This container cannot open the file. Mount the share that holds it, then say where it landed under{" "}
+            <SettingsLink page={SETTINGS_PAGES.library}>Settings, Library and files</SettingsLink>.
           </>
         )
       : null;
 
+  const firstLanguage = (t.subtitles[0]?.language ?? "eng").toLowerCase();
+
   return (
-    <section className="profile-section tidy">
-      <h3>Tidy the tracks</h3>
-      <div className="mini-list">
-        {t.steps.map((step) => (
-          <label key={step.key} className="mini tidy-step">
-            <span className="min0">
-              <span className="check">
-                <input
-                  type="checkbox"
-                  checked={picked.has(step.key)}
-                  disabled={Boolean(blocked)}
-                  onChange={(e) => pick(step.key, e.target.checked)}
-                />
+    <section className="tidy">
+      <h4>Tidy the tracks</h4>
+      {blocked && <p className="note warn-note">{blocked}</p>}
+      {t.steps.length > 0 && (
+        <div className="tidy-steps">
+          {t.steps.map((step) => (
+            <label key={step.key} className="tidy-step" title={step.why}>
+              <input
+                type="checkbox"
+                checked={picked.has(step.key)}
+                disabled={Boolean(blocked)}
+                onChange={(e) => pick(step.key, e.target.checked)}
+              />
+              <span className="min0">
                 <strong>{step.what}</strong>
+                <span className="muted small">{step.why}</span>
               </span>
-              <p className="muted small">{step.why}</p>
-            </span>
-          </label>
-        ))}
-      </div>
-      {tracks > 0 && (
-        <div className="track-picks">
-          {t.audio.length > 0 && (
-            <div className="min0">
-              <div className="row-between">
-                <p className="muted small">Audio: untick to drop, choose one to play first</p>
-                <span className="row">
-                  <button className="tab" onClick={() => setKeepAudio(new Set(t.audio.map((a) => a.position)))}>
-                    all
-                  </button>
-                  <button className="tab" onClick={() => setKeepAudio(new Set())}>
-                    none
-                  </button>
-                </span>
-              </div>
-              {t.audio.map((track) => (
-                <div key={track.position} className="track-row">
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={audioKept.has(track.position)}
-                      disabled={Boolean(blocked)}
-                      onChange={(e) => keep("audio", track.position, e.target.checked)}
-                    />
-                    <span>{trackName(track)}</span>
-                  </label>
-                  <label className="check" title="Players take the first track unless somebody goes looking">
-                    <input
-                      type="radio"
-                      name={`first-${ratingKey}`}
-                      checked={first === track.position}
-                      disabled={Boolean(blocked) || !audioKept.has(track.position)}
-                      onChange={() => setFirst(track.position)}
-                    />
-                    <span className="muted small">first</span>
-                  </label>
-                </div>
-              ))}
-              {t.audio.length > 1 && audioKept.size === 0 && (
-                <p className="muted small">Everything is kept: a file is never left with no sound.</p>
-              )}
-            </div>
-          )}
-          {t.subtitles.length > 0 && (
-            <div className="min0">
-              <div className="row-between">
-                <p className="muted small">Subtitles: untick to drop</p>
-                <span className="row">
-                  <button className="tab" onClick={() => setKeepSubs(new Set(t.subtitles.map((x) => x.position)))}>
-                    all
-                  </button>
-                  <button className="tab" onClick={() => setKeepSubs(new Set())}>
-                    none
-                  </button>
-                  {/* The commonest wish by far, and fifty six clicks otherwise. */}
-                  <button
-                    className="tab"
-                    title="Keep only tracks in the language you watch in"
-                    onClick={() =>
-                      setKeepSubs(
-                        new Set(
-                          t.subtitles
-                            .filter((x) => (x.language ?? "").toLowerCase() === (t.subtitles[0]?.language ?? "eng").toLowerCase())
-                            .map((x) => x.position),
-                        ),
-                      )
-                    }
-                  >
-                    first language only
-                  </button>
-                </span>
-              </div>
-              {t.subtitles.map((track) => (
-                <div key={track.position} className="track-row">
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={subsKept.has(track.position)}
-                      disabled={Boolean(blocked)}
-                      onChange={(e) => keep("subtitles", track.position, e.target.checked)}
-                    />
-                    <span>{trackName(track)}</span>
-                  </label>
-                </div>
-              ))}
-            </div>
-          )}
+            </label>
+          ))}
         </div>
       )}
 
-      {blocked ? (
-        <p className="muted small">{blocked}</p>
-      ) : (
-        <div className="row wrap">
-          <button className="btn" disabled={busy || (picked.size === 0 && !edited)} onClick={start}>
-            {busy ? "Queueing..." : "Tidy it"}
-          </button>
-          <span className="muted small">
-            The picture is copied, never re-encoded. The original is replaced only after the result is checked.
-          </span>
-        </div>
-      )}
-      {message && <p className={message.ok ? "note" : "note bad-note"}>{message.text}</p>}
+      <div className="track-picks">
+        {t.audio.length > 0 && (
+          <div className="min0">
+            <div className="track-picks-head">
+              <h4>Audio</h4>
+              <span className="muted small">untick to drop, choose one to play first</span>
+            </div>
+            {t.audio.map((track) => (
+              <div key={track.position} className="track-row">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={audioKept.has(track.position)}
+                    disabled={Boolean(blocked)}
+                    onChange={(e) => keep("audio", track.position, e.target.checked)}
+                  />
+                  <span>{trackName(track)}</span>
+                </label>
+                <label className="check" title="Players take the first track unless somebody goes looking">
+                  <input
+                    type="radio"
+                    name={`first-${ratingKey}`}
+                    checked={first === track.position}
+                    disabled={Boolean(blocked) || !audioKept.has(track.position)}
+                    onChange={() => setFirst(track.position)}
+                  />
+                  <span className="muted small">first</span>
+                </label>
+              </div>
+            ))}
+            {t.audio.length > 1 && audioKept.size === 0 && (
+              <p className="muted small">Everything is kept: a file is never left with no sound.</p>
+            )}
+          </div>
+        )}
+        {t.subtitles.length > 0 && (
+          <div className="min0">
+            <div className="track-picks-head">
+              <h4>Subtitles</h4>
+              {/* Keeping only the language watched in is the commonest wish by
+                  far, and fifty six clicks otherwise. */}
+              <div className="segmented" role="group" aria-label="Which subtitles to keep">
+                <button className="seg" onClick={() => setKeepSubs(new Set(t.subtitles.map((x) => x.position)))}>
+                  All
+                </button>
+                <button
+                  className="seg"
+                  title="Keep only the tracks in the first track's language"
+                  onClick={() =>
+                    setKeepSubs(
+                      new Set(t.subtitles.filter((x) => (x.language ?? "").toLowerCase() === firstLanguage).map((x) => x.position)),
+                    )
+                  }
+                >
+                  {(t.subtitles[0]?.language ?? "eng").toUpperCase()} only
+                </button>
+                <button className="seg" onClick={() => setKeepSubs(new Set())}>
+                  None
+                </button>
+              </div>
+            </div>
+            {t.subtitles.map((track) => (
+              <div key={track.position} className="track-row">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={subsKept.has(track.position)}
+                    disabled={Boolean(blocked)}
+                    onChange={(e) => keep("subtitles", track.position, e.target.checked)}
+                  />
+                  <span>{trackName(track)}</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
+      <div className="file-actions">
+        <button className="btn primary" disabled={Boolean(blocked) || busy || (picked.size === 0 && !edited)} onClick={start}>
+          {busy ? "Queueing" : dropped > 0 ? `Tidy it, dropping ${dropped}` : "Tidy it"}
+        </button>
+        <button className="btn" onClick={onClose}>
+          Done
+        </button>
+        <span className="muted small">The picture is copied, never re-encoded.</span>
+      </div>
     </section>
   );
 }
@@ -1226,14 +1270,21 @@ function ArrActions({
   ratingKey,
   arr,
   title,
+  primary,
+  picking,
+  onPick,
+  extra,
 }: {
   ratingKey: number;
   arr: { name: string; label: string; configured: boolean };
   title: string;
+  primary: boolean;
+  picking: boolean;
+  onPick: (on: boolean) => void;
+  extra?: React.ReactNode;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const [picking, setPicking] = useState(false);
 
   /* No confirmation here any more. Searching only downloads a release the
      quality profile already rates higher, tagging writes a label, and neither
@@ -1256,22 +1307,33 @@ function ArrActions({
   const why = arr.configured ? undefined : `Connect ${arr.label} in Settings to use this`;
   return (
     <div className="arr-actions">
-      <div className="row wrap">
-        <button className="btn primary" onClick={() => setPicking(!picking)} disabled={!arr.configured} title={why}>
+      {/* One thing to do, made the obvious one: replacing when something is
+          wrong with the file, tidying when only its tracks are untidy. */}
+      <div className="file-actions">
+        <button className={primary ? "btn primary" : "btn"} onClick={() => onPick(!picking)} disabled={!arr.configured} title={why}>
           Find a replacement
         </button>
-        <button className="btn" onClick={() => run("search")} disabled={!arr.configured || busy !== null} title={why}>
-          {busy === "search" ? "Asking\u2026" : `Let ${arr.label} search by itself`}
-        </button>
-        <button className="btn" onClick={() => run("tag")} disabled={!arr.configured || busy !== null} title={why}>
-          {busy === "tag" ? "Tagging\u2026" : "Tag for replacement"}
-        </button>
+        {extra}
       </div>
-      {!arr.configured && <p className="muted small">{why}.</p>}
+      {arr.configured ? (
+        <p className="muted small">
+          Or leave it to {arr.label}:{" "}
+          <button className="linkish" onClick={() => run("search")} disabled={busy !== null}>
+            {busy === "search" ? "asking" : "search by itself"}
+          </button>
+          {", or "}
+          <button className="linkish" onClick={() => run("tag")} disabled={busy !== null}>
+            {busy === "tag" ? "tagging" : "tag it for replacement"}
+          </button>
+          .
+        </p>
+      ) : (
+        <p className="muted small">{why}.</p>
+      )}
       {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
-      {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} onClose={() => setPicking(false)} />}
+      {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} onClose={() => onPick(false)} />}
     </div>
-  )
+  );
 }
 
 type Release = {
