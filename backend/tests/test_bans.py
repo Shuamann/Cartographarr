@@ -143,3 +143,73 @@ def test_ban_reason_is_logged_and_can_be_changed(client):
     summaries = [e["summary"] for e in client.get("/api/log?kind=changes").json()]
     assert any(s.endswith(": shared with a stranger") for s in summaries)
     assert any(s.startswith("Changed the ban reason") for s in summaries)
+
+
+def test_a_ban_still_acts_when_rules_are_switched_off(client, monkeypatch):
+    """Run rules governs the rules somebody wrote, not the ban list.
+
+    The ban list is enforced by the same sweep that runs the rules, and the
+    switch used to return before that sweep had even assembled it. So turning
+    off one noisy rule quietly stopped every ban on the server, with nothing
+    anywhere saying so. It is the shape of fault this app has already been
+    bitten by: a safety default that cannot be told apart from a broken
+    feature.
+    """
+    import asyncio
+
+    from app.db import session_scope
+    from app.models import BannedDevice, EnforcementLog
+    from app.services import enforcer
+
+    claim(client)
+    client.put("/api/settings", json={"enforce_enabled": False, "ban_record_only": True})
+    with session_scope() as db:
+        db.add(BannedDevice(machine_id="bad-device", label="Bad"))
+
+    async def live():
+        return [{"session_key": "s1", "machine_id": "bad-device", "state": "playing", "user_id": 7}], {}, None
+
+    monkeypatch.setattr(enforcer, "is_configured", lambda: True)
+    monkeypatch.setattr(enforcer, "live_context", live)
+    enforcer._done.clear()
+    enforcer._recent.clear()
+
+    result = asyncio.run(enforcer.run_once())
+    assert result["matched"] >= 1, "the ban list was not even consulted"
+    with session_scope() as db:
+        names = [r.rule_name for r in db.query(EnforcementLog).all()]
+    assert enforcer.BAN_RULE_NAME in names
+
+
+def test_a_rule_does_not_act_when_rules_are_switched_off(client, monkeypatch):
+    """The other half of the same switch, so this cannot be read as having
+    quietly turned rules back on."""
+    import asyncio
+    import json as _json
+
+    from app.db import session_scope
+    from app.models import EnforcementLog, Rule
+    from app.services import enforcer
+
+    claim(client)
+    client.put("/api/settings", json={"enforce_enabled": False})
+    with session_scope() as db:
+        db.add(Rule(
+            name="Anything at all", enabled=True, record_only=True,
+            conditions=_json.dumps({"type": "group", "op": "and", "items": [
+                {"type": "condition", "field": "device", "op": "any", "value": ["some-device"]},
+            ]}),
+            actions=_json.dumps([{"name": "log_only", "params": {}}]),
+        ))
+
+    async def live():
+        return [{"session_key": "s1", "machine_id": "some-device", "state": "playing", "user_id": 7}], {}, None
+
+    monkeypatch.setattr(enforcer, "is_configured", lambda: True)
+    monkeypatch.setattr(enforcer, "live_context", live)
+    enforcer._done.clear()
+    enforcer._recent.clear()
+
+    asyncio.run(enforcer.run_once())
+    with session_scope() as db:
+        assert db.query(EnforcementLog).filter(EnforcementLog.rule_name == "Anything at all").count() == 0

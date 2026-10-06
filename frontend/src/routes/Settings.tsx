@@ -168,6 +168,11 @@ const AREAS: Area[] = [
         keys: ["backup_keep", "backup_hour"],
       },
       {
+        title: "What is kept",
+        note: "How long the detailed record of each stream is kept, and the two logs. Not the plays themselves, which are history and are kept whatever this says. 0 keeps everything. Three years by default because a report can be asked for any window up to ten, and throwing away old streams should be something you chose rather than something you found out.",
+        keys: ["keep_streams_days", "keep_logs_days"],
+      },
+      {
         title: "When a job stops working",
         note: "A broken background job does not announce itself, it just stops having the right answer. Three failures in a row sends one message, then nothing until it works again. Needs notifications set up.",
         keys: ["task_alerts"],
@@ -186,7 +191,7 @@ const AREAS: Area[] = [
       },
       {
         title: "Rules",
-        note: "Whether rules run at all, and how long a rule waits before acting on the same stream again. Each rule, and the ban list, has its own record only switch on the Rules page.",
+        note: "Whether the rules you wrote run, and how long one waits before acting on the same stream again. The ban list and the blocked countries are not rules and keep working either way. Each of the three has its own record only switch on the Rules page.",
         keys: ["enforce_enabled", "enforce_cooldown_seconds", "automation_daily_cap", "automation_download_cap"],
       },
       {
@@ -421,6 +426,8 @@ const LABELS: Record<string, string> = {
   digest_weekday: "On",
   digest_hour: "At",
   watch_alerts: "Tell me about new devices and signals",
+  keep_streams_days: "Keep stream records for",
+  keep_logs_days: "Keep the logs for",
   backup_keep: "Snapshots to keep",
   backup_hour: "Taken at",
   auth_proxy_enabled: "Trust a reverse proxy",
@@ -487,6 +494,8 @@ const SHAPES: Record<string, FieldShape> = {
   impossible_min_km: { unit: "km", min: 0, max: 5000, step: 10 },
   impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
   session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
+  keep_streams_days: { unit: "days", min: 0, max: 3650, step: 1 },
+  keep_logs_days: { unit: "days", min: 0, max: 3650, step: 1 },
   backup_keep: { unit: "snapshots", min: 0, max: 60, step: 1 },
   backup_hour: { unit: "o'clock", min: 0, max: 23, step: 1 },
   digest_hour: { unit: "o'clock", min: 0, max: 23, step: 1 },

@@ -4,6 +4,23 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.91.0 - 2026-10-06
+
+### Fixed
+- Turning off Run rules no longer turns off the ban list. Bans are enforced by the same sweep that runs the
+  rules, and the switch returned before that sweep had even assembled them, so quietening one noisy rule
+  silently stopped every ban on the server with nothing anywhere saying so. Run rules now governs the rules
+  somebody wrote. The ban list and the blocked countries are explicit acts against a named device, address or
+  place, each already has its own record only switch, and they keep working either way.
+
+### Added
+- Four tables that grew forever are pruned: the record of each stream, the buffering during it, the audit log
+  and the enforcement log. Bandwidth samples and task runs already had this, so the pattern existed and these
+  were simply never given it.
+- Two settings under Syncing say how long each is kept, three years by default, 0 to keep everything. It is a
+  setting rather than a number in the code because a report can be asked for any window up to ten years, and
+  throwing away old streams should be something you chose rather than something you found out.
+
 ## 0.90.0 - 2026-10-06
 
 ### Added

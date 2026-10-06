@@ -193,17 +193,6 @@ episodes a section at a time instead, which is one paged listing rather than a
 request per show, after checking against a real server that the listing
 carries the show and season keys.
 
-### Banning rides on "Run rules"
-
-Turning off Run rules in Settings stops the sweep, and the ban list is
-enforced by the sweep, so bans stop too. The ban list looks like its own thing
-in the interface and reads like its own thing in the README. It defaults to on
-so it is unlikely to be biting anybody, but somebody who turns rules off to
-stop a noisy rule will quietly lose their bans as well.
-
-Either enforce bans independently of that switch, or say plainly on the switch
-what else it turns off.
-
 ### Tables that grow forever
 
 `stream_sessions`, `stream_events`, `audit_log` and `enforcement_log` have no
@@ -211,11 +200,6 @@ pruning. `bandwidth_samples` is kept for a year and `task_runs` is capped per
 task, so the pattern exists and these were simply never given it. Not urgent
 at any volume seen so far, which is why it has not been done, but it is the
 kind of thing noticed two years late.
-
-### A dead function
-
-`library.forget_rows()` has no caller. Either call it where the row cache
-should be dropped, or remove it.
 
 ---
 

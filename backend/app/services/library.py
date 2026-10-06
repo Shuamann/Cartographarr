@@ -455,7 +455,13 @@ def _rows_cache(stamp: tuple[Any, ...]) -> dict[int, tuple[Any, dict[str, Any]]]
 
 
 def forget_rows() -> None:
-    """For a test, or anything that changes a file without saying so."""
+    """Drop the cache outright.
+
+    Nothing in the app calls this and nothing should: the cache is keyed on a
+    stamp made of the things that change a row, so a tidy, a scan or a
+    replacement already invalidates it by altering one of them. This exists
+    for tests, which change files underneath it on purpose, and the
+    alternative is a test reaching into module globals."""
     global _ROWS_FOR
 
     _ROWS.clear()
