@@ -48,11 +48,55 @@ def _when(value: Any) -> datetime | None:
         return None
 
 
-def _person(raw: dict[str, Any] | None) -> tuple[str | None, int | None]:
-    """Who reported or commented, and their Plex user id where there is one."""
-    raw = raw or {}
+def _person(raw: Any) -> tuple[str | None, int | None]:
+    """Who reported or commented, and their Plex user id where there is one.
+
+    Seerr does not always send the whole user: a comment can arrive with the
+    user cut down to its ids, or as a bare Seerr id. Whatever is missing here
+    is filled in by _author from the people the same sync has already seen.
+    """
+    if not isinstance(raw, dict):
+        return None, None
     name = raw.get("displayName") or raw.get("plexUsername") or raw.get("username") or raw.get("email")
     return name, _int(raw.get("plexId"))
+
+
+def _seerr_id(raw: Any) -> int | None:
+    return _int(raw.get("id")) if isinstance(raw, dict) else _int(raw)
+
+
+def _directory(raws: list[dict[str, Any]]) -> dict[int, tuple[str | None, int | None]]:
+    """Every Seerr user named anywhere in this sync, by their Seerr id.
+
+    A person who reported one issue and only commented on another is still the
+    same person, and Seerr's users are Plex logins, so whoever is named once
+    can be named everywhere.
+    """
+    people: dict[int, tuple[str | None, int | None]] = {}
+    for raw in raws:
+        users = [raw.get("createdBy"), raw.get("modifiedBy")] + [c.get("user") for c in raw.get("comments") or []]
+        for user in users:
+            sid, (name, plex_id) = _seerr_id(user), _person(user)
+            if sid is not None and (name or plex_id):
+                known = people.get(sid, (None, None))
+                people[sid] = (known[0] or name, known[1] or plex_id)
+    return people
+
+
+def _author(db, user: Any, people: dict[int, tuple[str | None, int | None]]) -> tuple[str | None, int | None]:
+    """A comment's author by name, from the comment, from the sync, or from
+    the Plex users this app already knows."""
+    from app.models import User
+
+    name, plex_id = _person(user)
+    if not (name and plex_id):
+        known = people.get(_seerr_id(user) or -1, (None, None))
+        name, plex_id = name or known[0], plex_id or known[1]
+    if name is None and plex_id is not None:
+        found = db.get(User, plex_id)
+        if found is not None:
+            name = found.friendly_name or found.username
+    return name, plex_id
 
 
 def episode_key(db, show_rating_key: int | None, season: int | None, episode: int | None) -> int | None:
@@ -70,7 +114,7 @@ def episode_key(db, show_rating_key: int | None, season: int | None, episode: in
     ).scalar()
 
 
-def row_from_issue(db, raw: dict[str, Any]) -> dict[str, Any] | None:
+def row_from_issue(db, raw: dict[str, Any], people: dict[int, tuple[str | None, int | None]] | None = None) -> dict[str, Any] | None:
     """One issues row from Seerr's issue, or None if it names no media."""
     from app.models import MediaItem
 
@@ -81,19 +125,24 @@ def row_from_issue(db, raw: dict[str, Any]) -> dict[str, Any] | None:
     # Seerr stores Plex's own rating key, which is the same one this app uses.
     key = _int(media.get("ratingKey")) or _int(media.get("ratingKey4k"))
     season, episode = _int(raw.get("problemSeason")), _int(raw.get("problemEpisode"))
+    # Seerr sends 0 and 0 for a film, which would otherwise read as season
+    # nought, a special, and there is no episode nought of anything.
+    if media.get("mediaType") != "tv" or not episode:
+        season = episode = None
     show_key = key if (media.get("mediaType") == "tv") else None
     if show_key:
         key = episode_key(db, show_key, season, episode) or show_key
-    name, reporter_id = _person(raw.get("createdBy"))
+    name, reporter_id = _author(db, raw.get("createdBy"), people or {})
     item = db.get(MediaItem, key) if key else None
-    comments = [
-        {
+    comments = []
+    for c in raw.get("comments") or []:
+        author, author_id = _author(db, c.get("user"), people or {})
+        comments.append({
             "message": c.get("message"),
-            "author": _person(c.get("user"))[0],
+            "author": author,
+            "author_id": author_id,
             "created_at": (_when(c.get("createdAt")) or datetime.now(UTC).replace(tzinfo=None)).isoformat(),
-        }
-        for c in (raw.get("comments") or [])
-    ]
+        })
     return {
         "seerr_id": seerr_id,
         "source": "seerr",
@@ -153,7 +202,9 @@ async def sync(limit: int = 500) -> dict[str, int]:
 
         with session_scope() as db:
             return {
-                i.seerr_id: (i.updated_at.isoformat() if i.updated_at else None)
+                # A report whose comments have no author is read again in full,
+                # since a copy from the list may have been what lost them.
+                i.seerr_id: (i.updated_at.isoformat() if i.updated_at else None) if _named(i.comments) else "unnamed"
                 for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()
             }
 
@@ -194,15 +245,42 @@ def _open_ids() -> list[int] | None:
         return ids
 
 
+def _named(comments: str | None) -> bool:
+    try:
+        return all(c.get("author") for c in json.loads(comments or "[]"))
+    except (ValueError, AttributeError):
+        return False
+
+
+def _keep_authors(old: str | None, new: str | None) -> str | None:
+    """New comments, keeping any author the old copy knew and the new one does
+    not. The list Seerr returns can carry less than the issue read on its own,
+    and a sync that has nothing new to say must not unsay a name."""
+    try:
+        before, after = json.loads(old or "[]"), json.loads(new or "[]")
+    except ValueError:
+        return new
+    if not after and before:
+        return old
+    known = {(c.get("created_at"), c.get("message")): c for c in before if c.get("author")}
+    for c in after:
+        if not c.get("author"):
+            match = known.get((c.get("created_at"), c.get("message")))
+            if match:
+                c["author"], c["author_id"] = match.get("author"), match.get("author_id")
+    return json.dumps(after)
+
+
 def _store(raws: list[dict[str, Any]]) -> int:
     from app.models import Issue
 
     kept = 0
+    people = _directory(raws)
     with session_scope() as db:
         existing = {i.seerr_id: i for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()}
         seen: set[int] = set()
         for raw in raws:
-            row = row_from_issue(db, raw)
+            row = row_from_issue(db, raw, people)
             if row is None:
                 continue
             seen.add(row["seerr_id"])
@@ -210,6 +288,9 @@ def _store(raws: list[dict[str, Any]]) -> int:
             if issue is None:
                 db.add(Issue(**row))
             else:
+                row["comments"] = _keep_authors(issue.comments, row["comments"])
+                if row["message"] is None:
+                    row["message"] = issue.message
                 for key, value in row.items():
                     # A title, or the file it was about, can leave Plex while
                     # the report stands. Forgetting what it was called would

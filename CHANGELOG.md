@@ -33,8 +33,10 @@ copy on GitHub to say what an update brings.
 - A long title keeps its season and episode. Rows clipped "The Show - Episode" from the end, which could cut off
   the numbers that say which episode is being reported. They now shorten the way the stream tiles do: the
   episode's own name first, and the numbers never.
-- An opened report reads as facts rather than a paragraph: the device, the network, how it played, how often it
-  stalled and how much was watched, then the conversation, then every play of the file one to a line.
+- An opened report holds only what the row has no room for: the conversation, the play it was reported from,
+  every play of the file one to a line, and the file itself in a few lines with what is known to be wrong with
+  it. Replacing the file and rewriting its tracks stay in the Library, one click away, rather than filling the
+  report.
 - Somebody who is not an admin sees their own reports, how their own plays went, and what is already known about
   the file, without the buttons that only an admin can use.
 - The filters are buttons rather than a list to open, and every control on the page is one height. The kind of
@@ -47,6 +49,11 @@ copy on GitHub to say what an update brings.
   asks Plex about the key, which leaves an empty placeholder row behind, and that row was being read as the film
   being back.
 - In an opened report on a phone, the facts ran off the right edge of the screen.
+- Comments read in from Seerr said "Someone" rather than who wrote them. Seerr does not always send the whole user
+  with a comment, and a sync with nothing new to read was replacing named comments with unnamed ones. Names are
+  now kept, filled in from the Plex users this app knows, and the first comment, which Seerr always makes the
+  reporter's, is signed by the reporter.
+- A film reported in Seerr read as "Special, episode 0", from the season and episode Seerr sends for a film.
 
 
 ## 0.88.0 - 2026-10-06
