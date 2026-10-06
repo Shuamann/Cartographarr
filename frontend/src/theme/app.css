@@ -4900,6 +4900,17 @@ label.locked .pill {
   background: var(--accent);
   border-color: var(--accent);
 }
+/* Whether anything Tautulli recorded is missing here. The days that are short
+   are a short list by design: a missing week in 2022 and a missing hour last
+   Tuesday are different problems and both are visible in a handful of rows. */
+.history-check {
+  margin-top: var(--space-3);
+}
+.check-days {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
 /* The tick that vouches for a device. Grey until it is given, then the colour
    the rest of the app uses for a thing that is as it should be. */
 .btn.trust span {

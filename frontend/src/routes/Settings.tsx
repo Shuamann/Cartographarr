@@ -1148,6 +1148,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             />
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Schedule" && <SyncNow />}
+            {section.title === "Where the live data comes from" && <HistoryCheck />}
             {section.title === "Backups" && <ServerTime />}
             {section.title === "Rules" && <ServerTime />}
             {section.title === "Tidying files" && (
@@ -1851,6 +1852,113 @@ function ServerTime() {
       The server thinks it is <strong>{shown}</strong> ({when.data.zone}). Times here and in rules mean that clock,
       so if it is wrong, set TZ on the container.
     </p>
+  );
+}
+
+/* Whether anything Tautulli recorded is missing here.
+ *
+ * Switching where the data comes from is the one change in this app where
+ * everything can look normal and be wrong: a day nobody fetched looks exactly
+ * like a day nobody watched anything. One request to Tautulli answers two
+ * thousand days, so this asks and waits rather than starting a job and
+ * leaving somebody to go and find the answer.
+ */
+type HandoverCheck = {
+  asked: boolean;
+  reason?: string | null;
+  days?: number;
+  from?: string;
+  to?: string;
+  tautulli?: number;
+  here?: number;
+  missing?: number;
+  missing_day_count?: number;
+  missing_days?: { day: string; tautulli: number; here: number; difference: number }[];
+  extra?: number;
+  extra_day_count?: number;
+};
+
+function HistoryCheck() {
+  const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState<HandoverCheck | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function check() {
+    setBusy(true);
+    setFailed(null);
+    try {
+      setFound(await api.get<HandoverCheck>("/handover/check"));
+    } catch (err) {
+      setFailed((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fill() {
+    setBusy(true);
+    setFailed(null);
+    try {
+      await api.post("/handover/fill", {});
+      setFound(await api.get<HandoverCheck>("/handover/check"));
+    } catch (err) {
+      setFailed((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const short = found?.missing ?? 0;
+  return (
+    <div className="history-check">
+      <div className="row">
+        <button type="button" className="btn" onClick={check} disabled={busy}>
+          {busy ? "Counting…" : "Check nothing is missing"}
+        </button>
+        {short > 0 && (
+          <button type="button" className="btn" onClick={fill} disabled={busy}>
+            Fetch {found?.missing_day_count} day{found?.missing_day_count === 1 ? "" : "s"}
+          </button>
+        )}
+        {!found && !failed && (
+          <span className="muted small">
+            Counts what Tautulli recorded against what is here, day by day.
+          </span>
+        )}
+      </div>
+      {failed && <p className="note bad-note" role="alert">{failed}</p>}
+      {found && !found.asked && <p className="muted small">{found.reason}</p>}
+      {found?.asked && (
+        <>
+          <p className={short ? "small bad-text" : "muted small"}>
+            {short
+              ? `${short} play${short === 1 ? "" : "s"} across ${found.missing_day_count} day${
+                  found.missing_day_count === 1 ? "" : "s"
+                } are in Tautulli and not here.`
+              : `Nothing missing. ${found.tautulli?.toLocaleString()} plays on each side, across ${found.days} days.`}
+          </p>
+          {Boolean(found.missing_days?.length) && (
+            <ul className="muted small check-days">
+              {found.missing_days?.map((d) => (
+                <li key={d.day}>
+                  {d.day}: Tautulli {d.tautulli}, here {d.here}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* On their own these are expected: plays are recorded from Plex
+              directly when Tautulli is not connected. A lot of them on days
+              Tautulli was running is what counting twice looks like. */}
+          {Boolean(found.extra) && (
+            <p className="muted small">
+              {found.extra} play{found.extra === 1 ? "" : "s"} here that Tautulli does not have, across{" "}
+              {found.extra_day_count} day{found.extra_day_count === 1 ? "" : "s"}. Expected where this app was
+              recording from Plex and Tautulli was not running.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

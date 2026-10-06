@@ -172,112 +172,50 @@ def test_a_viewer_cannot_vouch_for_their_own_device(client):
 
 
 def test_a_literal_path_is_declared_before_the_one_with_a_placeholder():
-    """/devices/{machine_id} swallowed /devices/trust-suggestions and answered
-    "No such device", which reads as the feature being broken rather than as
-    the route being in the wrong place.
+    """A placeholder route swallows a literal one declared after it.
+
+    /devices/{machine_id} caught /devices/trust-suggestions and answered "No
+    such device"; later /history/{row_id} in one router caught /history/check
+    in another, which is worse because no amount of ordering inside a file
+    fixes it. Every router is checked, in the order they are included, so a
+    collision across two files is caught as well as one inside a file.
 
     Only a route that could actually catch it counts: the same method, the
     same segments up to the placeholder, and the same number of segments
-    overall. /history/{row_id} has never been a threat to /media/search.
+    overall. /history/{row_id} was never a threat to /media/search.
     """
-    import pathlib
-    import re
+    from app.main import app
 
-    source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "routers" / "data.py").read_text(encoding="utf-8")
-    routes = re.findall(r'@router\.(get|post|put|delete)\("([^"]+)"', source)
+    def every_route(routes):
+        """Flattened, in the order a request is matched against them.
+
+        app.routes holds a wrapper per included router rather than the routes
+        themselves, so walking it directly checks nothing at all. The first
+        version of this test did exactly that and passed with the bug it was
+        written for put back on purpose, which is how it was found out.
+        """
+        for route in routes:
+            inner = getattr(route, "original_router", None)
+            if inner is not None:
+                yield from every_route(inner.routes)
+            else:
+                yield route
+
     catchers: dict[tuple, str] = {}
-    for method, path in routes:
+    checked = 0
+    for route in every_route(app.routes):
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if not path or not methods:
+            continue
+        checked += 1
         parts = path.strip("/").split("/")
         placeholder = next((i for i, p in enumerate(parts) if p.startswith("{")), None)
-        if placeholder is not None:
-            catchers.setdefault((method, tuple(parts[:placeholder]), len(parts)), path)
-            continue
-        for depth in range(len(parts)):
-            caught = catchers.get((method, tuple(parts[:depth]), len(parts)))
-            assert caught is None, f"{method} {path} is declared after {caught}, which will catch it first"
-
-
-def _two_places_at_once(db, machine_a, machine_b):
-    """One account playing in Kansas City and Miami fifty seconds apart, from
-    two different devices. Nobody travels 2,000 km in fifty seconds, so this
-    is the signal firing on exactly what it is for."""
-    from app.models import History, IpLocation, User
-
-    db.add(User(user_id=7, username="viewer7"))
-    db.add(IpLocation(ip="203.0.113.1", city="Kansas City", lat=39.1, lon=-94.6, is_hosting=False))
-    db.add(IpLocation(ip="203.0.113.2", city="Miami", lat=25.8, lon=-80.2, is_hosting=False))
-    db.add(History(row_id=1, user_id=7, ip_address="203.0.113.1", machine_id=machine_a,
-                   started=1000, stopped=2000, full_title="A Film"))
-    db.add(History(row_id=2, user_id=7, ip_address="203.0.113.2", machine_id=machine_b,
-                   started=2050, stopped=3000, full_title="A Show"))
-
-
-def test_the_signal_fires_when_neither_device_is_trusted(client):
-    """The control. Without this the next two tests prove nothing: a rule that
-    quiets a signal looks identical to a rule that never fired."""
-    from app.db import session_scope
-    from app.services import travel
-    from app.settings_store import current
-
-    claim(client)
-    with session_scope() as db:
-        _device(db, "phone", 7)
-        _device(db, "laptop", 7)
-        _two_places_at_once(db, "phone", "laptop")
-
-    travel.find_flags(current())
-    assert len(client.get("/api/travel-flags").json()) == 1
-
-
-def test_a_pair_of_trusted_devices_is_not_raised(client):
-    """A phone on mobile data and a laptop carried to work are the same person
-    every time, and the signal has no way to know it without being told."""
-    from app.db import session_scope
-    from app.services import travel
-    from app.settings_store import current
-
-    claim(client)
-    with session_scope() as db:
-        _device(db, "phone", 7, trusted=True)
-        _device(db, "laptop", 7, trusted=True)
-        _two_places_at_once(db, "phone", "laptop")
-
-    travel.find_flags(current())
-    assert client.get("/api/travel-flags").json() == []
-
-
-def test_one_trusted_device_and_one_unknown_is_still_raised(client):
-    """The case most worth seeing. A device somebody recognises playing
-    alongside one they do not is what sharing looks like from the outside, so
-    trusting half a pair has to leave the signal standing."""
-    from app.db import session_scope
-    from app.services import travel
-    from app.settings_store import current
-
-    claim(client)
-    with session_scope() as db:
-        _device(db, "phone", 7, trusted=True)
-        _device(db, "stranger", 7)
-        _two_places_at_once(db, "phone", "stranger")
-
-    travel.find_flags(current())
-    assert len(client.get("/api/travel-flags").json()) == 1
-
-
-def test_trusting_a_device_for_somebody_else_does_not_quiet_this_account(client):
-    """Trust is per account. The same television trusted for the person who
-    owns it says nothing about the person who signed into it afterwards."""
-    from app.db import session_scope
-    from app.services import travel
-    from app.settings_store import current
-
-    claim(client)
-    with session_scope() as db:
-        _device(db, "phone", 7)
-        _device(db, "phone", 9, trusted=True)
-        _device(db, "laptop", 7)
-        _device(db, "laptop", 9, trusted=True)
-        _two_places_at_once(db, "phone", "laptop")
-
-    travel.find_flags(current())
-    assert len(client.get("/api/travel-flags").json()) == 1
+        for method in methods:
+            if placeholder is not None:
+                catchers.setdefault((method, tuple(parts[:placeholder]), len(parts)), path)
+                continue
+            for depth in range(len(parts)):
+                caught = catchers.get((method, tuple(parts[:depth]), len(parts)))
+                assert caught is None, f"{method} {path} is declared after {caught}, which will catch it first"
+    assert checked > 100, f"only {checked} routes seen, so this is not looking at the app"

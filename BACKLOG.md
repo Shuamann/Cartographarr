@@ -315,13 +315,10 @@ and fetches only the days that are short, one request per day rather than a
 walk through four years. Run against this install: 2,000 days compared, 19,046
 plays on each side, nothing missing and nothing counted twice.
 
-What is left:
-
-- A button rather than a task. Switching the source to Plex should offer the
-  check there and then, and say that older history comes from Tautulli, rather
-  than leaving somebody to find the task on their own.
-- The report is a task message. The days that are short deserve a screen when
-  there are any; there is nothing to show while the answer is nothing.
+It is a button as well as a task, in Settings under the source choice, and it
+answers where you are standing rather than starting a job and leaving you to
+go and find the result. Where days are short it names them and offers to fetch
+exactly those.
 
 ### Checking the handover actually worked
 

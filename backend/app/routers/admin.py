@@ -448,3 +448,48 @@ async def run_task(key: str, admin: AdminUser) -> dict:
     asyncio.get_running_loop().create_task(tasks.run(key, trigger="manual"))
     audit.record(admin, "task.run", f"Ran {tasks.TASKS[key].name} by hand", target=key)
     return {"started": True}
+
+
+@router.get("/handover/check")
+async def history_check(_: AdminUser) -> dict:
+    """Day by day, what Tautulli recorded against what is here.
+
+    Answered now rather than started in the background, because it is one
+    request to Tautulli and a count, under a second on a four year library,
+    and a question somebody asked deserves an answer rather than a spinner.
+    """
+    from app.services import handover
+    from app.settings_store import tautulli_configured
+
+    if not tautulli_configured():
+        return {"asked": False, "reason": "Tautulli is not connected, so there is nothing to compare against"}
+    client = TautulliClient(current())
+    try:
+        return await handover.compare(client)
+    finally:
+        await client.aclose()
+
+
+@router.post("/handover/fill")
+async def history_fill(admin: AdminUser) -> dict:
+    """Fetch the days that are short, and nothing else."""
+    from app.services import handover
+    from app.settings_store import tautulli_configured
+
+    if not tautulli_configured():
+        raise HTTPException(400, "Tautulli is not connected")
+    client = TautulliClient(current())
+    try:
+        found = await handover.compare(client)
+        if not found.get("asked"):
+            raise HTTPException(502, found.get("reason") or "Tautulli did not answer")
+        filled = await handover.fill(client, found)
+    finally:
+        await client.aclose()
+    if filled["filled"]:
+        audit.record(
+            admin, "history.fill",
+            f"Fetched {filled['filled']} plays across {filled['days']} days Tautulli had and this did not",
+            detail=filled,
+        )
+    return {**filled, "missing_before": found["missing"]}

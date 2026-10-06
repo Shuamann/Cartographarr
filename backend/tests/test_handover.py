@@ -159,3 +159,34 @@ def test_it_is_a_task_so_it_runs_and_can_be_seen(client):
 
     assert "history_check" in tasks.TASKS
     assert tasks.TASKS["history_check"].name == "Check nothing is missing"
+
+
+def test_the_check_answers_now_rather_than_starting_a_job(client, monkeypatch):
+    """One request to Tautulli and a count, under a second on a four year
+    library. A question somebody asked deserves an answer rather than a
+    spinner and a task page to go and find."""
+    from app.routers import admin
+
+    claim(client)
+    monkeypatch.setattr(admin, "TautulliClient", lambda settings: FakeTautulli({"2026-03-01": 0}))
+    answer = client.get("/api/handover/check").json()
+    assert answer["asked"] is True and answer["missing"] == 0
+
+
+def test_without_tautulli_it_says_so_rather_than_failing(client, monkeypatch):
+    """There is nothing to compare against, which is a plain answer and not an
+    error worth colouring red."""
+    from tests.test_setup_plex import no_tautulli
+
+    claim(client)
+    no_tautulli(monkeypatch)
+    answer = client.get("/api/handover/check").json()
+    assert answer["asked"] is False and "Tautulli" in answer["reason"]
+
+
+def test_filling_without_tautulli_is_refused(client, monkeypatch):
+    from tests.test_setup_plex import no_tautulli
+
+    claim(client)
+    no_tautulli(monkeypatch)
+    assert client.post("/api/handover/fill").status_code == 400

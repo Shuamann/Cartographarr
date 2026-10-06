@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.98.0 - 2026-10-06
+
+### Added
+- The check that nothing is missing is a button in Settings, under the source choice, as well as a nightly task.
+  It answers where you are standing rather than starting a job and leaving you to find the result: on a four year
+  library it comes back in under a second with the count on each side. Where days are short it names them and
+  offers to fetch exactly those.
+
+### Fixed
+- The guard against a route being swallowed by one with a placeholder in it was checking nothing. It walked the
+  app's routes, which hold a wrapper per included router rather than the routes themselves, so it passed with the
+  bug it was written for deliberately put back. It now flattens them, counts what it saw, and fails on that bug.
+  The fault it missed was real: one router's /history/check was being caught by another's /history/{row_id}.
+
 ## 0.97.0 - 2026-10-06
 
 ### Added
