@@ -3870,52 +3870,135 @@ label.locked .pill {
 .issue-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 16px;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
-.issue-row {
+/* The two filters side by side, the same height as everything else, and
+   wrapping under each other rather than squeezing on a phone. */
+.issue-filters {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-2);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+}
+.issue-filters .segmented {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-.issue-row:hover,
-.issue-row.on {
-  border-color: var(--accent);
-}
-
-.issue-title {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
+/* Stalling is the evidence most reports are really about, so it is the one
+   value on a row that is coloured. */
+.issue-stalled {
+  color: var(--warn);
 }
 
 .issue-card {
-  margin: 4px 0 14px;
-  padding: 0 12px;
+  margin: var(--space-1) 0 var(--space-4);
+  padding: 0 var(--space-3);
   border-left: 2px solid var(--accent);
 }
 
-.issue-play {
+/* What was said, oldest first, as a short conversation. */
+.issue-thread {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 4px 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.issue-note {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.issue-note-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.issue-note p {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
 }
 
-.issue-play.mine {
+/* A line of controls: an input that takes the room, and buttons at their own
+   width. Inputs and selects are full width with a margin above by default,
+   which beside a button is a staircase. */
+.issue-reply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.issue-reply input {
+  flex: 1 1 16rem;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+/* An input is taller than a button by default: its minimum is the control
+   height, and its padding and line height come to more than that. Beside a
+   button that is the staircase every control is meant to avoid, so here it
+   is held to the same height. */
+.issue-reply input,
+.raise input {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Plays, one to a line. A phone scrolls the table sideways rather than
+   breaking a date or a device name over two lines. */
+.issue-plays-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--space-3);
+}
+.issue-plays {
+  border-collapse: collapse;
+  font-size: var(--text);
+}
+.issue-plays th {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.issue-plays td {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+}
+.issue-plays tr.mine td {
   font-weight: 600;
+}
+/* What a viewer is told is already known about the file: titles only, since
+   the fixes are for whoever runs the server. */
+.issue-known {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
+/* The facts in an opened report are label and value cells, which the
+   narrow-screen rule for .spec does not expect: it sizes a first column to its
+   contents, and a whole cell at its one-line width runs off a phone. One
+   column, and the values wrap, until there is room for two. */
+@media (max-width: 900px) {
+  .issue-card .spec {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The device is the one value long enough to need cutting, and its start is
+   the part that says which one it was. */
+.issue-plays-device {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stream-times {

@@ -22,6 +22,33 @@ copy on GitHub to say what an update brings.
   answers and what it means. It also keeps a library of thirty thousand files from storing tens of megabytes of
   falses. The four fields that were always there are still always there, so nothing reading them has to change.
 
+## 0.89.0 - 2026-10-06
+
+### Changed
+- Issues, rebuilt around the question behind most reports: is it the file, or is it them? Each row puts the
+  reporter's plays beside everybody else's, so somebody who stalled three times while two other people played it
+  cleanly reads differently, at a glance, from a file that stalls for everyone.
+- Resolving and reopening are on the row. Nothing asks first, because either one is undone with one click. A note
+  typed in an opened report goes with the resolution, so saying what was done and closing it is one click too.
+- A long title keeps its season and episode. Rows clipped "The Show - Episode" from the end, which could cut off
+  the numbers that say which episode is being reported. They now shorten the way the stream tiles do: the
+  episode's own name first, and the numbers never.
+- An opened report reads as facts rather than a paragraph: the device, the network, how it played, how often it
+  stalled and how much was watched, then the conversation, then every play of the file one to a line.
+- Somebody who is not an admin sees their own reports, how their own plays went, and what is already known about
+  the file, without the buttons that only an admin can use.
+- The filters are buttons rather than a list to open, and every control on the page is one height. The kind of
+  problem is chosen the same way when reporting one.
+
+### Fixed
+- A viewer opening their own report was sent where the file is kept on the server, which they are not meant to
+  see. They are still told whether it is there.
+- A report on a film Plex no longer has said so until its row was looked at, then stopped. Drawing the artwork
+  asks Plex about the key, which leaves an empty placeholder row behind, and that row was being read as the film
+  being back.
+- In an opened report on a phone, the facts ran off the right edge of the screen.
+
+
 ## 0.88.0 - 2026-10-06
 
 ### Added

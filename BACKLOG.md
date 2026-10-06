@@ -361,23 +361,16 @@ holds.
 
 ### The screen
 
-Seerr's issue list is the reference for how it should look, and the bar to
-clear on how it reads. Cleaner than Seerr, usable by somebody who is not an
-admin, and carrying more than Seerr can: this app knows the file the issue is
-about, the plays behind it, what went wrong during those plays, whether the
-file is still on the disk and who else watched it.
+Done in 0.89.0, against Seerr's list as the reference. A row carries the
+artwork, the title with its episode number kept whatever gives way, the one
+thing that is wrong, and the reporter's plays beside everybody else's, which
+answers whether it is the file or the person before anything is opened. An
+admin resolves from the row. A viewer sees their own reports and their own
+plays, and is told whether the file is there without being told where.
 
-What that means in practice:
-
-- A row says what it is about before a word is read: the artwork, the poster,
-  the title, and the one thing that is wrong.
-- The detail answers the question the report is really asking. Somebody
-  writing "it keeps buffering" wants the plays that buffered, the bitrate, the
-  transcode decision and whether the file is oversized. All of that is already
-  recorded against that file.
-- A viewer sees their own reports and a clear state. An admin sees everything
-  and closes it.
-- Fewer clicks than now. The common actions belong on the row.
+Left for later: a report that was resolved by replacing the file could say so
+on its row, since the replacements feature already knows when a new file
+landed.
 
 ### Importing from Seerr
 
@@ -402,6 +395,19 @@ Dashboard's lower half, Endpoints, Reports, Rules and Settings.
 ---
 
 ## Smaller things noticed and not done
+
+- **Inputs are taller than buttons.** An input's height is its padding and
+  line height, which comes to about seven pixels more than the control height
+  it is meant to share. Issues holds its own inputs to the control height;
+  everywhere else an input beside a button is a small staircase. Fixing it in
+  the base rule touches every form, Settings included, so it wants its own
+  pass and a look at each page.
+- **The narrow-screen rule for .spec expects bare labels and values.** Below
+  900 pixels it sizes the first column to its contents, which is right for a
+  label and wrong for a label and value cell: the cell takes its full one-line
+  width and runs off a phone. Issues overrides it. The stream detail uses the
+  same cells and probably has the same fault on a phone, which has not been
+  checked.
 
 - **The Map at phone width.** A few filter inputs are still under the size
   worth aiming a thumb at. The rest of the app was fixed; the map's own
