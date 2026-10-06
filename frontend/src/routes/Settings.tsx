@@ -27,11 +27,22 @@ const AREAS: Area[] = [
   {
     area: "Plex and Tautulli",
     group: "Connections",
-    blurb: "Required. Where the history, the live streams and the server details come from.",
+    blurb: "Plex for everything happening now. Tautulli for plays from before this app was watching.",
     sections: [
       {
-        title: "Tautulli",
-        note: "Everything except sharing goes through Tautulli.",
+        title: "Plex",
+        note: "A token lets this app talk to Plex directly, for live streams, the library, stopping streams and sharing. Find servers looks up the address and keeps it, which saves about twenty seconds on every connection.",
+        test: "plex",
+        keys: ["plex_token", "plex_url", "plex_machine_identifier"],
+      },
+      {
+        title: "Where the live data comes from",
+        note: "Plex answers faster and with more detail, and gives the address, device and account. Tautulli only has what it already recorded, so old history comes from it either way.",
+        keys: ["activity_source", "library_source"],
+      },
+      {
+        title: "Tautulli: bring in your history",
+        note: "Optional once Plex is connected. Plex keeps no record of where a play came from or how it went, so plays from before this app was watching exist only in Tautulli. History, the map, Endpoints and the list of users are still read from it for now, so they stay empty without it.",
         test: "tautulli",
         keys: [
           "tautulli_url",
@@ -40,17 +51,6 @@ const AREAS: Area[] = [
           "tautulli_verify_ssl",
           "tautulli_timeout",
         ],
-      },
-      {
-        title: "Plex",
-        note: "A token lets this app talk to Plex directly, for sharing, live streams and the library. Find servers looks up the address and keeps it, which saves about twenty seconds on every connection.",
-        test: "plex",
-        keys: ["plex_token", "plex_url", "plex_machine_identifier"],
-      },
-      {
-        title: "Where the live data comes from",
-        note: "Plex answers faster and with more detail, and gives the address, device and account. Tautulli only has what it already recorded, so old history comes from it either way.",
-        keys: ["activity_source", "library_source"],
       },
     ],
   },

@@ -180,6 +180,9 @@ export function useApi<T>(path: string | null, deps: unknown[] = []): Query<T> {
 export type SetupStatus = {
   configured: boolean;
   missing: string[];
+  // Which connections already work, whoever set them up.
+  plex?: boolean;
+  tautulli?: boolean;
   locked: string[];
   geoip_ready: boolean;
   clock?: { now: string; zone: string };

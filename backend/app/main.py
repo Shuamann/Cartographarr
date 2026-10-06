@@ -21,16 +21,40 @@ from app import redact, tasks
 from app.routers import admin, auth, branding, data, home, issues, library, live, monitoring, reports, sharing
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
-from app.settings_store import current, is_configured, missing_required
+from app.settings_store import current, is_configured, missing_required, tautulli_configured
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
 
 
-async def _cycle(full: bool = False) -> dict:
+# Plays, users and libraries are still read from Tautulli alone, so an install
+# connected to Plex directly skips these and says why, rather than failing
+# every few minutes against an address nobody gave it.
+NO_TAUTULLI = "Tautulli is not connected, and plays, users and libraries are read from it"
+
+
+def _tautulli_or_skip() -> None:
     # A fresh install has no credentials until someone completes setup.
     if not is_configured():
         raise tasks.Skipped("Not set up yet")
+    if not tautulli_configured():
+        raise tasks.Skipped(NO_TAUTULLI)
+
+
+def _client_for(source: str) -> TautulliClient | None:
+    """A Tautulli client when this source reads from Tautulli, and nothing when
+    it reads from Plex, which needs none."""
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
+    if source == "plex":
+        return None
+    if not tautulli_configured():
+        raise tasks.Skipped("The library source is Tautulli, which is not connected")
+    return TautulliClient(current())
+
+
+async def _cycle(full: bool = False) -> dict:
+    _tautulli_or_skip()
     settings = current()
     client = TautulliClient(settings)
     try:
@@ -80,8 +104,7 @@ async def _backup_cycle() -> dict | str:
 
 
 async def _slow_cycle() -> dict:
-    if not is_configured():
-        raise tasks.Skipped("Not set up yet")
+    _tautulli_or_skip()
     client = TautulliClient(current())
     try:
         return await sync_service.run_slow_sync(client)
@@ -110,25 +133,23 @@ tasks.register(tasks.Task(
 async def _library_scan() -> dict:
     from app.services import library_scan
 
-    if not is_configured():
-        raise tasks.Skipped("Not set up yet")
-    client = TautulliClient(current())
+    client = _client_for(current().library_source)
     try:
         return await library_scan.scan(client)
     finally:
-        await client.aclose()
+        if client is not None:
+            await client.aclose()
 
 
 async def _file_details() -> dict | str:
     from app.services import library_scan
 
-    if not is_configured():
-        raise tasks.Skipped("Not set up yet")
-    client = TautulliClient(current())
+    client = _client_for(current().library_source)
     try:
         result = await library_scan.read_details(client)
     finally:
-        await client.aclose()
+        if client is not None:
+            await client.aclose()
     return result if result["read"] else "all files read"
 
 

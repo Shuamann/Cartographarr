@@ -762,8 +762,8 @@ def _anything_queued() -> bool:
 async def _house_is_quiet() -> bool:
     """Whether to start another file now.
 
-    Asked of Tautulli rather than of this app's own records, because what
-    matters is whether somebody is watching at this moment. If Tautulli cannot
+    Asked of the live source rather than of this app's own records, because
+    what matters is whether somebody is watching at this moment. If it cannot
     be reached the answer is yes: a tidy that never runs because the thing it
     asks is down is worse than one that runs while somebody watches.
     """
@@ -773,17 +773,16 @@ async def _house_is_quiet() -> bool:
         return True
     if not is_configured():
         return True
-    from app.tautulli.client import TautulliClient
+    from app.routers.live import read_activity
 
-    client = TautulliClient(current())
+    # Asked of whichever source the live setting names, so an install with no
+    # Tautulli does not take every check as quiet.
     try:
-        data = await client.call("get_activity") or {}
+        data = await read_activity()
         return not (data.get("sessions") or [])
     except Exception:  # noqa: BLE001 - see the docstring
         log.debug("could not check for streams before tidying; carrying on")
         return True
-    finally:
-        await client.aclose()
 
 
 def _say(job_id: int, progress: int | None = None, detail: str | None = None) -> None:

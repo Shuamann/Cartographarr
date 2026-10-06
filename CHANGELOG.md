@@ -4,6 +4,37 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.92.0 - 2026-10-06
+
+### Changed
+- Plex is the recommended connection, and Tautulli is optional. First run asks one question before anything else,
+  connect to Plex directly or through Tautulli, and says what each brings. An install that answers Plex is never
+  shown a Tautulli field and reaches the app with no Tautulli at all.
+- Linking Plex needs no password. Setup shows a short code to enter at plex.tv/link, waits for Plex to confirm,
+  and keeps the token on the server; it never comes back to the page. Pasting a token still works for anybody who
+  has one. Finding the server is then done once and the address kept, since looking it up costs about twenty
+  seconds and connecting to a known address a fifth of one.
+- Settings calls Tautulli what it now is, the way to bring in your history, and lists Plex first.
+- An opened report holds only what its row has no room for: the conversation, the play it was reported from,
+  every play of the file one to a line, and the file itself in a few lines with what is known to be wrong with
+  it. Replacing the file and rewriting its tracks stay in the Library, one click away.
+
+### Fixed
+- With live activity set to Plex, Now playing still asked Tautulli, so it stayed empty without it while the rules
+  could see every stream. It reads from the same source as the rules now.
+- Without Tautulli, a ban or a rule could not stop anything: stopping a stream, and knowing the server has the
+  Plex Pass it needs, both went through Tautulli. Both come from Plex when Plex is the source.
+- Without Tautulli there was no artwork anywhere. Posters and backgrounds come from Plex's own resizer when
+  Tautulli is not connected, with the token sent as a header rather than in the address.
+- The library scan and the reading of file details each built a Tautulli client even when reading from Plex, and
+  the jobs that only Tautulli can do failed every few minutes on an install without it. They now say plainly
+  that Tautulli is not connected.
+- Comments read in from Seerr said "Someone" rather than who wrote them. Seerr does not always send the whole user
+  with a comment, and a sync with nothing new to read was replacing named comments with unnamed ones. Names are
+  now kept, filled in from the Plex users this app knows, and the first comment, which Seerr always makes the
+  reporter's, is signed by the reporter.
+- A film reported in Seerr read as "Special, episode 0", from the season and episode Seerr sends for a film.
+
 ## 0.90.0 - 2026-10-06
 
 ### Added
@@ -33,10 +64,8 @@ copy on GitHub to say what an update brings.
 - A long title keeps its season and episode. Rows clipped "The Show - Episode" from the end, which could cut off
   the numbers that say which episode is being reported. They now shorten the way the stream tiles do: the
   episode's own name first, and the numbers never.
-- An opened report holds only what the row has no room for: the conversation, the play it was reported from,
-  every play of the file one to a line, and the file itself in a few lines with what is known to be wrong with
-  it. Replacing the file and rewriting its tracks stay in the Library, one click away, rather than filling the
-  report.
+- An opened report reads as facts rather than a paragraph: the device, the network, how it played, how often it
+  stalled and how much was watched, then the conversation, then every play of the file one to a line.
 - Somebody who is not an admin sees their own reports, how their own plays went, and what is already known about
   the file, without the buttons that only an admin can use.
 - The filters are buttons rather than a list to open, and every control on the page is one height. The kind of
@@ -49,11 +78,6 @@ copy on GitHub to say what an update brings.
   asks Plex about the key, which leaves an empty placeholder row behind, and that row was being read as the film
   being back.
 - In an opened report on a phone, the facts ran off the right edge of the screen.
-- Comments read in from Seerr said "Someone" rather than who wrote them. Seerr does not always send the whole user
-  with a comment, and a sync with nothing new to read was replacing named comments with unnamed ones. Names are
-  now kept, filled in from the Plex users this app knows, and the first comment, which Seerr always makes the
-  reporter's, is signed by the reporter.
-- A film reported in Seerr read as "Special, episode 0", from the season and episode Seerr sends for a film.
 
 
 ## 0.88.0 - 2026-10-06
