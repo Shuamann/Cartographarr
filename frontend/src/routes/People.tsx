@@ -57,6 +57,41 @@ type AddressRow = {
 };
 type Sort = "last_seen" | "plays" | "name";
 
+/* A tick that says this device belongs to this account.
+ *
+ * It quiets one thing: a pair of plays is not raised as one account in two
+ * places when both ends are trusted devices of that account. A phone on
+ * mobile data and a laptop carried to work are the same person every time,
+ * and the signal has no way to know it without being told. Both ends, never
+ * one: a trusted device playing alongside one nobody recognises is the case
+ * most worth seeing.
+ */
+function TrustTick({
+  trusted,
+  onChange,
+  label,
+}: {
+  trusted: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      className={trusted ? "btn trust on" : "btn trust"}
+      aria-pressed={trusted}
+      title={
+        trusted
+          ? `${label} is trusted. Plays from here are not raised against another trusted device of the same account.`
+          : `Trust ${label}, so plays from here are not raised against another trusted device of the same account.`
+      }
+      onClick={() => onChange(!trusted)}
+    >
+      <span aria-hidden="true">{"\u2713"}</span>
+      {trusted ? "Trusted" : "Trust"}
+    </button>
+  );
+}
+
 export default function PeopleRoute({
   initial,
   onInitialUsed,
@@ -150,6 +185,7 @@ export default function PeopleRoute({
   }, [initial]);
 
   const nav = useNav();
+  const suggestions = useApi<{ machine_id: string }[]>(nav.isAdmin ? "/devices/trust-suggestions" : null);
   const liveUsers = useMemo(
     () => new Set((live.data?.sessions ?? []).map((s) => Number(s.user_id))),
     [live.data],
@@ -357,6 +393,36 @@ export default function PeopleRoute({
                 }}
               >
                 Mark all reviewed
+              </button>
+            )}
+            {/* The flag is set by hand and the tick is the final word, but the
+                data already says which devices are not in question: a long
+                history on one account and none on any other. Offering those
+                is the difference between a feature somebody uses and one
+                nobody has the afternoon for. */}
+            {nav.isAdmin && (suggestions.data?.length ?? 0) > 0 && (
+              <button
+                className="chip"
+                title="Trust the devices with a settled history on one account and no history on any other"
+                onClick={async () => {
+                  const n = suggestions.data?.length ?? 0;
+                  if (!(await askConfirm({
+                    title: `Trust ${n} device${n === 1 ? "" : "s"}?`,
+                    body:
+                      "Each has a long history on one account and none on any other. Trusting them stops a pair of"
+                      + " their plays being raised as one account in two places. Any of them can be untrusted again.",
+                    confirm: "Trust them",
+                  }))) return;
+                  try {
+                    await api.post("/devices/trust-suggested", {});
+                    devices.reload();
+                    suggestions.reload();
+                  } catch (err) {
+                    void tell("That did not work", (err as Error).message);
+                  }
+                }}
+              >
+                Trust {suggestions.data?.length} settled
               </button>
             )}
           </div>
@@ -724,6 +790,11 @@ function DeviceProfile({
               </span>
             )}
             {d.is_new_unreviewed && <span className="pill warn">new, not reviewed</span>}
+            {d.trusted && (
+              <span className="pill ok" title={d.trusted_by ? `Trusted by ${d.trusted_by}` : "Trusted"}>
+                trusted
+              </span>
+            )}
             {d.owners.length > 1 && <span className="pill warn">used by {d.owners.length} accounts</span>}
             <button className="idbtn" title="Copy the device id" onClick={copy}>
               <code className="small">{machineId}</code>
@@ -746,6 +817,19 @@ function DeviceProfile({
             <button className="btn" onClick={review}>
               Mark reviewed
             </button>
+          )}
+          {nav.isAdmin && (
+            <TrustTick
+              trusted={Boolean(d.trusted)}
+              label={label}
+              onChange={async (next) => {
+                await api
+                  .post(`/devices/${encodeURIComponent(machineId)}/trust?trusted=${next}`)
+                  .catch(() => {});
+                detail.reload();
+                onChanged();
+              }}
+            />
           )}
           {nav.blockDevice && !bans.ids.has(machineId) && (
             <button className="btn danger" onClick={() => nav.blockDevice?.(machineId, label)}>

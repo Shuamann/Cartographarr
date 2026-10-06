@@ -203,49 +203,34 @@ kind of thing noticed two years late.
 
 ---
 
-## Trusted devices, and quieter shared account signals
+## Trusting more than a device
 
-**What.** Mark a device as trusted, and untrust it again, from the device on
-the Endpoints screen: a green tick beside the ban control that goes grey when
-it is not trusted.
+Trusted devices shipped: a tick on the Endpoints screen beside the ban
+control, a suggestion for the devices with a settled history on one account
+and none on any other, and a pair test in the travel and concurrent checks so
+a signal is not raised when both ends are trusted devices of that account.
 
-**Why.** The shared account signal fires when one account plays from two
-places too far apart to be the same person. That is the right rule and it
-catches real sharing, but it also catches the ordinary life of a household: a
-phone on a mobile network, a laptop carried to work, a VPN whose exit moves
-between cities. Those are the same person, every time, and the signal has no
-way to know it.
+What was left open, and why.
 
-**The rule to apply.** Where both ends of a pair are trusted devices of that
-account, do not raise the signal. Two sides, not one: a trusted device paired
-with an unknown one is exactly the case worth seeing, because a device
-somebody recognises playing alongside one they do not is what sharing looks
-like.
+**Trusting an account, or an address.** An address is the more tempting of the
+two because a home address is stable and trusting it would quiet a whole
+household at once. It is also exactly what a shared password looks like from
+the outside, which is the thing the signal exists to find. Device first was
+the right order; whether an address ever earns the same treatment should wait
+until the device flag has been used for a while and the remaining noise can be
+looked at rather than guessed at.
 
-**What counts as trusted.** The intent is to trust the devices that clearly
-belong to an account, which the data already shows: a device with a long
-history on one account and no history on any other is not ambiguous. Worth
-offering an automatic suggestion from that, with the tick as the final word,
-rather than asking somebody to tick two hundred devices by hand.
+**Whether trust should go stale.** A device not seen for a year is not
+obviously still theirs. The date is recorded so this can be answered later
+without a migration, and nothing reads it yet.
 
-**Open questions.**
-
-- Trusting an account, or an address, as well as a device. An address is the
-  more tempting of the two, because a home address is stable and trusting it
-  would quiet a whole household at once, but it is also the thing a shared
-  password looks like from the outside. Probably device first, and see.
-- Whether trust should decay. A device not seen for a year is not obviously
-  still theirs.
-- Whether a trusted device should be exempt from anything else. Nothing else
-  suggests itself yet, which is an argument for keeping the flag simple and
-  letting a use case prove itself before the meaning is widened.
-
-**Where it touches.** The device model needs a flag and a note of who set it
-and when. The travel and concurrent checks need the pair test. Endpoints needs
-the control. The existing ignore patterns already answer a nearby question, so
-the two should be looked at together rather than built past each other.
+**Whether a trusted device should be exempt from anything else.** Nothing has
+suggested itself. The flag means one thing and says so in the model, which is
+worth keeping until a second use proves itself rather than widening the
+meaning on the strength of a hunch.
 
 ---
+
 
 ## Finishing the move to Plex
 

@@ -4735,6 +4735,21 @@ label.locked .pill {
   background: var(--accent);
   border-color: var(--accent);
 }
+/* The tick that vouches for a device. Grey until it is given, then the colour
+   the rest of the app uses for a thing that is as it should be. */
+.btn.trust span {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-3);
+}
+.btn.trust.on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.btn.trust.on span {
+  color: var(--ok);
+}
+
 /* A title that goes where it names. Inherits its size so a heading still
    reads as a heading, and the two halves of S01E06 sit together. */
 .title-link {

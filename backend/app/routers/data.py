@@ -1077,6 +1077,35 @@ def user_playback(user_id: int, db: Db, scope: ViewerScope, days: int = Query(90
     return playback_summary(db, days, user_id=user_id)
 
 
+@router.get("/devices/trust-suggestions")
+def trust_suggestions(admin: AdminUser) -> list:
+    """Devices with a real history on one account and none on any other.
+
+    Nobody is going to tick two hundred devices, and the data already says
+    which ones are not in question."""
+    from app.services import trust
+
+    return trust.suggestions()
+
+
+@router.post("/devices/trust-suggested")
+def trust_suggested(admin: AdminUser) -> dict:
+    """Trust every suggestion at once. The tick is still the final word: any
+    one of them can be untrusted afterwards."""
+    from app.services import trust
+
+    found = trust.suggestions()
+    for row in found:
+        trust.set_trusted(row["machine_id"], row["user_id"], True, admin.username)
+    if found:
+        audit.record(
+            admin, "device.trust_suggested",
+            f"Trusted {len(found)} device{'s' if len(found) != 1 else ''} with a settled history",
+            detail={"devices": len(found)},
+        )
+    return {"trusted": len(found)}
+
+
 @router.get("/devices/{machine_id}/playback")
 def device_playback(machine_id: str, db: Db, scope: ViewerScope, days: int = Query(90, ge=1, le=3650)) -> dict:
     from app.services.library import playback_summary
@@ -1163,6 +1192,10 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
         "first_seen": min((d.first_seen for d in rows if d.first_seen), default=None),
         "last_seen": max((d.last_seen for d in rows if d.last_seen), default=None),
         "is_new_unreviewed": any(d.is_new_unreviewed for d in rows),
+        # Every account on it, because trust is per account and a device two
+        # people use being trusted for one of them is not the same as trusted.
+        "trusted": all(d.trusted_at is not None for d in rows),
+        "trusted_by": next((d.trusted_by for d in rows if d.trusted_by), None),
         "owners": [
             {
                 "user_id": d.user_id,
@@ -1175,6 +1208,7 @@ def device_detail(machine_id: str, db: Db, scope: ViewerScope) -> dict:
                 "places": places.get(d.user_id, [])[:5],
                 "last_watched": last_titles.get(d.user_id),
                 "deleted_in_tautulli": deleted.get(d.user_id, False),
+                "trusted": d.trusted_at is not None,
             }
             for d in rows
         ],
@@ -1666,6 +1700,31 @@ def review_device(machine_id: str, admin: AdminUser, reviewed: bool = True) -> d
         detail={"player": label, "user_id": owner},
     )
     return {"machine_id": machine_id, "is_new_unreviewed": not reviewed}
+
+
+@router.post("/devices/{machine_id}/trust")
+def trust_device(machine_id: str, admin: AdminUser, trusted: bool = True, user_id: int | None = None) -> dict:
+    """Say that this device belongs to this account, or take it back.
+
+    Admin only, and for one reason: it quiets a signal. A viewer vouching for
+    their own device would be marking their own homework.
+    """
+    from app.services import trust
+
+    changed = trust.set_trusted(machine_id, user_id, trusted, admin.username)
+    if not changed:
+        raise HTTPException(404, "No such device")
+    with session_scope() as db:
+        device = db.execute(select(Device).where(Device.machine_id == machine_id).limit(1)).scalar_one_or_none()
+        label = (device.player if device else None) or machine_id[:12]
+    audit.record(
+        admin,
+        "device.trust" if trusted else "device.untrust",
+        f"Trusted {label}" if trusted else f"Stopped trusting {label}",
+        target=machine_id,
+        detail={"player": label, "user_id": user_id},
+    )
+    return {"machine_id": machine_id, "trusted": trusted, "devices": changed}
 
 
 @router.get("/libraries")

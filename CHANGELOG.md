@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.94.0 - 2026-10-06
+
+### Added
+- Devices can be trusted. A green tick on the Endpoints screen, beside the ban control, says this device belongs
+  to this account.
+- Trusting quiets one thing: a pair of plays is not raised as one account in two places when the device at each
+  end is a trusted device of that account. A phone on mobile data, a laptop carried to work, a VPN whose exit
+  moves between cities are the ordinary life of a household, and the signal had no way to tell them from sharing.
+- Both ends, never one. A trusted device playing alongside one nobody recognises is the case most worth seeing,
+  so trusting half a pair leaves the signal standing. There is a test for each of those three, and a fourth that
+  the signal still fires when neither device is trusted, since a rule that quiets a signal looks exactly like a
+  rule that never fired.
+- Nobody is going to tick two hundred devices, so the ones with a settled history on one account and none on any
+  other can be trusted in one go. On a real library that offered 82 of 234. The tick stays the final word: any of
+  them can be untrusted afterwards.
+- Trust is per account, because a device is one row per account that has used it. A shared television trusted for
+  the person who owns it says nothing about the person who signed into it afterwards.
+
 ## 0.93.0 - 2026-10-06
 
 ### Fixed
