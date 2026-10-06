@@ -2,9 +2,11 @@
 
 Two stages, each its own background task:
 
-1. **Scan** lists every movie and episode through Tautulli's media info
-   (a page per movie library, a request per show and per season), with
-   bitrate, resolution, codecs, container and size. A few hundred quick
+1. **Scan** lists every movie and episode, from Tautulli's media info (a
+   page per movie library, a request per show and per season) or from Plex
+   directly, as the library source setting says, with bitrate, resolution,
+   codecs, container and size. Plex adds the file path and the IMDb, TMDB
+   and TVDB ids. A few hundred quick
    requests cover tens of thousands of files, so Problem files and 4K copies
    are complete within a minute. A file whose size changed is marked to be
    read again, and anything no longer in Plex drops out of the lists.
@@ -93,8 +95,29 @@ async def _pages(client, **params) -> list[dict[str, Any]]:
 
 
 async def scan(client) -> dict[str, Any]:
-    """List every movie and episode. Returns counts."""
+    """List every movie and episode. Returns counts.
+
+    Either source answers in the same rows, so storing them, the size history
+    and everything that reads media_items do not know which one was asked.
+    Plex also gives the file path and the external ids in the same pass.
+    """
+    from app.settings_store import current
+
     started = datetime.now(UTC)
+    if current().library_source == "plex":
+        from app.plex import library as plex_library
+
+        rows = await asyncio.to_thread(plex_library.read)
+    else:
+        rows = await _tautulli_rows(client)
+    counts = await asyncio.to_thread(_store, rows, started)
+    await asyncio.to_thread(_record_sizes, started)
+    return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
+            "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+
+
+async def _tautulli_rows(client) -> list[dict[str, Any]]:
+    """A page per movie library, a request per show and per season."""
     libraries = await client.call("get_libraries") or []
     semaphore = asyncio.Semaphore(CONCURRENCY)
     rows: list[dict[str, Any]] = []
@@ -131,11 +154,7 @@ async def scan(client) -> dict[str, Any]:
 
             for found in await asyncio.gather(*(one_show(s) for s in shows)):
                 rows.extend(found)
-
-    counts = await asyncio.to_thread(_store, rows, started)
-    await asyncio.to_thread(_record_sizes, started)
-    return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
-            "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+    return rows
 
 
 def _record_sizes(started: datetime) -> None:
