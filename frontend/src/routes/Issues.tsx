@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Loading from "../components/Loading";
 import { api, useApi } from "../lib/api";
-import { FileCardView, type FileDetail } from "./Library";
+import { FileCardView, type FileDetail, size } from "./Library";
 import { useNav } from "../lib/nav";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
@@ -25,6 +25,7 @@ type IssueRow = {
   rating_key: number | null;
   season: number | null;
   episode: number | null;
+  year: number | null;
   reporter_name: string | null;
   reporter_user_id: number | null;
   comments: number;
@@ -69,6 +70,10 @@ type IssueDetail = IssueRow & {
   plays: Play[];
   streams: { platform: string | null; cause: string | null; buffers: number | null; started_at: string | null; user_name: string | null }[];
   other_reports?: IssueRow[];
+  // Whether the file is on the disk now, which the library's own row cannot
+  // say: it records where the file was at the last scan.
+  whereis?: { state: "present" | "gone" | "unreachable" | "unknown"; path: string | null; size: number | null; changed?: boolean };
+  found_under?: number | null;
 };
 
 type Listing = {
@@ -168,15 +173,61 @@ export default function Issues() {
       <div className="issue-list">
         {d.items.map((i) => (
           <div key={i.id}>
-            <button className={open === i.id ? "issue-row on" : "issue-row"} onClick={() => setOpen(open === i.id ? null : i.id)}>
-              <span className={i.status === "open" ? "pill warn" : "pill ok"}>{i.status}</span>
-              <span className="pill">{TYPES[i.issue_type]}</span>
-              <span className="issue-title clip">
-                <strong>{i.title ?? (i.rating_key ? `Item ${i.rating_key}` : "No longer in the library")}</strong>
-                <span className="muted small clip">{i.message}</span>
+            <button
+              className={open === i.id ? "media-row on" : "media-row"}
+              onClick={() => setOpen(open === i.id ? null : i.id)}
+            >
+              {i.rating_key ? (
+                <span
+                  className="media-row-art"
+                  aria-hidden="true"
+                  style={{ backgroundImage: `url(/api/media/${i.rating_key}/image?kind=art&width=900&height=506)` }}
+                />
+              ) : null}
+              {i.rating_key ? (
+                <img
+                  className="media-row-poster"
+                  src={`/api/media/${i.rating_key}/image?width=92&height=138`}
+                  alt=""
+                  loading="lazy"
+                  onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+                />
+              ) : (
+                <span className="media-row-poster" />
+              )}
+
+              <span className="media-row-what">
+                {i.year ? <span className="media-row-year">{i.year}</span> : null}
+                <span className="media-row-title">
+                  {i.title ?? (i.rating_key ? `Item ${i.rating_key}` : "No longer in the library")}
+                </span>
+                {i.message ? <span className="media-row-note">{i.message}</span> : null}
+                {i.season != null && (
+                  <span className="row wrap" style={{ gap: "6px", marginTop: "4px" }}>
+                    <span className="pill">Season {i.season}</span>
+                    {i.episode != null && <span className="pill">Episode {i.episode}</span>}
+                  </span>
+                )}
               </span>
-              <span className="muted small">{i.reporter_name ?? "Someone"}</span>
-              <span className="muted small">{when(i.created_at)}</span>
+
+              <dl className="media-row-facts">
+                <dt>Status</dt>
+                <dd>
+                  <span className={i.status === "open" ? "pill warn" : "pill ok"}>{i.status}</span>
+                </dd>
+                <dt>Type</dt>
+                <dd>{TYPES[i.issue_type]}</dd>
+                <dt>Opened</dt>
+                <dd>
+                  {when(i.created_at)} by {i.reporter_name ?? "someone"}
+                </dd>
+              </dl>
+
+              <span className="media-row-do">
+                <span className={open === i.id ? "btn" : "btn primary"}>
+                  {open === i.id ? "Hide" : "View issue"}
+                </span>
+              </span>
             </button>
             {open === i.id && (
               <IssueCard id={i.id} seerrUrl={d.seerr_url} mineOnly={d.mine_only} onChanged={data.reload} />
@@ -332,12 +383,36 @@ function IssueCard({
 
       <section className="card-section">
         <h3>The file</h3>
+        {/* Whether it is on the disk now, which is a different question from
+            whether the library has a row for it. They disagree exactly when
+            something has been deleted, moved or unmounted. */}
+        {d.whereis && d.whereis.state !== "unknown" && (
+          <p className={d.whereis.state === "gone" ? "note bad-note" : "note"} role={d.whereis.state === "gone" ? "alert" : undefined}>
+            {d.whereis.state === "present" && (
+              <>
+                The file is on the disk{d.whereis.size ? `, ${size(d.whereis.size)}` : ""}.
+                {d.whereis.changed ? " It is a different size from the last scan, so it has been replaced since." : ""}
+              </>
+            )}
+            {d.whereis.state === "gone" && (
+              <>The library has a record of this file and it is not on the disk. It has been deleted or moved.</>
+            )}
+            {d.whereis.state === "unreachable" && (
+              <>
+                This container cannot reach where the file is kept, so whether it is still there cannot be checked.
+                Mount it, or set the path map, under Settings, Library.
+              </>
+            )}
+            {d.whereis.path ? <span className="muted small file-path"> {d.whereis.path}</span> : null}
+          </p>
+        )}
         {d.file ? (
           <FileCardView f={d.file} days={365} />
         ) : (
           <p className="muted small">
-            This server has no file for the reported item{d.rating_key ? ` (${d.rating_key})` : ""}. It may have been
-            removed, or the report names something never added.
+            {d.found_under
+              ? `Nothing in the library under the reported key${d.rating_key ? ` (${d.rating_key})` : ""}, but the same title is here under ${d.found_under}, so Plex has renumbered it since the report.`
+              : `This server has no file for the reported item${d.rating_key ? ` (${d.rating_key})` : ""}. It may have been removed, or the report names something never added.`}
           </p>
         )}
       </section>

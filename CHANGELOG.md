@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.81.0 - 2026-10-05
+
+### Added
+- An issue says whether the file is still on the disk. The library's own row only records where the file was at the
+  last scan, so it cannot answer this; the two disagree exactly when something has been deleted, moved or
+  unmounted, which is the case worth knowing about. A path this container cannot reach is said differently from a
+  file that has gone: one is a mount to fix, the other is a file to replace. A file that has changed size since the
+  scan says so, because that is somebody having replaced it.
+- A report whose key the library has no row for is matched by its id instead, so it names the title and says Plex
+  has renumbered it rather than reading as "Item 87676".
+
+### Changed
+- Issues are rows about a title rather than boxes of text: the artwork bleeds across the row behind a scrim, with
+  the poster, the year, the title, what was said, the facts as label and value, and one clear action. The first
+  piece of a house style for every list that is about something with a picture.
+
 ## 0.80.0 - 2026-10-05
 
 ### Added

@@ -56,8 +56,11 @@ def _comments(issue: Issue) -> list[dict[str, Any]]:
         return []
 
 
-def _brief(issue: Issue, names: dict[int, str]) -> dict[str, Any]:
+def _brief(issue: Issue, names: dict[int, str], years: dict[int, int] | None = None) -> dict[str, Any]:
     return {
+        # The year a row shows above its title, read from the library rather
+        # than from the report, which never carried one.
+        "year": (years or {}).get(issue.rating_key or -1),
         "id": issue.id,
         "seerr_id": issue.seerr_id,
         "source": issue.source,
@@ -98,6 +101,12 @@ def list_issues(
             u.user_id: u.friendly_name or u.username
             for u in db.execute(select(User).where(User.user_id.in_([i.reporter_user_id for i in issues if i.reporter_user_id]))).scalars()
         }
+        keys = [i.rating_key for i in issues if i.rating_key]
+        years = dict(
+            db.execute(
+                select(MediaItem.rating_key, MediaItem.year).where(MediaItem.rating_key.in_(keys))
+            ).all()
+        ) if keys else {}
         totals = select(Issue.status, func.count()).group_by(Issue.status)
         kinds = select(Issue.issue_type, func.count()).where(Issue.status == "open").group_by(Issue.issue_type)
         if mine is not None:
@@ -106,7 +115,7 @@ def list_issues(
         counts = dict(db.execute(totals).all())
         by_type = dict(db.execute(kinds).all())
         return {
-            "items": [_brief(i, names) for i in issues],
+            "items": [_brief(i, names, years) for i in issues],
             "open": counts.get("open", 0),
             "resolved": counts.get("resolved", 0),
             "by_type": by_type,
@@ -188,7 +197,16 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
             return {**data, "file": None, "plays": [], "streams": [], "other_reports": []}
         data["plays"] = [{**p, "user_name": names.get(p["user_id"] or -1)} for p in _plays(db, key, issue.reporter_user_id)]
         item = db.get(MediaItem, key)
+        if item is None and issue.tmdb_id:
+            # Plex renumbers things. The report remembers the old key; the id
+            # finds the same title under the new one.
+            item = db.execute(
+                select(MediaItem).where(MediaItem.tmdb_id == str(issue.tmdb_id)).limit(1)
+            ).scalar_one_or_none()
+            if item is not None:
+                data["found_under"] = item.rating_key
         data["file_title"] = (item.full_title or item.title) if item else None
+        data["whereis"] = _whereis(item)
         # What live recording saw while this file played: why it transcoded,
         # and whether it stalled.
         data["streams"] = [
@@ -207,6 +225,46 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
         ]
     data["file"] = _file_payload(key, days)
     return data
+
+
+def _whereis(item: MediaItem | None) -> dict[str, Any]:
+    """Whether the file is actually on the disk.
+
+    A row in the library is a record that the file was there at the last scan.
+    This looks. The two disagree exactly when something has been deleted,
+    moved or unmounted, which is the case worth telling somebody about and the
+    one the page could not answer at all.
+
+    A path this container cannot reach is not the same as a file that is gone,
+    so the two are said differently: one is a mount to fix, the other is a
+    file to replace.
+    """
+    import os
+
+    if item is None or not item.file_path:
+        return {"state": "unknown", "path": None, "size": None}
+
+    from app.services import mediafix
+
+    here = mediafix.local_path(item.file_path)
+    if here is None:
+        return {
+            "state": "unreachable",
+            "path": item.file_path,
+            "size": item.file_size,
+        }
+    try:
+        size = os.path.getsize(here)
+    except OSError:
+        return {"state": "gone", "path": item.file_path, "size": item.file_size}
+    return {
+        "state": "present",
+        "path": item.file_path,
+        "size": size,
+        # The scan's figure against what is on the disk now. A file that has
+        # changed size since is a file somebody replaced.
+        "changed": bool(item.file_size and abs(size - item.file_size) > 1024),
+    }
 
 
 TYPES = ("video", "audio", "subtitles", "other")
