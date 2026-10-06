@@ -327,23 +327,28 @@ exactly those.
 
 ### Checking the handover actually worked
 
-Switching the source is the one change in this app where everything can look
-normal and be wrong. The rows keep arriving, the pages keep drawing, and a
-field that is quietly missing shows as a blank rather than an error.
+Done, as "Compare the two sources" beside the other check in Settings. It asks
+both sources about the same twenty five files and compares sixteen fields on
+each, and about whatever is playing and compares fourteen fields on each
+stream, naming the fields that disagree and the fields one source leaves empty
+rather than returning a score. Empty and wrong are reported apart, because a
+field Plex does not fill is something to fetch and a field with the wrong
+value in it is actively lying.
 
-So the switch needs something that says, in one place, whether the two sources
-agree:
+Run against this install: 25 files, 16 fields each, no disagreements and
+nothing empty on either side.
 
-- Over the same recent window, the plays, the people and the devices each
-  source reports, side by side.
-- Which fields come back empty from the new source and did not from the old
-  one, named rather than counted.
-- A sample play looked up in both, field by field, because a number matching
-  in total says nothing about whether the right value landed in the right
-  column.
+It would have caught the transcode decision, and there is a test that says so
+by feeding it that exact case: a session one source called a copy and the
+other called a transcode.
 
-This is the test that would have caught the transcode decision mismatch, and
-it is cheap: both sources are already readable through one shape.
+What is left is a judgement rather than work: the file sample is twenty five
+because each one is a request to Tautulli, which has no batch form. That is
+enough to find a field that is wrong everywhere, which is what this is for,
+and not enough to find the one item in ten thousand that differs. If that ever
+matters, the sample is one number.
+
+---
 
 ## Issues as the system of record, and the screen for it
 

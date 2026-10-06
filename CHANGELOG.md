@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.100.0 - 2026-10-06
+
+### Added
+- "Compare the two sources", beside the check that nothing is missing. It asks Plex and Tautulli about the same
+  twenty five files and compares sixteen fields on each, and about whatever is playing and compares fourteen
+  fields on each stream. Counting is not enough: a total agreeing says nothing about whether the right value
+  reached the right column, which is how the transcode decision nearly went wrong, with both sources reporting the
+  same stream and calling it different things.
+- Fields that disagree and fields one source leaves empty are reported apart. A field Plex does not fill is
+  something to go and fetch; a field with the wrong value in it is actively lying, and they are not the same
+  problem.
+- Nothing playing is said plainly rather than reported as agreement, because the second one would be believed.
+
+### Changed
+- The two checks stand on their own without a line of prose beside them, like the rest of Settings.
+
 ## 0.99.2 - 2026-10-06
 
 ### Changed

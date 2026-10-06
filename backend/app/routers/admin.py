@@ -470,6 +470,28 @@ async def history_check(_: AdminUser) -> dict:
         await client.aclose()
 
 
+@router.get("/handover/agreement")
+async def handover_agreement(_: AdminUser) -> dict:
+    """Ask both sources about the same things and compare them field by field.
+
+    Counting is not enough. A total agreeing says nothing about whether the
+    right value reached the right column, which is how the transcode decision
+    nearly went wrong: both sources reported the stream and they called it
+    different things.
+    """
+    from app.plex.server import configured as plex_configured
+    from app.services import agreement
+    from app.settings_store import tautulli_configured
+
+    if not tautulli_configured() or not plex_configured():
+        return {"asked": False, "reason": "Both Plex and Tautulli have to be connected to compare them"}
+    client = TautulliClient(current())
+    try:
+        return {"asked": True, "files": await agreement.files(client), "streams": await agreement.streams(client)}
+    finally:
+        await client.aclose()
+
+
 @router.post("/handover/fill")
 async def history_fill(admin: AdminUser) -> dict:
     """Fetch the days that are short, and nothing else."""

@@ -1863,6 +1863,71 @@ function ServerTime() {
  * thousand days, so this asks and waits rather than starting a job and
  * leaving somebody to go and find the answer.
  */
+/* Whether the two sources say the same thing about the same things.
+ *
+ * Counting is not enough. A total agreeing says nothing about whether the
+ * right value reached the right column, which is how the transcode decision
+ * nearly went wrong: both sources reported the stream and called it different
+ * things, and every rule anybody has written matches on that word.
+ */
+type Agreement = {
+  asked: boolean;
+  reason?: string | null;
+  files?: {
+    asked: boolean;
+    reason?: string | null;
+    compared?: number;
+    fields?: number;
+    differ_counts?: Record<string, number>;
+    empty_from_plex?: Record<string, number>;
+    empty_from_tautulli?: Record<string, number>;
+  };
+  streams?: { asked: boolean; reason?: string | null; compared?: number; differ_counts?: Record<string, number> };
+};
+
+function AgreementCheck() {
+  const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState<Agreement | null>(null);
+
+  async function run() {
+    setBusy(true);
+    try {
+      setFound(await api.get<Agreement>("/handover/agreement"));
+    } catch (err) {
+      setFound({ asked: false, reason: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const files = found?.files;
+  const names = (what?: Record<string, number>) => Object.keys(what ?? {});
+  const wrong = names(files?.differ_counts);
+  const missingHere = names(files?.empty_from_plex);
+
+  return (
+    <>
+      <button type="button" className="btn" onClick={run} disabled={busy}>
+        {busy ? "Comparing…" : "Compare the two sources"}
+      </button>
+      {found && !found.asked && <span className="muted small">{found.reason}</span>}
+      {found?.asked && files?.asked && (
+        <span className={wrong.length || missingHere.length ? "small bad-text" : "muted small"}>
+          {wrong.length
+            ? `They disagree on ${wrong.join(", ")}.`
+            : missingHere.length
+              ? `Plex leaves ${missingHere.join(", ")} empty where Tautulli does not.`
+              : `${files.compared} files agree on all ${files.fields} fields${
+                  found.streams?.asked
+                    ? `, and so do the ${found.streams.compared} streams playing now.`
+                    : ". Nothing is playing, so no streams could be compared."
+                }`}
+        </span>
+      )}
+    </>
+  );
+}
+
 type HandoverCheck = {
   asked: boolean;
   reason?: string | null;
@@ -1915,15 +1980,11 @@ function HistoryCheck() {
         <button type="button" className="btn" onClick={check} disabled={busy}>
           {busy ? "Counting…" : "Check nothing is missing"}
         </button>
+        <AgreementCheck />
         {short > 0 && (
           <button type="button" className="btn" onClick={fill} disabled={busy}>
             Fetch {found?.missing_day_count} day{found?.missing_day_count === 1 ? "" : "s"}
           </button>
-        )}
-        {!found && !failed && (
-          <span className="muted small">
-            Counts what Tautulli recorded against what is here, day by day.
-          </span>
         )}
       </div>
       {failed && <p className="note bad-note" role="alert">{failed}</p>}
