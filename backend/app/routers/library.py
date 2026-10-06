@@ -169,10 +169,11 @@ async def _causes_from_history(row_ids: list[int]) -> list[dict]:
     from collections import Counter
 
     from app.services.streams import transcode_causes
-    from app.settings_store import is_configured
+    from app.settings_store import tautulli_configured
     from app.tautulli.client import TautulliClient
 
-    if not row_ids or not is_configured():
+    # The stream detail of a past play is only Tautulli's to give.
+    if not row_ids or not tautulli_configured():
         return []
     client = TautulliClient(current())
     counts: Counter = Counter()

@@ -564,3 +564,86 @@ def test_alerts_can_be_switched_off(client, monkeypatch):
     sent = fake_notifier(monkeypatch)
     client.post("/api/issues", json={"rating_key": 5, "message": "Quiet please"})
     assert sent == []
+
+
+def test_a_comment_from_seerr_is_signed_by_who_wrote_it(client, monkeypatch):
+    """Seerr's users are Plex logins, but a comment does not always carry the
+    whole user. One with only a Plex id is named from this app's users, one
+    with only a Seerr id is named from wherever else that person appeared, and
+    neither reads as "someone"."""
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    raw = issue(11)
+    raw["createdBy"] = {"id": 3, "displayName": "Watcher", "plexId": 7}
+    raw["comments"] = [
+        {"message": "Audio is out of sync", "user": {"plexId": 7}, "createdAt": "2026-09-16T10:00:00.000Z"},
+        {"message": "Still is", "user": 3, "createdAt": "2026-09-16T12:00:00.000Z"},
+    ]
+    fake_seerr(monkeypatch, [raw])
+    asyncio.run(service.sync())
+
+    row = client.get("/api/issues").json()["items"][0]
+    thread = client.get(f"/api/issues/{row['id']}").json()["comment_list"]
+    assert [c["author"] for c in thread] == ["Watcher", "Watcher"]
+
+
+def test_a_quiet_sync_does_not_unsay_a_name(client, monkeypatch):
+    """The issue is read in full when it changes and from Seerr's list the rest
+    of the time. The list can carry less, and a sync with nothing new to say
+    was replacing named comments with unnamed ones."""
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+
+    def full():
+        raw = issue(11)
+        raw["comments"].append({"message": "Replaced it", "user": {"displayName": "Keeper", "plexId": 1},
+                                "createdAt": "2026-09-16T12:00:00.000Z"})
+        return raw
+
+    fake_seerr(monkeypatch, [full()])
+    asyncio.run(service.sync())
+
+    thin = full()
+    for c in thin["comments"]:
+        c["user"] = {}
+    # Same updatedAt, so the list copy is the one stored this time.
+    fake_seerr(monkeypatch, [thin], details={11: thin})
+    asyncio.run(service.sync())
+
+    row = client.get("/api/issues").json()["items"][0]
+    thread = client.get(f"/api/issues/{row['id']}").json()["comment_list"]
+    assert [c["author"] for c in thread] == ["Watcher", "Keeper"]
+
+
+def test_an_unsigned_first_comment_is_the_reporters(client):
+    """Seerr opens every issue with the reporter's own message."""
+    import json
+
+    from app.db import session_scope
+    from app.models import Issue
+
+    claim(client)
+    with session_scope() as db:
+        db.add(Issue(source="seerr", seerr_id=40, issue_type="other", status="open", message="Bad copy",
+                     media_type="movie", reporter_name="Watcher", reporter_user_id=7,
+                     comments=json.dumps([{"message": "Bad copy", "author": None, "created_at": "2026-09-16T10:00:00"},
+                                          {"message": "Thanks", "author": None, "created_at": "2026-09-16T11:00:00"}])))
+    row = client.get("/api/issues").json()["items"][0]
+    thread = client.get(f"/api/issues/{row['id']}").json()["comment_list"]
+    assert thread[0]["author"] == "Watcher" and thread[1]["author"] is None
+
+
+def test_a_film_is_not_a_special(client, monkeypatch):
+    """Seerr sends season 0 and episode 0 for a film. Read as numbers, that is
+    "Special, episode 0" on a film."""
+    from app.services import issues as service
+
+    claim(client)
+    fake_seerr(monkeypatch, [issue(20, kind=4, rating_key=40, media_type="movie", season=0, episode=0)])
+    asyncio.run(service.sync())
+    row = client.get("/api/issues").json()["items"][0]
+    assert row["season"] is None and row["episode"] is None

@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from app.db import session_scope
 from app.models import AppUser, BannedDevice, Device, EnforcementLog, History, Rule, SyncState, TravelFlag, User
 from app.plays import plays
-from app.settings_store import current, is_configured
+from app.settings_store import current, tautulli_configured
 from app.tautulli.client import TautulliClient
 
 router = APIRouter()
@@ -48,7 +48,9 @@ async def _live() -> dict[str, Any]:
     if _live_cache["value"] is not None and now - _live_cache["at"] < LIVE_SECONDS:
         return _live_cache["value"]
     value = {"streams": 0, "transcodes": 0, "bandwidth_kbps": 0, "reachable": False}
-    if is_configured():
+    # Named for Tautulli, and the scrape that reads it is too, so it reports
+    # Tautulli and nothing else.
+    if tautulli_configured():
         client = TautulliClient(current())
         try:
             data = await client.call("get_activity") or {}

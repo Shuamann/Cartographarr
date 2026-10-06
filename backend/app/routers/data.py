@@ -27,7 +27,7 @@ from app.models import Device, History, IpLocation, Library, MediaItem, User
 from app.plays import plays, plays_in, plays_when, sessions
 from app.integrations import arr, seerr
 from app.services import capabilities
-from app.settings_store import current, is_configured
+from app.settings_store import current, is_configured, plex_configured, tautulli_configured
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
@@ -227,9 +227,9 @@ async def history_detail(row_id: int, scope: ViewerScope) -> dict:
     """
     base = await asyncio.to_thread(_history_locally, row_id, scope)
 
-    if not is_configured():
+    if not tautulli_configured():
         base["stream"] = None
-        base["stream_error"] = "Tautulli is not configured"
+        base["stream_error"] = "The detail of a past play comes from Tautulli, which is not connected"
         return base
 
     client = TautulliClient(current())
@@ -302,7 +302,7 @@ async def _cached(rating_key: int | None) -> MediaItem | None:
             return found
 
     item = await asyncio.to_thread(read)
-    if item is None and is_configured():
+    if item is None and tautulli_configured():
         from app.services.sync import cache_one
 
         await cache_one(rating_key)
@@ -448,11 +448,12 @@ picked up without a restart.
 
 @router.get("/media/{rating_key}/image")
 async def media_image(request: Request, rating_key: int, width: int = 300, height: int = 450, kind: str = "poster"):
-    """Poster art, proxied through Tautulli and kept on disk.
+    """Poster art, proxied through Tautulli or Plex and kept on disk.
 
     Plex image URLs need a token, so the browser cannot fetch them directly and
     handing the token to the browser would be worse. Tautulli already has one,
-    and pms_image_proxy resizes on the way through. The answer never changes
+    and pms_image_proxy resizes on the way through. Without Tautulli, Plex's
+    own resizer is asked with the token this app holds. The answer never changes
     for a given item, so it is written to the data directory and served from
     there afterwards: a library page full of posters should cost one fetch
     each, ever, not one fetch a visit.
@@ -462,15 +463,16 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
     if kept.exists():
         return FileResponse(kept, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
 
-    if not is_configured():
-        raise HTTPException(409, "Tautulli is not configured")
+    tautulli = tautulli_configured()
+    if not (tautulli or plex_configured()):
+        raise HTTPException(409, "Neither Plex nor Tautulli is connected")
 
     asked = _ARTLESS.get((rating_key, kind))
     if asked is not None and time.monotonic() - asked < ARTLESS_SECONDS:
         raise HTTPException(404, "No artwork for that item")
 
     art = await asyncio.to_thread(_poster_art, rating_key, kind)
-    if art is None:
+    if art is None and tautulli:
         # Playing now but newer than the last sync: the poster and the links
         # load at the same moment, so this cannot rely on the links request
         # having cached the item first.
@@ -478,23 +480,36 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
 
         await cache_one(rating_key)
         art = await asyncio.to_thread(_poster_art, rating_key, kind)
-    if not art:
+    if not art and tautulli:
         art = await _backfill_poster_for(rating_key)
+    if not art and not tautulli:
+        # Plex answers for an item's current artwork by its key alone, which
+        # covers anything playing before the library scan has seen it.
+        art = f"/library/metadata/{rating_key}/{'art' if kind == 'art' else 'thumb'}"
     if not art:
         _ARTLESS[(rating_key, kind)] = time.monotonic()
         raise HTTPException(404, "No artwork for that item")
 
     settings = current()
-    base = (settings.tautulli_url or "").rstrip("/")
-    params = {
-        "apikey": settings.tautulli_api_key,
-        "cmd": "pms_image_proxy",
-        "img": art,
-        "width": width,
-        "height": height,
-        "fallback": "poster",
-        "img_format": POSTER_FORMAT,
-    }
+    headers: dict[str, str] = {}
+    if tautulli:
+        url = f"{(settings.tautulli_url or '').rstrip('/')}/api/v2"
+        params: dict[str, Any] = {
+            "apikey": settings.tautulli_api_key,
+            "cmd": "pms_image_proxy",
+            "img": art,
+            "width": width,
+            "height": height,
+            "fallback": "poster",
+            "img_format": POSTER_FORMAT,
+        }
+    else:
+        # Plex's own resizer, which is what Tautulli's proxy calls in turn.
+        # The token goes in a header rather than the address, so an error
+        # that quotes the address does not carry it.
+        url = f"{settings.plex_url.rstrip('/')}/photo/:/transcode"
+        params = {"url": art, "width": width, "height": height, "minSize": 1, "upscale": 1}
+        headers = {"X-Plex-Token": settings.plex_token, "Accept": "image/jpeg"}
 
     # Leaving a page removes its images, and the browser drops the requests.
     # Without this the handler keeps its place in the queue and fetches a
@@ -508,7 +523,7 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
             raise HTTPException(499, "Gone before the artwork arrived")
         client = _image_client(settings)
         try:
-            upstream = await client.get(f"{base}/api/v2", params=params)
+            upstream = await client.get(url, params=params, headers=headers)
             upstream.raise_for_status()
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc

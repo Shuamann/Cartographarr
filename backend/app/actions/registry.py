@@ -88,6 +88,16 @@ async def _terminate(session: Session, params: Params) -> str:
     if session_key is None:
         raise RuntimeError("session has no session_key")
 
+    # Whichever is reading the streams stops them. With no Tautulli this is
+    # the only way a ban or a rule acts at all.
+    if current().activity_source == "plex":
+        from app.plex import control
+
+        await asyncio.to_thread(
+            control.stop, str(session_key), session.get("session_id"), params.get("message") or DEFAULT_MESSAGE
+        )
+        return "terminated"
+
     client = TautulliClient(current())
     try:
         await client.call(

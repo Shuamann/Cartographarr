@@ -109,6 +109,28 @@ async def activity_endpoint(scope: ViewerScope) -> dict:
     return await activity(None, scope)
 
 
+async def read_activity() -> dict:
+    """What is playing, from whichever source the setting names.
+
+    The rules already read from Plex when told to. This page went on asking
+    Tautulli regardless, so an install connected to Plex alone had a Now
+    playing that was always empty while the rules could see every stream.
+    """
+    if current().activity_source == "plex":
+        from app.plex import activity as plex_activity
+
+        return await asyncio.to_thread(plex_activity.read)
+    # Looked up when asked rather than bound at import, so the tidy check and
+    # its tests see the same client as everything else.
+    from app.tautulli import client as tautulli
+
+    client = tautulli.TautulliClient(current())
+    try:
+        return await client.call("get_activity") or {}
+    finally:
+        await client.aclose()
+
+
 async def activity(db: Session | None = None, scope: "privacy.Scope | None" = None) -> dict:
     """What is playing, as Tautulli sees it, with what this app knows added.
 
@@ -118,15 +140,12 @@ async def activity(db: Session | None = None, scope: "privacy.Scope | None" = No
     take the whole app down with it rather than just this panel.
     """
     if not is_configured():
-        return {"stream_count": 0, "sessions": [], "error": "Tautulli is not configured"}
+        return {"stream_count": 0, "sessions": [], "error": "Not set up yet"}
 
-    client = TautulliClient(current())
     try:
-        data = await client.call("get_activity") or {}
+        data = await read_activity()
     except Exception as exc:  # noqa: BLE001
         return {"stream_count": 0, "sessions": [], "error": redact(exc)}
-    finally:
-        await client.aclose()
 
     if db is None:
         with session_scope() as opened:
@@ -202,7 +221,8 @@ async def _place_live(db: Session, data: dict, scope: "privacy.Scope | None") ->
         "stream_count": data.get("stream_count") if scope is None or not scope.own_only else len(sessions),
         "total_bandwidth": data.get("total_bandwidth"),
         "wan_bandwidth": data.get("wan_bandwidth"),
-        "transcode_count": data.get("stream_count_transcode"),
+        # Tautulli's name for it, or the one the Plex reading uses.
+        "transcode_count": data.get("stream_count_transcode", data.get("transcode_count")),
         "sessions": sessions,
     }
 
@@ -221,20 +241,18 @@ async def terminate(
     # Read the stream first. Once it is stopped there is nothing left to ask
     # about, and the log would only know a session key.
     session: dict[str, Any] = {"session_key": session_key}
-    client = TautulliClient(current())
     try:
-        activity = await client.call("get_activity") or {}
-        for live in activity.get("sessions") or []:
+        for live in (await read_activity()).get("sessions") or []:
             if str(live.get("session_key")) == str(session_key):
                 session = live
                 break
     except Exception:  # noqa: BLE001 - a thinner log beats refusing to stop it
         log.debug("could not snapshot session %s before stopping it", session_key)
-    finally:
-        await client.aclose()
 
     try:
-        result = await action.execute({"session_key": session_key}, {"message": message})
+        # The whole session, so stopping it through Plex has the session id
+        # Plex wants rather than having to look it up again.
+        result = await action.execute({**session, "session_key": session_key}, {"message": message})
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"Plex refused: {redact(exc)}") from exc
 

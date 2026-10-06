@@ -56,8 +56,34 @@ def _comments(issue: Issue) -> list[dict[str, Any]]:
         return []
 
 
+def _thread(issue: Issue, names: dict[int, str]) -> list[dict[str, Any]]:
+    """The comments, each signed by whoever wrote it.
+
+    By the name this app knows them by where there is a Plex id, the same as
+    the reporter. Seerr opens every issue with the reporter's own message, so
+    an unsigned first comment is theirs, and saying "someone" there names
+    nobody when the answer is on the same row.
+    """
+    out = []
+    for n, note in enumerate(_comments(issue)):
+        author = names.get(note.get("author_id") or -1) or note.get("author")
+        if not author and n == 0:
+            author = names.get(issue.reporter_user_id or -1) or issue.reporter_name
+        out.append({**note, "author": author})
+    return out
+
+
+def _numbers(issue: Issue) -> tuple[int | None, int | None]:
+    """Season and episode, only for an episode. Seerr sends 0 and 0 for a
+    film, and reports read in before that was caught still carry them."""
+    if issue.media_type not in ("tv", "episode") or not issue.episode:
+        return None, None
+    return issue.season, issue.episode
+
+
 def _brief(issue: Issue, names: dict[int, str], items: dict[int, Any] | None = None) -> dict[str, Any]:
     item = (items or {}).get(issue.rating_key or -1)
+    season, episode = _numbers(issue)
     return {
         # The year a row shows above its title, read from the library rather
         # than from the report, which never carried one.
@@ -81,8 +107,8 @@ def _brief(issue: Issue, names: dict[int, str], items: dict[int, Any] | None = N
         "title": issue.title,
         "media_type": issue.media_type,
         "rating_key": issue.rating_key,
-        "season": issue.season,
-        "episode": issue.episode,
+        "season": season,
+        "episode": episode,
         "reporter_name": names.get(issue.reporter_user_id or -1) or issue.reporter_name,
         "reporter_user_id": issue.reporter_user_id,
         "comments": len(_comments(issue)),
@@ -237,7 +263,7 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
         }
         data = {
             **_brief(issue, names),
-            "comment_list": _comments(issue),
+            "comment_list": _thread(issue, names),
             "context": json.loads(issue.context) if issue.context else None,
             "tmdb_id": issue.tmdb_id,
             "show_rating_key": issue.show_rating_key,

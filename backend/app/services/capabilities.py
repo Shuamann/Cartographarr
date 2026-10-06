@@ -5,8 +5,9 @@ integrations. The UI reads it to disable controls with a reason rather than
 hiding them, and the API enforces it independently. UI gating is a courtesy,
 not a control.
 
-Plex Pass comes from Tautulli's get_server_info (`pms_plexpass`), so no Plex
-token is required. Stream termination depends on it.
+Plex Pass comes from Tautulli's get_server_info (`pms_plexpass`) when Tautulli
+is connected, and from Plex itself when it is not. Stream termination depends
+on it, so an install with no Tautulli has to be able to answer it too.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Any
 
 from app.db import session_scope
 from app.models import SyncState
-from app.settings_store import current, is_configured
+from app.settings_store import current, is_configured, plex_configured, tautulli_configured
 from app.tautulli.client import TautulliClient
 from app.redact import redact
 
@@ -60,7 +61,17 @@ async def refresh() -> dict[str, Any]:
     }
 
     if not is_configured():
-        result["error"] = "Tautulli is not configured"
+        result["error"] = "Not set up yet"
+    elif not tautulli_configured() and plex_configured():
+        import asyncio
+
+        from app.plex import control
+
+        try:
+            result.update(await asyncio.to_thread(control.describe))
+        except Exception as exc:  # noqa: BLE001 - unknown is a valid answer
+            result["error"] = redact(exc)
+            log.warning("capability probe failed: %s", redact(exc))
     else:
         client = TautulliClient(current())
         try:
