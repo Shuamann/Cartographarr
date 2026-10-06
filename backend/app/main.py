@@ -27,10 +27,10 @@ from app.tautulli.client import TautulliClient
 log = logging.getLogger(__name__)
 
 
-# Plays, users and libraries are still read from Tautulli alone, so an install
-# connected to Plex directly skips these and says why, rather than failing
-# every few minutes against an address nobody gave it.
-NO_TAUTULLI = "Tautulli is not connected, and plays, users and libraries are read from it"
+# The server's user list and libraries are still read from Tautulli alone, so
+# an install connected to Plex directly skips that job and says why, rather
+# than failing every few minutes against an address nobody gave it.
+NO_TAUTULLI = "Tautulli is not connected, and the user list and libraries are read from it"
 
 
 def _tautulli_or_skip() -> None:
@@ -54,8 +54,13 @@ def _client_for(source: str) -> TautulliClient | None:
 
 
 async def _cycle(full: bool = False) -> dict:
-    _tautulli_or_skip()
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
     settings = current()
+    # Without Tautulli the plays are written as they finish, so the sync still
+    # has devices, places and sharing signals to build from them.
+    if not tautulli_configured():
+        return await sync_service.run_sync(None, settings, full=full)
     client = TautulliClient(settings)
     try:
         return await sync_service.run_sync(client, settings, full=full)

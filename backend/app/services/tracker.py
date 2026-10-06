@@ -25,6 +25,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 BUFFERING = "buffering"
+PAUSED = "paused"
 
 
 @dataclass
@@ -47,6 +48,9 @@ class Track:
     row_id: int | None = None
     row: dict[str, Any] = field(default_factory=dict)
     written_at: float = 0.0
+    # Time spent paused, so a play recorded from this stream says how long it
+    # was actually watched rather than how long it was open.
+    paused_seconds: float = 0.0
 
 
 _tracks: dict[str, Track] = {}
@@ -77,6 +81,8 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
         elif state != track.state:
             if track.state == BUFFERING:
                 _end_buffering(track, now, session)
+            if track.state == PAUSED:
+                track.paused_seconds += now - track.state_since
             if state == BUFFERING:
                 _start_buffering(track, session, now)
             track.state = state
@@ -112,6 +118,13 @@ def observe(sessions: list[dict[str, Any]], now: float | None = None, activity: 
         if track.row_id is not None:
             streams.save(track.row, track.row_id)
             streams.finish(track.row_id, track.last_seen, track.buffer_count, track.buffer_seconds)
+            if track.state == PAUSED:
+                track.paused_seconds += track.last_seen - track.state_since
+            # The play itself, for an install with nobody else writing them.
+            from app.services import recorded
+
+            recorded.record(track.row_id, track.last_session, track.row, track.first_seen, track.last_seen,
+                            track.paused_seconds)
 
 
 def metrics(session_key: str, now: float | None = None) -> dict[str, Any]:

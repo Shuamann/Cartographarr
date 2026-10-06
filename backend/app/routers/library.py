@@ -172,7 +172,9 @@ async def _causes_from_history(row_ids: list[int]) -> list[dict]:
     from app.settings_store import tautulli_configured
     from app.tautulli.client import TautulliClient
 
-    # The stream detail of a past play is only Tautulli's to give.
+    # The stream detail of a past play is only Tautulli's to give, and only
+    # for its own plays: a negative id is one recorded here from Plex.
+    row_ids = [r for r in row_ids if r > 0]
     if not row_ids or not tautulli_configured():
         return []
     client = TautulliClient(current())

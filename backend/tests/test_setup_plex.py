@@ -104,16 +104,18 @@ def test_a_fresh_install_with_nothing_set_reaches_the_app_through_plex(client, m
     shown = {row["key"]: row["value"] for row in client.get("/api/settings").json()}
     assert shown["plex_token"] != TOKEN and TOKEN not in client.get("/api/settings").text
 
-    # The Tautulli jobs say why they are not running rather than failing every
-    # few minutes against an address nobody gave them.
-    for job in (main._cycle, main._slow_cycle):
-        try:
-            asyncio.run(job())
-        except tasks.Skipped as skipped:
-            assert "Tautulli is not connected" in str(skipped)
-        else:
-            raise AssertionError(f"{job.__name__} ran without Tautulli")
-    assert client.post("/api/sync/run").status_code == 409
+    # The job that only Tautulli can do says why it is not running, rather
+    # than failing every few minutes against an address nobody gave it.
+    try:
+        asyncio.run(main._slow_cycle())
+    except tasks.Skipped as skipped:
+        assert "Tautulli is not connected" in str(skipped)
+    else:
+        raise AssertionError("the user list was read without Tautulli")
+    # The history sync still runs: plays are recorded from Plex as they
+    # finish, and devices and places are built from them.
+    assert asyncio.run(main._cycle())["history"] == 0
+    assert client.post("/api/sync/run").status_code == 200
 
 
 def test_a_plex_install_scans_reads_tracks_and_watches_without_tautulli(client, monkeypatch):

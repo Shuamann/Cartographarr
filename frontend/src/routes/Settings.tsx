@@ -42,7 +42,7 @@ const AREAS: Area[] = [
       },
       {
         title: "Tautulli: bring in your history",
-        note: "Optional once Plex is connected. Plex keeps no record of where a play came from or how it went, so plays from before this app was watching exist only in Tautulli. History, the map, Endpoints and the list of users are still read from it for now, so they stay empty without it.",
+        note: "Optional once Plex is connected. Plays are recorded from Plex as they finish, but Plex keeps no record of where an older play came from or how it went, so plays from before this app was watching exist only in Tautulli. The full list of the server's users and its libraries are also still read from it.",
         test: "tautulli",
         keys: [
           "tautulli_url",

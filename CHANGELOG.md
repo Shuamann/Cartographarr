@@ -4,6 +4,31 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.95.0 - 2026-10-06
+
+### Added
+- With no Tautulli, plays are recorded from Plex as they finish. History, the map, Endpoints and the sharing
+  signals fill as people watch, where before they stayed empty for ever on an install connected to Plex alone.
+  Counted the way the Tautulli sync counts: one play per Plex session, a pause inside it still one play, nothing
+  under thirty seconds, and the time paused not counted as watched.
+- Anybody who plays has a name, from what Plex says with each stream, without Tautulli to list the users.
+
+### Changed
+- A file's card in the Library reads in a glance. What is wrong with it is a line each, opening to the why and the
+  fix. The facts are label and value on one line each, the file is named by its name with the folders in its
+  tooltip, and a file nobody has played says so instead of "0 times by 0 people". The tracks are listed once.
+- One or two things to do, with the obvious one marked: finding a replacement when something is wrong, tidying
+  when only the tracks are untidy. Asking Radarr or Sonarr to search by itself, or to tag the file, are words
+  under them rather than two more buttons.
+- Tidying opens when asked for rather than standing open on every file. Its steps are lines to tick with their
+  reasons under them, its tick boxes are the track list rather than a second copy of it, and keeping all, none or
+  one language's subtitles is one control at one height. The button says how many tracks it is about to drop.
+
+### Fixed
+- Connecting Tautulli to an install that had been recording from Plex would have counted the plays both had seen
+  twice. A play Tautulli delivers that was already recorded here, by the same person, of the same thing,
+  starting within two minutes, is kept once, as Tautulli's.
+
 ## 0.94.0 - 2026-10-06
 
 ### Added

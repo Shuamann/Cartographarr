@@ -183,6 +183,11 @@ async def sync_history(client: TautulliClient, settings: Settings, full: bool = 
 
         with session_scope() as session:
             _upsert(session, History, mapped)
+            # Plays this app wrote down itself, while Tautulli was not
+            # connected, that Tautulli has now delivered as well.
+            from app.services import recorded
+
+            recorded.drop_duplicates(session, mapped)
             offset += len(rows)
             # Persisted every page so a restart resumes instead of restarting.
             _set_state(session, BACKFILL_OFFSET, offset)
@@ -659,8 +664,24 @@ async def _tell_about(new_devices: int, new_signals: int) -> None:
         log.exception("could not send word about what the sync found")
 
 
-async def run_sync(client: TautulliClient, settings: Settings, full: bool = False) -> dict:
-    """One full cycle. Safe to call concurrently with reads."""
+async def run_sync(client: TautulliClient | None, settings: Settings, full: bool = False) -> dict:
+    """One full cycle. Safe to call concurrently with reads.
+
+    Without a client, for an install with no Tautulli, the plays are already
+    here, written by the live tracker as each one finished, and everything
+    built from them still needs building: devices, places, sharing signals,
+    the stall patterns and the pruning. Only reading Tautulli is skipped.
+    """
+    if client is None:
+        history = metadata = 0
+    else:
+        history, metadata = await _read_tautulli(client, settings, full)
+    devices, new_devices = refresh_devices()
+    return await _after_plays(settings, history, metadata, devices, new_devices)
+
+
+async def _read_tautulli(client: TautulliClient, settings: Settings, full: bool) -> tuple[int, int]:
+    """New plays, names for anybody unknown, and titles not cached yet."""
     # Two one-time re-reads: history synced before episode numbers were kept
     # has none, and history synced as merged plays has the wrong times and only
     # the last device. Reading it all again fixes both, and the upsert makes
@@ -679,8 +700,10 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     # on this sync rather than waiting for the slow one.
     await sync_missing_users(client)
     metadata = await cache_new_metadata(client, settings)
-    devices, new_devices = refresh_devices()
+    return history, metadata
 
+
+async def _after_plays(settings: Settings, history: int, metadata: int, devices: Any, new_devices: Any) -> dict:
     resolver = GeoResolver(settings.geoip_dir)
     try:
         ips = geocode_new_ips(resolver)
