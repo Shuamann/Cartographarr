@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.99.2 - 2026-10-06
+
+### Changed
+- Two tests closed a gap rather than fixing a fault: that an event from Plex reaches the enforcer, and that the
+  enforcer is what it reaches. Neither could be seen on a running server unless somebody happened to be watching
+  something, and the wiring between them is exactly the sort a merge changes quietly. Both were checked by
+  breaking them on purpose first.
+
 ## 0.99.1 - 2026-10-06
 
 ### Fixed

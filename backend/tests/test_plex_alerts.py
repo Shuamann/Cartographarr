@@ -109,4 +109,68 @@ def test_the_poll_is_still_registered_and_unchanged():
     source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
     assert '"enforce", "Check live streams"' in source
     assert "activity_poll_seconds" in source, "the poll still sets its own interval"
-    assert "plex_alerts.listen" in source, "and the listener runs beside it"
+    # Not only that a listener runs, but what it wakes. The test above proves
+    # the listener calls whatever it is handed; this is the only thing saying
+    # what it is handed, which is the half a merge could quietly change.
+    assert 'plex_alerts.listen(lambda: tasks.run("enforce"' in source, (
+        "the listener must wake the enforcer, or it is a connection that does nothing"
+    )
+
+
+def test_an_event_actually_reaches_the_enforcer(monkeypatch):
+    """The part that cannot be checked by looking at a running server unless
+    somebody happens to be watching something.
+
+    Everything else here tests which messages are worth waking for. This tests
+    that waking for one calls the thing it was added to call, which is the
+    whole feature and the only part a merge could quietly break.
+    """
+    import json as _json
+    from types import SimpleNamespace
+
+    class FakeSocket:
+        def __init__(self, messages):
+            self.messages = messages
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def __aiter__(self):
+            async def pump():
+                for m in self.messages:
+                    yield _json.dumps({"NotificationContainer": m})
+
+            return pump()
+
+    sent = [
+        {"type": "playing", "PlaySessionStateNotification": [{"sessionKey": "1", "state": "playing"}]},
+        # The same stream saying where it has got to: no second wake.
+        {"type": "playing", "PlaySessionStateNotification": [{"sessionKey": "1", "state": "playing"}]},
+        {"type": "timeline"},
+    ]
+    woken = []
+
+    async def wake():
+        woken.append(True)
+
+    monkeypatch.setattr(
+        "app.settings_store.current",
+        lambda: SimpleNamespace(plex_token="t", plex_url="http://plex.example.test:32400"),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules, "websockets",
+        SimpleNamespace(connect=lambda url, **kw: FakeSocket(sent)),
+    )
+
+    async def stop_after_first_pass(seconds, stopping):
+        stopping.set()
+
+    monkeypatch.setattr(alerts, "_sleep_or_stop", stop_after_first_pass)
+    monkeypatch.setattr(alerts, "QUIET_SECONDS", 0.0)
+
+    stopping = asyncio.Event()
+    asyncio.run(alerts.listen(wake, stopping))
+    assert woken == [True], "one wake for the stream starting, and nothing for the ping or the timeline"
