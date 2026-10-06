@@ -3,7 +3,7 @@ import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
 import { ACCENTS, SCHEMES, applyAccent, contrast, setScheme, type Parts, type Scheme } from "../theme/accent";
 import Tasks from "../components/Tasks";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { api, useApi, type AppUser, type Setting } from "../lib/api";
 import { brandingUrl, useBranding } from "../lib/useBranding";
 import BrandIcon from "../components/BrandIcon";
@@ -43,13 +43,13 @@ const AREAS: Area[] = [
       },
       {
         title: "Plex",
-        note: "A token lets this app talk to Plex directly, which is where sharing is managed and where the live streams and the library can be read from. Find servers looks up the address once: discovering it takes about twenty seconds because Plex advertises addresses that are unreachable from outside the house, and connecting to a known one takes a fifth of a second, so it is worth storing.",
+        note: "A token lets this app talk to Plex directly, for sharing, live streams and the library. Find servers looks up the address and keeps it, which saves about twenty seconds on every connection.",
         test: "plex",
         keys: ["plex_token", "plex_url", "plex_machine_identifier"],
       },
       {
         title: "Where the live data comes from",
-        note: "Tautulli watches Plex and writes down what it sees, which is why it is the only thing that has an address against a play from years ago. For anything happening now, Plex can be asked directly: it answers in about nine milliseconds with the viewer's address, whether they are local, relayed and secure, the device, the player and the account, which is everything recorded about a stream. History from before this app was watching stays with Tautulli either way.",
+        note: "Plex answers faster and with more detail, and gives the address, device and account. Tautulli only has what it already recorded, so old history comes from it either way.",
         keys: ["activity_source", "library_source"],
       },
     ],
@@ -79,21 +79,21 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Radarr",
-        note: "Films link straight to their Radarr page. Cartographarr talks to the local URL; the buttons open the remote URL, so they work away from home.",
+        note: "Films link straight to their Radarr page. The app uses the local URL; buttons open the remote one, so they work away from home.",
         test: "radarr",
         guess: { key: "radarr_url", port: 7878, slug: "radarr", publicKey: "radarr_public_url" },
         keys: ["radarr_url", "radarr_public_url", "radarr_api_key"],
       },
       {
         title: "Sonarr",
-        note: "Shows and episodes link straight to their Sonarr page. Cartographarr talks to the local URL; the buttons open the remote URL.",
+        note: "Shows and episodes link straight to their Sonarr page. The app uses the local URL; buttons open the remote one.",
         test: "sonarr",
         guess: { key: "sonarr_url", port: 8989, slug: "sonarr", publicKey: "sonarr_public_url" },
         keys: ["sonarr_url", "sonarr_public_url", "sonarr_api_key"],
       },
       {
         title: "Seerr",
-        note: "Shows who requested a title. Seerr is what Overseerr and Jellyseerr merged into. Cartographarr talks to the local URL; the buttons open the remote URL.",
+        note: "Shows who requested a title. Seerr is what Overseerr and Jellyseerr became. The app uses the local URL; buttons open the remote one.",
         test: "seerr",
         guess: { key: "seerr_url", port: 5055, slug: "seerr", publicKey: "seerr_public_url" },
         keys: ["seerr_url", "seerr_public_url", "seerr_api_key"],
@@ -113,18 +113,18 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Notifications",
-        note: "One Apprise URL per line or comma separated, covering Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Test checks they are understood without sending anything.",
+        note: "One Apprise URL per line, or comma separated. Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Test checks them without sending anything.",
         test: "apprise",
         keys: ["apprise_urls"],
       },
       {
         title: "Weekly digest",
-        note: "One message a week with the week in it: hours watched and by how many people, new devices, new signals, problems reported, where the library stands, and any job that has stopped working. Everything in it is already on a page somewhere; this is the version that comes to you. Goes to the Apprise targets above, so it stays quiet until those are set up.",
+        note: "One message a week: hours watched, new devices, new signals, reported problems, where the library stands, and any job that has stopped. Goes to the Apprise targets above, so it needs those set up.",
         keys: ["weekly_digest", "digest_weekday", "digest_hour"],
       },
       {
         title: "Messaging viewers",
-        note: "Lets a rule message the person watching instead of stopping them. An Apprise URL with {email} (and optionally {username}) filled in from their Plex account, usually email, for example mailtos://you:app-password@gmail.com?to={email}. Leave empty to keep the action off.",
+        note: "Lets a rule message the person watching instead of stopping them. An Apprise URL with {email}, and optionally {username}, filled in from their Plex account. For example mailtos://user:app-password@smtp.example.com?to={email}. Empty keeps the action off.",
         keys: ["viewer_message_url"],
       },
       {
@@ -135,14 +135,14 @@ const AREAS: Area[] = [
       },
       {
         title: "Uptime Kuma",
-        note: "A push monitor pinged after each sync, so it watches the sync rather than just the container. Test sends one real ping.",
+        note: "A heartbeat pinged after each sync, so it watches the sync and not just the container. Test sends one real ping.",
         test: "uptime_kuma",
         guess: { key: "uptime_kuma_push_url", port: 3001, slug: "uptime", path: "/api/push/" },
         keys: ["uptime_kuma_push_url"],
       },
       {
         title: "Prometheus and dashboard tiles",
-        note: "Set a token to switch on /metrics for Prometheus and /api/summary for Homepage or Homarr tiles. Send the token as a bearer token, or as ?token= on the URL. Both carry counts only (streams, plays, devices, signals, bans, last sync), never names, addresses or titles. Leave empty to keep them off.",
+        note: "A token switches on /metrics for Prometheus and /api/summary for dashboard tiles. Send it as a bearer token, or as ?token= on the URL. Counts only, never names, addresses or titles. Empty keeps them off.",
         keys: ["metrics_token"],
       },
     ],
@@ -154,7 +154,7 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Schedule",
-        note: "History is read often because it is what everything else is built from. Users and libraries change rarely, so they have their own slower round.",
+        note: "History is read often because everything is built from it. Users and libraries change rarely, so they get a slower round.",
         keys: ["sync_interval_minutes", "slow_sync_interval_minutes"],
       },
       {
@@ -164,12 +164,12 @@ const AREAS: Area[] = [
       },
       {
         title: "Backups",
-        note: "Everything this app has worked out lives in one file and nowhere else: stall causes, shared account signals, bans, rules, reported problems, keep decisions and every setting. Tautulli can rebuild the raw history and none of the rest. Snapshots are taken while the database is in use, so nothing stops, and they land beside it in the appdata volume, which means whatever already backs that up gets them too. Keep 0 to switch it off.",
+        note: "One file holds everything this app has worked out: stall causes, signals, bans, rules, reports, keep decisions and every setting. Tautulli can rebuild the raw history and nothing else. Snapshots are taken without stopping anything and land in the appdata volume. Keep 0 to switch it off.",
         keys: ["backup_keep", "backup_hour"],
       },
       {
         title: "When a job stops working",
-        note: "A background job that breaks does not announce itself: the app simply stops having the right answer, and the only sign is the Tasks page, which nobody has reason to open. Three failures in a row sends one message through Apprise, then nothing more until it works again, so a job broken for a week is one message rather than three hundred. Quiet unless notifications are set up.",
+        note: "A broken background job does not announce itself, it just stops having the right answer. Three failures in a row sends one message, then nothing until it works again. Needs notifications set up.",
         keys: ["task_alerts"],
       },
     ],
@@ -181,7 +181,7 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Live activity",
-        note: "How often the list of who is watching is refreshed. Every check is one request to Tautulli.",
+        note: "How often the list of who is watching is refreshed. Each check is one request.",
         keys: ["activity_poll_seconds"],
       },
       {
@@ -191,12 +191,12 @@ const AREAS: Area[] = [
       },
       {
         title: "What a stopped viewer sees",
-        note: "Plex puts your words in the middle of a sentence it writes itself: \"<account> asked to stop your playback from this server: <your message>\". Each list has its own, because a banned device, a banned address and a blocked country are three different things to be told. Leave the address one empty to use the device wording for both.",
+        note: "Plex wraps your words in its own sentence: \"<account> asked to stop your playback from this server: <your message>\". A banned device, a banned address and a blocked country each get their own. Leave the address one empty to use the device wording for both.",
         keys: ["ban_message", "address_ban_message", "geo_block_message"],
       },
       {
         title: "Server upload",
-        note: "Your server's upload speed. Stalls that happen while the upload is nearly full are blamed on the upload rather than on a viewer, and you get a notification, through Apprise and at most every half hour, when remote streams use more than the alert level. Leave the capacity at 0 to use the Internet upload speed set in Plex under Remote Access.",
+        note: "Your server's upload speed. A stall while the upload is nearly full is blamed on the upload, not on a viewer. You get a notification, at most every half hour, when remote streams pass the alert level. 0 uses the speed set in Plex under Remote Access.",
         keys: ["upload_capacity_mbps", "upload_alert_percent"],
       },
     ],
@@ -213,12 +213,12 @@ const AREAS: Area[] = [
       },
       {
         title: "Tidying files",
-        note: "What tidying a file's tracks should aim for, and when. Languages are the three letter codes the tracks carry: eng, spa, jpn. An empty list keeps every language. Nothing here happens on its own: it is what the button on a file card, and any rule you write, will do. Tidying reads and rewrites a whole file, which is minutes of the disks' attention for something nobody is waiting on, so by default a queued job waits for the streams to stop.",
+        note: "What tidying a file's tracks should aim for. Languages are the three letter codes the tracks carry: eng, spa, jpn. An empty list keeps every language. Nothing happens on its own: this is what the button on a file card, and any rule you write, will do. Tidying rewrites the whole file, so a queued job waits for the streams to stop by default.",
         keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages", "tidy_when_quiet"],
       },
       {
         title: "Storage",
-        note: "How much of a file's path names the disk it is on. Plex usually reports a mount per library, so one part (/movies, /tv) is right. Raise it where several libraries share a mount (/mnt/user/movies, /mnt/user/tv) and Library, Storage would otherwise count them as one.",
+        note: "How much of a file's path names the disk it is on. One part (/movies, /tv) is usually right. Raise it where libraries share a mount (/mnt/user/movies, /mnt/user/tv), or Library, Storage counts them as one.",
         keys: ["library_store_depth"],
       },
     ],
@@ -230,17 +230,17 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Viewer privacy",
-        note: "What viewer accounts can see. Admins always see everything. Own data only hides everyone else entirely. Others anonymised keeps totals, charts and the map for the whole server, but other people appear as \"Another viewer\" with their addresses, devices and titles withheld. A viewer is matched to a Plex user by the link under Accounts, or by email or username; a viewer who matches nobody sees no personal data.",
+        note: "What viewer accounts can see. Admins always see everything. Own data only hides everyone else. Others anonymised keeps the totals, charts and map, but other people show as \"Another viewer\" without their addresses, devices or titles. A viewer is matched to a Plex user by the link under Accounts, or by email or username.",
         keys: ["viewer_privacy"],
       },
       {
         title: "Reported problems",
-        note: "Whether people who sign in as viewers can report something wrong with what they watched, and whether you hear about it. They see what they reported and nothing else: not other people's reports, not who else watched the file, not where it sits on disk. Reporting from a play carries that play's details with it, so nobody has to ask what device they were on. Only an admin closes a report. The alert goes through Apprise and stays quiet until notifications are set up.",
+        note: "Whether viewers can report something wrong with what they watched, and whether you hear about it. They see their own reports and nothing else. A report carries the play's details with it, so nobody has to ask what device they were on. Only an admin closes one.",
         keys: ["viewer_reports_issues", "issue_alerts"],
       },
       {
         title: "Shared account detection",
-        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so these guard against crying wolf: a pair is ignored when either fix is vaguer than the accuracy limit, or they are closer together than the minimum distance. A sync that turns up a new device or a new signal can send word through Apprise, which is the only way either is seen without going and looking; it is only ever about what that sync found, never the backlog.",
+        note: "How eagerly to flag one account being used in two places. Locations are only accurate to a city, so a pair is ignored when either fix is vaguer than the accuracy limit, or they are closer than the minimum distance. A sync can send word when it finds a new device or signal.",
         keys: ["impossible_kmh", "impossible_min_km", "impossible_max_accuracy_km", "watch_alerts"],
       },
       {
@@ -257,7 +257,7 @@ const AREAS: Area[] = [
     sections: [
       {
         title: "Plex sign in",
-        note: "Adds Sign in with Plex to the sign-in page. A Plex account signs in as the Cartographarr account linked to it under Accounts, or a viewer account with the same email. Usernames are never matched, and an admin account must be linked to its Plex account first. With new viewers allowed, anyone the server is shared with gets a viewer account the first time they sign in, seeing other people anonymised whatever the viewer privacy setting; change that per account under Accounts. Nobody becomes an admin through Plex, and Cartographarr does not keep their Plex token.",
+        note: "Adds Sign in with Plex. A Plex account signs in as the account linked to it under Accounts, or a viewer with the same email. Usernames are never matched, and an admin must be linked first. With new viewers allowed, anyone the server is shared with gets a viewer account on first sign-in. Nobody becomes an admin this way, and no Plex token is kept.",
         keys: ["plex_signin_enabled", "plex_signin_new_viewers"],
       },
       {
@@ -278,7 +278,7 @@ const AREAS: Area[] = [
       },
       {
         title: "Showing inside other dashboards",
-        note: "Turn this on if you open Cartographarr inside Organizr, Homarr or another dashboard that shows apps in a frame; otherwise it shows blank there. Off, no other site can put Cartographarr in a frame, which stops a hidden page tricking a click on Ban or Unshare.",
+        note: "Turn this on to open Cartographarr inside Organizr, Homarr or another dashboard, or it shows blank there. Off, no other site can frame it, which stops a hidden page tricking a click on Ban or Unshare.",
         keys: ["allow_framing"],
       },
     ],
@@ -554,6 +554,94 @@ function FindServers({ onPick }: { onPick: (url: string, machineId: string) => v
         </div>
       ))}
     </div>
+  );
+}
+
+/* A heading, with its explanation folded away behind an information icon.
+ *
+ * Every section has a paragraph saying what it is for. They are worth reading
+ * once, after which they are the bulk of the page and the controls are the
+ * reason anybody opened it. The heading owns the note because a paragraph
+ * cannot sit inside a heading, so the icon and the words it reveals have to be
+ * drawn by the same thing to share one piece of state.
+ *
+ * Remembered per heading: somebody working through a page with the notes open
+ * should not have to open each one twice.
+ */
+function Head({
+  what,
+  note,
+  section,
+  brand,
+  right,
+}: {
+  what: string;
+  note?: string;
+  /* A section heading sits in a row with whatever acts on it. A page heading
+   * is just the title. */
+  section?: boolean;
+  /* A section named after a service gets its logo. One named Colour has
+   * nothing to show. */
+  brand?: boolean;
+  right?: ReactNode;
+}) {
+  const remembered = `settings.explain.${what}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(remembered) === "on";
+    } catch {
+      // A private window, or storage turned off. Closed is the right default
+      // and the page works either way.
+      return false;
+    }
+  });
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try {
+      localStorage.setItem(remembered, next ? "on" : "off");
+    } catch {
+      // Nothing depends on it sticking.
+    }
+  }
+
+  const icon = note ? (
+    <button
+      className={open ? "explain-toggle on" : "explain-toggle"}
+      aria-expanded={open}
+      aria-label={open ? `Hide what ${what} is for` : `What ${what} is for`}
+      title={open ? "Hide this" : "What this is for"}
+      onClick={toggle}
+    >
+      i
+    </button>
+  ) : null;
+
+  if (!section) {
+    return (
+      <>
+        <h2>
+          {what}
+          {icon}
+        </h2>
+        {note && open && <p className="muted explain-note">{note}</p>}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="row-between">
+        <h3 className="section-title">
+          {brand && <BrandIcon name={what.toLowerCase()} size={16} />}
+          {what}
+          {icon}
+        </h3>
+        {right}
+      </div>
+      {note && open && <p className="muted small explain-note">{note}</p>}
+    </>
   );
 }
 
@@ -1021,8 +1109,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
 
       <div className="settings-page">
         <header className="settings-page-head">
-          <h2>{current.title}</h2>
-          {current.blurb && <p className="muted">{current.blurb}</p>}
+          <Head key={current.title} what={current.title} note={current.blurb} />
         </header>
 
         {error && <p className="note bad-note" role="alert">{error}</p>}
@@ -1035,19 +1122,21 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
 
         {shownSections.map((section) => (
           <section key={section.title} className="card-section">
-            <div className="row-between">
-              <h3 className="section-title">
-                <BrandIcon name={section.title.toLowerCase()} size={16} />
-                {section.title}
-              </h3>
-              {section.test && (
-                <TestButton
-                  name={section.test}
-                  values={Object.fromEntries(section.keys.filter((k) => k in draft).map((k) => [k, draft[k]]))}
-                />
-              )}
-            </div>
-            {section.note && <p className="muted small">{section.note}</p>}
+            <Head
+              key={section.title}
+              what={section.title}
+              note={section.note}
+              section
+              brand
+              right={
+                section.test && (
+                  <TestButton
+                    name={section.test}
+                    values={Object.fromEntries(section.keys.filter((k) => k in draft).map((k) => [k, draft[k]]))}
+                  />
+                )
+              }
+            />
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Schedule" && <SyncNow />}
             {section.title === "Backups" && <ServerTime />}
@@ -1177,11 +1266,11 @@ function BrandingImages() {
 
   return (
     <section className="card-section">
-      <h3>Logos and icon</h3>
-      <p className="muted small">
-        Stored on the server rather than linked, so they keep working without depending on
-        anywhere else. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB.
-      </p>
+      <Head
+        what="Logos and icon"
+        note="Stored on the server rather than linked, so they keep working on their own. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB."
+        section
+      />
       {error && <p className="note bad-note" role="alert">{error}</p>}
 
       <div className="mini-list">
@@ -1839,16 +1928,16 @@ function Accounts() {
 
   return (
     <section className="card-section">
-      <div className="row-between">
-        <h3>People</h3>
-        <button className="btn" onClick={() => setAdding(!adding)}>
-          {adding ? "Cancel" : "Add account"}
-        </button>
-      </div>
-      <p className="muted small">
-        Viewers see the map, history and statistics. Admins also get rules, stopping streams and
-        these settings.
-      </p>
+      <Head
+        what="Accounts"
+        note="Viewers see the map, history and statistics. Admins also get rules, stopping streams and these settings."
+        section
+        right={
+          <button className="btn" onClick={() => setAdding(!adding)}>
+            {adding ? "Cancel" : "Add account"}
+          </button>
+        }
+      />
 
       {error && <p className="note bad-note" role="alert">{error}</p>}
 
@@ -2044,11 +2133,12 @@ function ThemeEditor({ value, onChange }: { value: string; onChange: (colours: s
 
   return (
     <section className="card-section">
-      <h3>The {mode} theme</h3>
-      <p className="muted small">
-        Four colours, and the rest follows: raised panels, borders and quieter text are worked out a step at a time
-        from the panel and the text. Switch the theme in the top bar to set the other one.
-      </p>
+      <Head
+        key={mode}
+        what={`The ${mode} theme`}
+        note="Four colours, and the rest follows: panels, borders and quieter text are worked out from the panel and the text. Switch the theme in the top bar to set the other one."
+        section
+      />
       <div className="row wrap accent-row">
         {SCHEMES.map((preset) => (
           <button
@@ -2110,11 +2200,11 @@ function AccentPicker({ value, onChange }: { value: string; onChange: (colour: s
 
   return (
     <section className="card-section">
-      <h3>Colour</h3>
-      <p className="muted small">
-        Buttons, links, map pins and charts follow this. Light and dark are worked out from it, so it only has to look
-        right once.
-      </p>
+      <Head
+        what="Colour"
+        note="Buttons, links, map pins and charts follow this. Light and dark are worked out from it."
+        section
+      />
       <div className="row wrap accent-row">
         {ACCENTS.map((a) => (
           <button

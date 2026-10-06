@@ -4,6 +4,26 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.86.0 - 2026-10-05
+
+### Fixed
+- Live streams were not being recorded at all. Three hardware transcoding columns added in 0.84.0 are booleans,
+  and Tautulli answers those questions with an empty string when it has nothing to say, which the column refuses,
+  so every insert failed and the whole session was lost. An empty answer is now recorded as no answer, which is
+  what it means: Tautulli not saying whether hardware was asked for is not the same as it saying no.
+- The stream card in the map's popup had a scrollbar along the bottom. Two of its rules asked how wide the window
+  was, and the popup is 460 pixels wide whatever the window is, so on any normal monitor it laid the facts out in
+  two columns and refused to wrap an address with a city on it. The facts stack in a popup, and a value there can
+  wrap.
+
+### Changed
+- Every explanation in Settings is folded away behind an information icon beside its heading. They are worth
+  reading once and after that they were most of the page, with the controls somewhere underneath. Each one
+  remembers whether it is open, so reading a page carefully does not mean opening the same notes next visit.
+- The explanations themselves are shorter and plainer. They had grown into paragraphs arguing their own case.
+- The Settings heading above Add account reads "Accounts" rather than "People", which is what it lists, and no
+  longer reads as the tab now called Endpoints.
+
 ## 0.84.1 - 2026-10-05
 
 ### Changed

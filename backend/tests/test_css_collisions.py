@@ -101,3 +101,25 @@ def test_the_check_leaves_normal_css_alone():
 def test_media_blocks_do_not_hide_a_real_duplicate():
     css = ".card { gap: 8px } @media (max-width: 600px) { .x { color: red } } .card { gap: 2px }"
     assert duplicates(css) == {"card": 2}
+
+
+def test_the_popup_card_does_not_lay_itself_out_by_the_window():
+    """A media query asks how wide the window is, not how wide the card is.
+
+    The stream card in the map's popup is 460px whatever the screen is. Two
+    rules keyed to the viewport, a second column of facts and a value that may
+    not wrap, both applied inside it on any normal monitor, and put a sideways
+    scrollbar across the bottom of the popup.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    compact = css[css.index(".stream-detail.compact .spec {") :][:400]
+    assert "grid-template-columns: minmax(0, 1fr);" in compact, "one column in a popup"
+    assert ".stream-detail.compact .spec-pair dd" in compact and "white-space: normal" in compact, (
+        "a fact in a popup has to be allowed to wrap"
+    )
+    flyout = css[css.index(".flyout {") :][:400]
+    assert "overflow: hidden auto;" in flyout, (
+        "overflow-y on its own leaves overflow-x computing to auto, which is the scrollbar"
+    )

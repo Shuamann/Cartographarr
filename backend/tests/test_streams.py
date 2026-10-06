@@ -4,6 +4,7 @@ Each of these ends up in a report someone acts on (re-encode a file, blame a
 device, buy more upload), so the reasoning is tested case by case.
 """
 
+import time
 from datetime import UTC, datetime, timedelta
 
 from app.services import streams, tracker
@@ -214,3 +215,38 @@ def test_a_real_speed_survives():
     assert streams._plausible_speed(0.8) == 0.8
     assert streams._plausible_speed(1.0) == 1.0
     assert streams._plausible_speed(11.66) == 11.66
+
+
+# ---- an empty answer is not a no --------------------------------------------
+
+
+def test_tautullis_empty_hardware_answer_is_not_a_boolean():
+    """Tautulli sends these keys with an empty string when it has nothing.
+
+    The columns are booleans, so an empty string is refused and the whole
+    insert fails, which silently lost every live session on a server reading
+    from Tautulli. It is also not a no: Tautulli not saying whether hardware
+    was asked for is different from it saying hardware was not asked for.
+    """
+    assert streams._said("") is None
+    assert streams._said(None) is None
+    assert streams._said("0") is False
+    assert streams._said("1") is True
+    assert streams._said(False) is False
+    assert streams._said(True) is True
+
+
+def test_a_tautulli_session_builds_a_row_the_columns_accept():
+    row = streams.row_for(
+        {
+            "session_key": "9",
+            "transcode_hw_requested": "",
+            "transcode_hw_decode": "",
+            "transcode_hw_encode": "",
+            "transcode_protocol": "",
+        },
+        time.time(),
+    )
+    for key in ("transcode_hw_requested", "transcode_hw_decode", "transcode_hw_encode"):
+        assert row[key] is None, key
+    assert row["transcode_protocol"] is None

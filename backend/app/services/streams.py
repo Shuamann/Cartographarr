@@ -113,6 +113,21 @@ def _plausible_speed(value: float | None) -> float | None:
     return value
 
 
+def _said(value: Any) -> bool | None:
+    """True, False, or not said.
+
+    Tautulli answers these with an empty string when it has nothing, and an
+    empty string is neither a boolean nor a no. Plex leaves them out instead,
+    and sends real booleans when it has them. Both mean the same thing here:
+    nobody said, so nothing is recorded.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        return bool(_int(value))
+    return bool(value)
+
+
 def _hw(s: dict[str, Any]) -> bool:
     return bool(_int(s.get("transcode_hw_encoding")) or _int(s.get("transcode_hw_decoding")) or s.get("transcode_hw_full_pipeline"))
 
@@ -158,12 +173,13 @@ def row_for(s: dict[str, Any], now: float) -> dict[str, Any]:
         "subtitle_decision": s.get("subtitle_decision") or None,
         "container_decision": s.get("container_decision") or None,
         "transcode_hw": _hw(s),
-        # Only Plex reports these, so a stream recorded through Tautulli
-        # leaves them empty rather than claiming something it was not told.
-        "transcode_hw_requested": s.get("transcode_hw_requested"),
-        "transcode_hw_decode": s.get("transcode_hw_decode"),
-        "transcode_hw_encode": s.get("transcode_hw_encode"),
-        "transcode_protocol": s.get("transcode_protocol"),
+        # Plex says these plainly. Tautulli sends the same keys with an empty
+        # string when it has nothing, which is not a boolean and would be
+        # refused by the column, so an empty answer is recorded as no answer.
+        "transcode_hw_requested": _said(s.get("transcode_hw_requested")),
+        "transcode_hw_decode": _said(s.get("transcode_hw_decode")),
+        "transcode_hw_encode": _said(s.get("transcode_hw_encode")),
+        "transcode_protocol": s.get("transcode_protocol") or None,
         "video_profile": s.get("video_profile"),
         "video_frame_rate": s.get("video_frame_rate"),
         "audio_channels": _int(s.get("audio_channels")),

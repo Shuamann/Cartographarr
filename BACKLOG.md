@@ -266,19 +266,6 @@ the two should be looked at together rather than built past each other.
 
 ---
 
-## Settings descriptions behind an information icon
-
-Every section carries a paragraph explaining itself. They are worth having and
-they are worth reading once, after which they are the bulk of the page and the
-controls are what somebody came for.
-
-Collapse each one behind an information icon beside the section's name, which
-expands it. Applies to every page, not a few. Worth remembering the expanded
-state per section, so somebody reading a page carefully is not re-opening the
-same note each visit.
-
----
-
 ## Finishing the move to Plex
 
 Live activity reads from Plex directly and carries everything recorded about a
@@ -294,12 +281,48 @@ has not been written.
 ### Importing Tautulli's history
 
 A one-time backfill of finished plays, so Tautulli can be switched off without
-losing what it recorded before this app was watching.
+losing what it recorded before this app was watching. Nothing starts one
+today: there is no button, no progress and no record that it ever ran. Until
+there is, choosing Plex quietly means choosing to have only what happens from
+now on, which is not a choice anybody would make knowingly.
+
+What it needs:
+
+- A button in Settings, under the source choice, that says how far back it
+  will go and what it will bring. It runs in the background like the other
+  jobs, reports progress on Tasks, and can be run again without doubling
+  anything.
+- A record of what the last import covered: when it ran, the span of dates it
+  asked for, how many plays it read, how many were new and how many were
+  already here. Without that, running it twice is an act of faith.
+- Switching the source to Plex should say, there and then, that older history
+  comes from Tautulli and offer the import. Nobody should have to read this
+  file to find that out.
 
 The care needed is play identity. A paused and resumed play is one play, and
 the import has to agree with how plays are already counted here or every
 figure in the app moves. Reference ids exist for exactly this and the import
 should use them rather than inventing a rule.
+
+### Checking the handover actually worked
+
+Switching the source is the one change in this app where everything can look
+normal and be wrong. The rows keep arriving, the pages keep drawing, and a
+field that is quietly missing shows as a blank rather than an error.
+
+So the switch needs something that says, in one place, whether the two sources
+agree:
+
+- Over the same recent window, the plays, the people and the devices each
+  source reports, side by side.
+- Which fields come back empty from the new source and did not from the old
+  one, named rather than counted.
+- A sample play looked up in both, field by field, because a number matching
+  in total says nothing about whether the right value landed in the right
+  column.
+
+This is the test that would have caught the transcode decision mismatch, and
+it is cheap: both sources are already readable through one shape.
 
 ### Users and libraries from Plex
 
@@ -308,10 +331,33 @@ because the slow sync runs rarely and nothing is waiting on it.
 
 ---
 
-## Issues as the system of record
+## Issues as the system of record, and the screen for it
 
-Issues raised here are already kept here. The gap is importing what Seerr
-holds, so that turning Seerr off loses nothing.
+Issues raised here are already kept here. Two things are missing: the screen
+is not yet what it should be, and there is no way to bring in what Seerr
+holds.
+
+### The screen
+
+Seerr's issue list is the reference for how it should look, and the bar to
+clear on how it reads. Cleaner than Seerr, usable by somebody who is not an
+admin, and carrying more than Seerr can: this app knows the file the issue is
+about, the plays behind it, what went wrong during those plays, whether the
+file is still on the disk and who else watched it.
+
+What that means in practice:
+
+- A row says what it is about before a word is read: the artwork, the poster,
+  the title, and the one thing that is wrong.
+- The detail answers the question the report is really asking. Somebody
+  writing "it keeps buffering" wants the plays that buffered, the bitrate, the
+  transcode decision and whether the file is oversized. All of that is already
+  recorded against that file.
+- A viewer sees their own reports and a clear state. An admin sees everything
+  and closes it.
+- Fewer clicks than now. The common actions belong on the row.
+
+### Importing from Seerr
 
 Worth doing because a report is more useful here than there: this app can put
 it next to the file, the plays behind it, what went wrong during them and
@@ -330,10 +376,6 @@ A row about a title now carries its artwork, a poster, the facts as label and
 value and one clear action. Issues uses it. The library lists and the stream
 cards have had a pass. Not yet done the same way: the Map's lists, the
 Dashboard's lower half, Endpoints, Reports, Rules and Settings.
-
-Settings also has a heading reading "People" above Add account, which is about
-app accounts rather than the Endpoints tab. "Accounts" would be clearer now
-that the tab has been renamed.
 
 ---
 

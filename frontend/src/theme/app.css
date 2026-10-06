@@ -1856,7 +1856,7 @@ label.locked .pill {
   width: 460px;
   max-width: calc(100% - 24px);
   max-height: min(72vh, 620px);
-  overflow-y: auto;
+  overflow: hidden auto;
   border: 1px solid var(--live);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1900,9 +1900,14 @@ label.locked .pill {
   font-size: 13px;
 }
 .stream-detail.compact .spec {
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 10px;
   font-size: 12.5px;
+}
+/* An address with its city on it is wider than this card, and the viewport is
+   no guide to how much room a popup has. */
+.stream-detail.compact .spec-pair dd {
+  white-space: normal;
 }
 .stream-detail.compact .stream-actions {
   flex-wrap: wrap;
@@ -4583,6 +4588,39 @@ label.locked .pill {
   white-space: nowrap;
 }
 
+/* An explanation, out of the way until it is wanted. Small, round and quiet
+   beside the heading it belongs to, and the accent colour once it is open so
+   it is clear which note is showing. */
+.explain-toggle {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  min-height: 0;
+  margin-left: var(--space-2);
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  font-family: var(--font);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.explain-toggle:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+.explain-toggle.on {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
 /* A title that goes where it names. Inherits its size so a heading still
    reads as a heading, and the two halves of S01E06 sit together. */
 .title-link {
