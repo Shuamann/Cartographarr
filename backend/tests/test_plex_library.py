@@ -285,6 +285,42 @@ def test_the_audio_tracks_come_back_in_order_with_what_is_kept_about_them():
     ]
 
 
+def test_everything_else_plex_says_about_a_track_is_kept_too():
+    """Tautulli passes on four things about a track. Plex says more, and the
+    rest was being thrown away: which track a player picks by default, what
+    the channels actually are rather than how many, and the track's own name.
+    """
+    streams = [
+        a_stream(2, codec="eac3", channels=6, languageCode="eng", bitrate=768,
+                 audioChannelLayout="5.1(side)", samplingRate=48000, profile="lc",
+                 bitDepth=24, default=True, title="Commentary"),
+        a_stream(3, codec="subrip", languageCode="eng", hearingImpaired=True, dub=True, default=True,
+                 title="English (SDH)", key="/library/streams/9001"),
+    ]
+    row = library.detail_row(a_film(media=[a_file(streams)]))
+    assert json.loads(row["audio_tracks"]) == [{
+        "codec": "eac3", "channels": 6, "language": "eng", "bitrate": 768,
+        "layout": "5.1(side)", "profile": "lc", "sample_rate": 48000, "bit_depth": 24,
+        "default": True, "title": "Commentary",
+    }]
+    assert json.loads(row["subtitle_tracks"]) == [{
+        "codec": "subrip", "language": "eng", "forced": False, "location": "external",
+        "sdh": True, "dub": True, "default": True, "title": "English (SDH)",
+    }]
+
+
+def test_what_plex_did_not_say_is_left_out_rather_than_written_down_as_no():
+    """Plex leaves these out instead of sending a no, and leaving them out
+    keeps that meaning. It is also the difference between a library of thirty
+    thousand files storing what is true about its tracks and storing tens of
+    megabytes of falses."""
+    row = library.detail_row(with_tracks())
+    plain = json.loads(row["subtitle_tracks"])[1]
+    assert set(plain) == {"codec", "language", "forced", "location"}
+    quiet = json.loads(row["audio_tracks"])[1]
+    assert set(quiet) == {"codec", "channels", "language", "bitrate"}
+
+
 def test_a_subtitle_beside_the_file_is_external_and_one_inside_it_is_not():
     """Plex does not say which it is. A subtitle stored beside the file is
     fetched by its own key and one inside the file has none, which was checked

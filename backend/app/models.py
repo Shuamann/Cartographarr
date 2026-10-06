@@ -187,8 +187,15 @@ class MediaItem(Base):
     video_dynamic_range: Mapped[str | None] = mapped_column(String(32))
     audio_codec: Mapped[str | None] = mapped_column(String(16))
     audio_channels: Mapped[int | None] = mapped_column(Integer)
-    # JSON lists: [{"codec", "channels", "language", "bitrate"}] and
+    # JSON lists. Always [{"codec", "channels", "language", "bitrate"}] and
     # [{"codec", "language", "forced", "location"}].
+    #
+    # A file read from Plex also carries, where Plex says so: on an audio
+    # track layout, profile, sample_rate, bit_depth, default and title; on a
+    # subtitle sdh, dub, original, default and title. Those keys are absent
+    # rather than null when Plex did not say, which is how Plex itself answers
+    # and keeps thirty thousand rows from storing a great many falses. A file
+    # read through Tautulli has the four it always had.
     audio_tracks: Mapped[str | None] = mapped_column(Text)
     subtitle_tracks: Mapped[str | None] = mapped_column(Text)
     file_checked_at: Mapped[datetime | None] = mapped_column()

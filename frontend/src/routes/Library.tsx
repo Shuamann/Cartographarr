@@ -16,7 +16,29 @@ import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
  * with a jump to its plays in History.
  */
 
-type Track = { codec: string | null; channels?: number | null; language: string | null; bitrate?: number | null; forced?: boolean; location?: string | null };
+/* A track, as it is stored.
+ *
+ * The first four are always there. The rest are only present when Plex said
+ * so, which is how Plex itself answers: a track that is not for the hard of
+ * hearing simply has nothing to say about it. A file read through Tautulli
+ * has only the first four, because that is all Tautulli passes on. */
+type Track = {
+  codec: string | null;
+  channels?: number | null;
+  language: string | null;
+  bitrate?: number | null;
+  forced?: boolean;
+  location?: string | null;
+  layout?: string | null;
+  profile?: string | null;
+  sample_rate?: number | null;
+  bit_depth?: number | null;
+  default?: boolean;
+  title?: string | null;
+  sdh?: boolean;
+  dub?: boolean;
+  original?: boolean;
+};
 
 type Finding = {
   key: string;
@@ -824,7 +846,17 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
           {f.audio_tracks.length === 0 && <p className="muted small">None recorded.</p>}
           {f.audio_tracks.map((t, i) => (
             <p key={i} className="small">
-              {[t.codec?.toUpperCase(), t.channels ? `${t.channels} ch` : null, t.language ?? "no language", t.bitrate ? `${t.bitrate} kbps` : null]
+              {[
+                t.codec?.toUpperCase(),
+                // The layout says what the count cannot: 5.1(side) and
+                // 5.1(rear) are both six channels and not the same thing.
+                t.layout ?? (t.channels ? `${t.channels} ch` : null),
+                t.language ?? "no language",
+                t.bitrate ? `${t.bitrate} kbps` : null,
+                t.sample_rate ? `${Math.round(t.sample_rate / 100) / 10} kHz` : null,
+                t.default ? "default" : null,
+                t.title,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
@@ -835,7 +867,21 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
           {f.subtitle_tracks.length === 0 && <p className="muted small">None.</p>}
           {f.subtitle_tracks.map((t, i) => (
             <p key={i} className="small">
-              {[t.codec?.toUpperCase(), t.language ?? "no language", t.forced ? "forced" : null, t.location].filter(Boolean).join(" · ")}
+              {[
+                t.codec?.toUpperCase(),
+                t.language ?? "no language",
+                // Subtitles carrying sound effects and speaker names. Anybody
+                // who wants plain subtitles does not want these, and nothing
+                // could tell them apart before.
+                t.sdh ? "SDH" : null,
+                t.forced ? "forced" : null,
+                t.dub ? "for the dub" : null,
+                t.location,
+                t.default ? "default" : null,
+                t.title,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
           ))}
         </div>

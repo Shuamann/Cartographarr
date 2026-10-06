@@ -189,6 +189,52 @@ def _range(stream: Any) -> str | None:
     return kind or "SDR"
 
 
+def _extra(track: dict, stream: Any, fields: tuple[tuple[str, str], ...]) -> dict:
+    """Add what Plex happened to say, and nothing for what it did not.
+
+    Plex leaves these out rather than sending a no, so leaving them out here
+    keeps that meaning exactly. It also matters for size: most tracks are not
+    forced, not for the hard of hearing and have no name, and writing all that
+    down as false against every track in a library of thirty thousand files is
+    tens of megabytes to say nothing.
+    """
+    for name, key in fields:
+        value = getattr(stream, name, None)
+        if value is None or value == "" or value is False:
+            continue
+        track[key] = _int(value) if key in ("sample_rate", "bit_depth") else (
+            True if value is True else str(value)
+        )
+    return track
+
+
+AUDIO_EXTRA = (
+    # How the channels are actually laid out, where the count alone does not
+    # say: 5.1(side) and 5.1(rear) are both six.
+    ("audioChannelLayout", "layout"),
+    ("profile", "profile"),
+    ("samplingRate", "sample_rate"),
+    ("bitDepth", "bit_depth"),
+    # The one a player picks when nobody chooses, which is the whole question
+    # behind somebody watching a film in the wrong language.
+    ("default", "default"),
+    # The track's own name in the file: "Commentary", "Director's cut".
+    ("title", "title"),
+)
+
+SUBTITLE_EXTRA = (
+    # Subtitles for the hard of hearing, which carry sound effects and speaker
+    # names. Somebody who wants plain subtitles does not want these, and until
+    # now nothing could tell them apart.
+    ("hearingImpaired", "sdh"),
+    # Subtitles written to match a dub rather than the original audio.
+    ("dub", "dub"),
+    ("original", "original"),
+    ("default", "default"),
+    ("title", "title"),
+)
+
+
 def _tracks(part: Any) -> tuple[list[dict], list[dict], Any]:
     """The audio and subtitle tracks, and the video stream, from one file."""
     audio: list[dict] = []
@@ -199,14 +245,14 @@ def _tracks(part: Any) -> tuple[list[dict], list[dict], Any]:
         if kind == 1:
             video = video or stream
         elif kind == 2:
-            audio.append({
+            audio.append(_extra({
                 "codec": getattr(stream, "codec", None) or None,
                 "channels": _int(getattr(stream, "channels", None)),
                 "language": getattr(stream, "languageCode", None) or getattr(stream, "language", None) or None,
                 "bitrate": _int(getattr(stream, "bitrate", None)),
-            })
+            }, stream, AUDIO_EXTRA))
         elif kind == 3:
-            subtitles.append({
+            subtitles.append(_extra({
                 "codec": getattr(stream, "codec", None) or None,
                 "language": getattr(stream, "languageCode", None) or getattr(stream, "language", None) or None,
                 # Plex only says forced when it is, which is not the same as
@@ -216,7 +262,7 @@ def _tracks(part: Any) -> tuple[list[dict], list[dict], Any]:
                 # inside the file has none. Checked against 1,100 tracks
                 # Tautulli had already described: no exceptions.
                 "location": "external" if getattr(stream, "key", None) else "embedded",
-            })
+            }, stream, SUBTITLE_EXTRA))
     return audio, subtitles, video
 
 

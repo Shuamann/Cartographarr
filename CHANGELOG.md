@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.90.0 - 2026-10-06
+
+### Added
+- Everything else Plex says about a track is kept now, not just the four things Tautulli passed on. An audio track
+  also carries its channel layout, profile, sample rate, bit depth, whether it is the one a player picks by
+  default, and its own name in the file. A subtitle also carries whether it is for the hard of hearing, whether it
+  was written for a dub, whether it is the original language, whether it is the default, and its name.
+- The channel layout is the useful one of those: 5.1(side) and 5.1(rear) are both six channels and are not the
+  same thing, and the count alone could not say which a file had.
+- Subtitles for the hard of hearing can be told apart from plain ones at last, which is the difference between
+  subtitles and subtitles with every door slam written out. Found on 205 files in the first six thousand read.
+- The library's track lists show all of it.
+
+### Changed
+- A field Plex did not mention is left out of the stored track rather than written down as a no, which is how Plex
+  answers and what it means. It also keeps a library of thirty thousand files from storing tens of megabytes of
+  falses. The four fields that were always there are still always there, so nothing reading them has to change.
+
 ## 0.88.0 - 2026-10-06
 
 ### Added
