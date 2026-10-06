@@ -302,10 +302,35 @@ What it needs:
   comes from Tautulli and offer the import. Nobody should have to read this
   file to find that out.
 
+It brings only what is missing. Importing what is already here would double
+every figure in the app, so the import has to recognise a play it already
+holds and skip it, and running it twice has to be safe and boring. The upsert
+the library scan uses is the pattern: the same row arriving again changes
+nothing.
+
+Which makes the more useful half of this a question rather than a copy: what
+does Tautulli have that this app does not? Answering it is most of the work
+and is worth having on its own, because it is also the check that the import
+worked.
+
+- Compare the two, day by day, over the whole of Tautulli's history: how many
+  plays it recorded against how many are here. A day that matches is done. A
+  day short by three is the thing to go and fetch.
+- Say where the gaps are and how big, before importing anything. A missing
+  week in 2022 and a missing hour last Tuesday are different problems: one is
+  Tautulli's history being older than this app, the other is something having
+  gone wrong recently and worth knowing about.
+- Fetch only those days, and compare again afterwards. An import that says it
+  read 4,000 plays is not evidence of anything; a gap report that comes back
+  empty is.
+- Run the comparison on its own, without importing, whenever anybody asks. It
+  is the only honest answer to "is anything missing".
+
 The care needed is play identity. A paused and resumed play is one play, and
 the import has to agree with how plays are already counted here or every
 figure in the app moves. Reference ids exist for exactly this and the import
-should use them rather than inventing a rule.
+should use them, both for recognising a play already held and for counting a
+day, rather than inventing a rule.
 
 ### Checking the handover actually worked
 

@@ -15,6 +15,12 @@ copy on GitHub to say what an update brings.
   unwatched.
 - It also stores each file's path, which the on-disk check and tidying are built on.
 
+### Changed
+- A tile's title keeps the show, the season and the episode, and gives up the episode's name instead. It was the
+  other way round, which left "Y... - S02 - E04": the two numbers, and not the one word that makes them mean
+  anything. The show name now takes everything except the room the numbers need and a few characters of the name.
+- Less air around the dashes in a title, on the tiles and on the stream card both.
+
 ### Fixed
 - A request whose title had changed key could be matched by TMDB id to an unrelated episode. An episode's TMDB id
   is the episode's own, a different number from the film or show a request names, so episodes are no longer looked
