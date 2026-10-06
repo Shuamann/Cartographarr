@@ -395,6 +395,44 @@ def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
         return art
 
 
+_IMAGE_CLIENT: dict[str, Any] = {"key": None, "client": None}
+
+
+def _image_client(settings) -> httpx.AsyncClient:
+    """One client for every poster, held open.
+
+    A client per image means a fresh connection and, over HTTPS, a fresh TLS
+    handshake for each one. Measured against a real server over the internet:
+    230 ms an image that way, 54 ms sharing one client. That is the whole of
+    the difference between this and the things it fetches from, which have
+    held their connections open all along.
+
+    Rebuilt when the settings it was made with change, so turning certificate
+    checking on or off takes effect without a restart.
+    """
+    key = f"{settings.tautulli_verify_ssl}|{settings.tautulli_timeout}"
+    if _IMAGE_CLIENT["key"] != key:
+        old = _IMAGE_CLIENT["client"]
+        if old is not None:
+            # Closed in the background: nothing is waiting on the old one.
+            asyncio.create_task(old.aclose())
+        _IMAGE_CLIENT["key"] = key
+        _IMAGE_CLIENT["client"] = httpx.AsyncClient(
+            timeout=settings.tautulli_timeout,
+            verify=settings.tautulli_verify_ssl,
+            limits=httpx.Limits(max_connections=16, max_keepalive_connections=16),
+        )
+    return _IMAGE_CLIENT["client"]
+
+
+async def close_image_client() -> None:
+    """At shutdown, so the connections are not left hanging."""
+    client = _IMAGE_CLIENT["client"]
+    _IMAGE_CLIENT["key"], _IMAGE_CLIENT["client"] = None, None
+    if client is not None:
+        await client.aclose()
+
+
 _ARTLESS: dict[tuple[int, str], float] = {}
 ARTLESS_SECONDS = 3600.0
 """How long to remember that an item has no artwork.
@@ -468,14 +506,12 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
     async with POSTER_FETCHES:
         if await request.is_disconnected():
             raise HTTPException(499, "Gone before the artwork arrived")
-        async with httpx.AsyncClient(
-            timeout=settings.tautulli_timeout, verify=settings.tautulli_verify_ssl
-        ) as client:
-            try:
-                upstream = await client.get(f"{base}/api/v2", params=params)
-                upstream.raise_for_status()
-            except Exception as exc:  # noqa: BLE001
-                raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
+        client = _image_client(settings)
+        try:
+            upstream = await client.get(f"{base}/api/v2", params=params)
+            upstream.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
 
     await asyncio.to_thread(_keep_poster, kept, upstream.content)
     return Response(

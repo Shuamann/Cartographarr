@@ -273,6 +273,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.shutdown(wait=False)
+        from app.routers.data import close_image_client
+
+        await close_image_client()
 
 
 # No interactive docs or schema: they would hand anyone who can reach the port a

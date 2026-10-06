@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.82.0 - 2026-10-05
+
+### Fixed
+- Artwork is roughly four times quicker to arrive. Every image opened a new connection, and over HTTPS that is a
+  new TLS handshake per picture. Measured against a real server: 230 ms an image that way, 54 ms sharing one client
+  the way the services we fetch from have been doing all along. One client now, held open, rebuilt only when the
+  settings it was made with change.
+
 ## 0.81.0 - 2026-10-05
 
 ### Added
