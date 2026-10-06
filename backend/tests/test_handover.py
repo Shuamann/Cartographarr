@@ -190,3 +190,35 @@ def test_filling_without_tautulli_is_refused(client, monkeypatch):
     claim(client)
     no_tautulli(monkeypatch)
     assert client.post("/api/handover/fill").status_code == 400
+
+
+def test_filling_a_day_does_not_leave_the_play_recorded_twice(client):
+    """An install that ran on Plex alone wrote these plays down itself, under
+    a negative id, and Tautulli has now delivered its own copy.
+
+    The history sync has always dropped ours when that happens. Filling a gap
+    writes to the same table and did not, so a fetched day ended up holding
+    both copies of every play, which is the exact thing this feature exists to
+    notice and would then have reported as extra on the next run.
+    """
+    from app.db import session_scope
+    from app.models import History
+    from app.services import handover
+
+    claim(client)
+    started = int(datetime(2026, 3, 2, 20).timestamp())
+    with session_scope() as db:
+        # Recorded here from Plex: negative id, same person, same item, same
+        # moment.
+        db.add(History(row_id=-5, user_id=7, rating_key=4101, started=started, stopped=started + 600,
+                       full_title="The same play"))
+
+    fake = FakeTautulli(
+        {"2026-03-02": 2},
+        {"2026-03-02": [{"row_id": 99, "user_id": 7, "rating_key": 4101, "date": started, "started": started,
+                         "stopped": started + 600, "full_title": "The same play", "media_type": "movie"}]},
+    )
+    asyncio.run(handover.fill(fake))
+    with session_scope() as db:
+        kept = db.query(History).all()
+        assert [h.row_id for h in kept] == [99], "Tautulli's copy is the one kept, and only one is kept"

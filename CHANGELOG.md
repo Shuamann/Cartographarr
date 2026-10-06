@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.99.1 - 2026-10-06
+
+### Fixed
+- Fetching a day the check said was short could leave every play on it recorded twice. An install that ran on
+  Plex alone writes its own plays down, and the history sync has always removed ours when Tautulli later delivers
+  its copy. Filling a gap writes to the same table and was not doing that, so the day ended up holding both, and
+  the next run of the check would have reported it as having more here than Tautulli has. Found by reading the
+  two paths side by side rather than by it biting.
+
 ## 0.99.0 - 2026-10-06
 
 ### Added

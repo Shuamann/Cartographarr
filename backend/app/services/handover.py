@@ -108,6 +108,7 @@ async def fill(client, result: dict | None = None) -> dict:
     here arrives with the row id it already has and the upsert leaves it
     alone, so running this twice is safe and boring.
     """
+    from app.services import recorded
     from app.services.sync import _map_history, _upsert
 
     from app.models import History
@@ -131,6 +132,13 @@ async def fill(client, result: dict | None = None) -> dict:
             continue
         with session_scope() as db:
             _upsert(db, History, rows)
+            # The same thing the history sync does after writing, and for the
+            # same reason: an install that ran on Plex alone recorded these
+            # plays itself, under a negative id, and Tautulli has now
+            # delivered its own copy of them. Without this the day fills up
+            # with both and is counted twice, which this whole feature exists
+            # to notice.
+            recorded.drop_duplicates(db, rows)
         written += len(rows)
     log.info("handover fill: %d rows across %d days", written, len(days))
     return {"filled": written, "days": len(days)}
