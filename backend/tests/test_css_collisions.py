@@ -139,3 +139,38 @@ def test_a_tile_title_gives_up_the_episode_name_and_never_the_numbers():
     assert "flex: 0 0 auto;" in show, "the show name does not shrink"
     name = css[css.index(".card-title-name {") :][:300]
     assert "flex: 1 1 0;" in name, "the episode's name takes what is left, and gives way first"
+
+
+def test_the_narrow_facts_rule_does_not_reach_a_phone():
+    """A media query with only an upper bound beats everything below it.
+
+    The two column rule for a middling window had no lower bound, so it also
+    beat the single column a narrow card is meant to get. On a phone that drew
+    two columns about 190 and 140 pixels wide: an address with its city on it
+    wrapped to five lines and the facts beside it lined up with nothing.
+    Nothing ran off the screen, so looking for overflow never found it.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    for query in re.finditer(r"@media ([^{]+)\{", css):
+        block = css[query.end() : css.find("\n}", query.end())]
+        if re.search(r"^\s+\.spec \{", block, re.M) and "max-width" in query.group(1):
+            assert "min-width" in query.group(1), (
+                "the middling rule needs a floor as well as a ceiling: " + query.group(1).strip()
+            )
+
+
+def test_every_control_uses_the_one_control_height():
+    """Measured across all twelve pages in a real browser, every input, select
+    and button is 32px. These are the three that had their own number and had
+    to be given the token instead: an overlay pill at 33, and the map's own
+    zoom buttons at 29. The only things left at another height are the text
+    links in History, which are links drawn as buttons and belong inline.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    for name in (".legend-tab {", ".view-body .maplibregl-ctrl-group button {"):
+        at = css.index(name)
+        assert "var(--control-h)" in css[at : css.index("\n}", at)], name + " needs the control height token"

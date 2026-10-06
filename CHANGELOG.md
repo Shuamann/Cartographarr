@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.93.0 - 2026-10-06
+
+### Fixed
+- The facts on a stream card read properly on a phone. A rule meant for a middling window had a ceiling and no
+  floor, so it also beat the single column a narrow card is supposed to get: a phone was drawn two columns about
+  190 and 140 pixels wide, an address with its city on it wrapped to five lines, and the facts beside it lined up
+  with nothing. Nothing ever ran off the screen, which is why looking for that never found it.
+- The map's own zoom buttons were 29 pixels square and the Key pill was 33, against the 32 every other control in
+  the app shares. Measured across all twelve pages at desktop and phone width, every input, select and button is
+  now that height. The only things at another are the text links in History, which are links drawn as buttons and
+  belong inline.
+
 ## 0.91.0 - 2026-10-06
 
 ### Fixed

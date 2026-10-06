@@ -380,22 +380,6 @@ Dashboard's lower half, Endpoints, Reports, Rules and Settings.
 
 ## Smaller things noticed and not done
 
-- **Inputs are taller than buttons.** An input's height is its padding and
-  line height, which comes to about seven pixels more than the control height
-  it is meant to share. Issues holds its own inputs to the control height;
-  everywhere else an input beside a button is a small staircase. Fixing it in
-  the base rule touches every form, Settings included, so it wants its own
-  pass and a look at each page.
-- **The narrow-screen rule for .spec expects bare labels and values.** Below
-  900 pixels it sizes the first column to its contents, which is right for a
-  label and wrong for a label and value cell: the cell takes its full one-line
-  width and runs off a phone. Issues overrides it. The stream detail uses the
-  same cells and probably has the same fault on a phone, which has not been
-  checked.
-
-- **The Map at phone width.** A few filter inputs are still under the size
-  worth aiming a thumb at. The rest of the app was fixed; the map's own
-  controls and the third party ones it embeds were left.
 - **A weekly digest exists and is off by default.** Worth revisiting whether
   anything else belongs in it once it has been run for a few weeks.
 
