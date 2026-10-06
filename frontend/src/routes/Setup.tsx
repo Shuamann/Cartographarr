@@ -73,11 +73,8 @@ export default function Setup({ status, onDone }: Props) {
                 </strong>
                 <span className="muted small">
                   Live streams, rules and bans, and the whole library down to every audio and subtitle track, straight
-                  from Plex. Nothing else to install.
-                </span>
-                <span className="muted small">
-                  History, the map and Endpoints are still built from Tautulli&apos;s record of plays, so they stay
-                  empty until Tautulli is connected. You can add it later from Settings.
+                  from Plex. Every play is recorded from today, so History, the map and Endpoints fill as people
+                  watch. Nothing else to install.
                 </span>
               </span>
             </label>
@@ -86,8 +83,8 @@ export default function Setup({ status, onDone }: Props) {
               <span>
                 <strong>Connect through Tautulli</strong>
                 <span className="muted small">
-                  Everything above, plus History, the map and Endpoints, and the only way to bring in plays from before
-                  today. Needs Tautulli running and watching your server.
+                  Everything above, and the only way to bring in plays from before today. Needs Tautulli running and
+                  watching your server.
                 </span>
               </span>
             </label>
