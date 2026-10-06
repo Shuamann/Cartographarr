@@ -107,14 +107,44 @@ def invalidate() -> None:
     _cache = None
 
 
-REQUIRED = ("tautulli_url", "tautulli_api_key")
+TAUTULLI = ("tautulli_url", "tautulli_api_key")
+PLEX = ("plex_token", "plex_url")
+
+
+def tautulli_configured() -> bool:
+    """Whether Tautulli can be asked anything. Only what Tautulli alone can
+    answer should check this: plays from before this app was watching, and the
+    users and libraries that are not read from Plex yet."""
+    settings = current()
+    return all(getattr(settings, name) for name in TAUTULLI)
+
+
+def plex_configured() -> bool:
+    settings = current()
+    return all(getattr(settings, name) for name in PLEX)
+
+
+def wants_plex() -> bool:
+    """Whether either source has been set to Plex, which setup does when Plex
+    is the answer to its first question."""
+    settings = current()
+    return settings.activity_source == "plex" or settings.library_source == "plex"
 
 
 def missing_required() -> list[str]:
     """Settings with no value yet. Non-empty means the app is unconfigured and
-    should show first-run setup rather than an empty dashboard."""
+    should show first-run setup rather than an empty dashboard.
+
+    One working connection is enough, either one. An install that already
+    reads from Tautulli is never sent back to setup for choosing Plex as a
+    source and not finishing it: that is a gap to show in Settings, not a
+    reason to lock somebody out of their own install.
+    """
+    if tautulli_configured() or plex_configured():
+        return []
     settings = current()
-    return [name for name in REQUIRED if not getattr(settings, name)]
+    wanted = PLEX if wants_plex() else TAUTULLI
+    return [name for name in wanted if not getattr(settings, name)]
 
 
 def is_configured() -> bool:

@@ -20,7 +20,9 @@ from app.settings_store import (
     is_configured,
     locked_keys,
     missing_required,
+    plex_configured,
     save,
+    tautulli_configured,
 )
 from app.tautulli.client import TautulliClient
 from app.redact import redact
@@ -54,6 +56,10 @@ def setup_status() -> dict:
     return {
         "configured": is_configured(),
         "missing": missing_required(),
+        # Which connections already work, so setup can skip a question the
+        # environment has answered, and say what an install has without one.
+        "plex": plex_configured(),
+        "tautulli": tautulli_configured(),
         # Env-supplied values are already filled in and locked, so the wizard
         # should render them read-only rather than asking again.
         "locked": sorted(locked_keys() - {"data_dir"}),
@@ -92,6 +98,11 @@ async def test_tautulli(
     (it just won't be preferred), but a remote URL that fails is fatal.
     """
 
+    # A field the environment set is shown locked and sent empty, so the
+    # value already held is the one to test.
+    tautulli_url = tautulli_url or current().tautulli_url
+    tautulli_api_key = tautulli_api_key or current().tautulli_api_key
+
     async def probe(url: str) -> dict:
         if not url:
             return {"tried": False}
@@ -119,6 +130,101 @@ async def test_tautulli(
     remote = await probe(tautulli_url)
     local = await probe(tautulli_local_url)
     return {"ok": bool(remote.get("ok")), "remote": remote, "local": local}
+
+
+def _save_unlocked(values: dict[str, Any]) -> dict[str, Any]:
+    """Save what the environment has not already decided, and say what it has.
+
+    Setup must never fail on a key the container's own variables set: those
+    are the operator's word, and refusing the whole step over one of them
+    would leave somebody unable to finish."""
+    locked = locked_keys()
+    free = {k: v for k, v in values.items() if k not in locked}
+    if free:
+        save(free)
+    return {k: getattr(current(), k) for k in values if k in locked}
+
+
+@router.post("/setup/plex/link")
+async def plex_link_start(_: AdminUser) -> dict:
+    """A code to type at plex.tv/link, in place of a password."""
+    from app.plex import link
+
+    try:
+        return await asyncio.to_thread(link.start)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"plex.tv did not answer: {redact(exc)}") from exc
+
+
+@router.post("/setup/plex/link/{link_id}")
+async def plex_link_check(link_id: str, admin: AdminUser) -> dict:
+    """Whether the code has been entered yet. The token goes straight into
+    the settings store and is never sent back to the page."""
+    from app.plex import link
+    from app.plex import server as plex_server
+
+    if "plex_token" in locked_keys():
+        raise HTTPException(409, "The Plex token is set by the environment, so there is nothing to link")
+    try:
+        token = await asyncio.to_thread(link.check, link_id)
+    except link.Expired as exc:
+        raise HTTPException(410, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"plex.tv did not answer: {redact(exc)}") from exc
+    if token is None:
+        return {"linked": False}
+    save({"plex_token": token})
+    plex_server.forget()
+    audit.record(admin, "settings.save", "Linked this install to a Plex account", detail={"plex_token": {"changed": True}})
+    return {"linked": True}
+
+
+@router.post("/setup/plex/token")
+async def plex_token_paste(admin: AdminUser, plex_token: str = Body(..., embed=True)) -> dict:
+    """For somebody who already has a token. Checked against plex.tv before it
+    is kept, so a mistyped one fails here rather than as an empty server list."""
+    from plexapi.myplex import MyPlexAccount
+
+    from app.plex import server as plex_server
+
+    token = plex_token.strip()
+    if not token:
+        raise HTTPException(400, "Paste the token first")
+    if "plex_token" in locked_keys():
+        raise HTTPException(409, "The Plex token is set by the environment")
+    try:
+        await asyncio.to_thread(MyPlexAccount, token=token)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(400, f"plex.tv did not accept that token: {redact(exc)}") from exc
+    save({"plex_token": token})
+    plex_server.forget()
+    audit.record(admin, "settings.save", "Set the Plex token by hand", detail={"plex_token": {"changed": True}})
+    return {"linked": True}
+
+
+@router.post("/setup/plex/use")
+async def plex_use(admin: AdminUser, plex_url: str = Body(..., embed=True)) -> dict:
+    """Keep this address and read from Plex directly.
+
+    The address is tried first and kept only if it answers, since everything
+    live depends on it. Both sources move to Plex together: that is what the
+    choice at the top of setup means.
+    """
+    from app.plex import server as plex_server
+
+    url = plex_url.strip().rstrip("/")
+    if not url:
+        raise HTTPException(400, "Choose an address first")
+    answer = await asyncio.to_thread(plex_server.reachable, url)
+    if not answer.get("ok"):
+        raise HTTPException(502, f"That address did not answer: {answer.get('error')}")
+    values: dict[str, Any] = {"plex_url": url, "activity_source": "plex", "library_source": "plex"}
+    if answer.get("machine_identifier"):
+        values["plex_machine_identifier"] = answer["machine_identifier"]
+    kept = _save_unlocked(values)
+    plex_server.forget()
+    audit.record(admin, "settings.save", f"Set up to read from Plex directly at {url}", detail={"plex_url": {"after": url}})
+    return {"ok": True, "name": answer.get("name"), "ms": answer.get("ms"), "kept_by_environment": kept}
 
 
 @router.post("/setup/test-maxmind")
@@ -238,6 +344,8 @@ def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[d
 async def sync_run(admin: AdminUser, full: bool = False) -> dict:
     if not is_configured():
         raise HTTPException(409, f"Not configured yet. Missing: {', '.join(missing_required())}")
+    if not tautulli_configured():
+        raise HTTPException(409, "Plays, users and libraries are read from Tautulli, which is not connected")
     if _sync_lock.locked():
         raise HTTPException(409, "A sync is already running")
     audit.record(admin, "sync.run", "Started a full resync" if full else "Started a sync")

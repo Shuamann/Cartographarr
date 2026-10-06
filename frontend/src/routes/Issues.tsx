@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Loading from "../components/Loading";
 import { api, useApi } from "../lib/api";
-import { FileCardView, type FileDetail, fileFormat, size } from "./Library";
+import { type FileDetail, fileFormat, mbps, size } from "./Library";
 import { useNav } from "../lib/nav";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
 
@@ -459,75 +459,22 @@ function IssueCard({
   const flip = () =>
     api.post<{ warning?: string | null }>(`/issues/${id}/status`, { status: d.status === "open" ? "resolved" : "open" });
   const c = d.context;
-  const theirs = d.plays.filter((p) => p.mine);
-  const others = d.plays.filter((p) => !p.mine);
-  const otherPeople = new Set(others.map((p) => p.user_id)).size;
-  const otherStalls = others.reduce((n, p) => n + p.stalls, 0);
 
+  /* Everything the row already says (status, who reported it and when, how
+     their plays went against everybody else's) stays on the row. The card
+     holds only what the row has no room for. */
   return (
     <div className="issue-card">
       <section className="card-section">
-        <h3>The report</h3>
-        <dl className="spec">
-          <Pair label="Kind">{TYPES[d.issue_type]}</Pair>
-          <Pair label="Status">
-            <StatusPill status={d.status} />
-          </Pair>
-          <Pair label="Reported">{admin ? `${when(d.created_at)} by ${d.reporter_name ?? "someone"}` : when(d.created_at)}</Pair>
-          {d.season != null && d.episode != null && (
-            <Pair label="Episode">{d.season === 0 ? `Special, episode ${d.episode}` : `Season ${d.season}, episode ${d.episode}`}</Pair>
-          )}
-          {/* The play it was reported from, which is the half nobody
-              remembers to write down. */}
-          {c && (
-            <>
-              {/* Labels of one word: the label column is nine characters
-                  wide, and "Watching on" broke over two lines in it. */}
-              <Pair label="Device">{[c.player, c.product ?? c.platform].filter(Boolean).join(", ") || "Not recorded"}</Pair>
-              <Pair label="Network">{c.location === "wan" ? "Remote" : c.location === "lan" ? "Local" : "Not recorded"}</Pair>
-              <Pair label="Playback">
-                <span className={c.transcode_decision === "transcode" ? "pill warn" : "pill"}>{c.transcode_decision ?? "not recorded"}</span>
-              </Pair>
-              <Pair label="Stalls">
-                <span className={c.stalls ? "issue-stalled" : undefined}>
-                  {c.stalls ? `${plural(c.stalls, "time")}, ${c.stall_seconds}s in all` : "None"}
-                </span>
-              </Pair>
-              {c.percent_complete != null && <Pair label="Watched">{Math.round(c.percent_complete)}%</Pair>}
-            </>
-          )}
-          {!c && theirs.length > 0 && (
-            <Pair label={admin ? "Reporter" : "Played"}>
-              <span className={theirs.some((p) => p.stalls) ? "issue-stalled" : undefined}>
-                {playsText(theirs.length, theirs.reduce((n, p) => n + p.stalls, 0))}
-              </span>
-            </Pair>
-          )}
-          {admin && (
-            <Pair label="Others">
-              <span className={otherStalls ? "issue-stalled" : undefined}>
-                {otherPeople
-                  ? `${plural(otherPeople, "person", "people")}, ${otherStalls ? `stalled ${plural(otherStalls, "time")}` : "no stalls"}`
-                  : "Nobody else has played it"}
-              </span>
-            </Pair>
-          )}
-          {admin && d.seerr_id && seerrUrl && (
-            <Pair label="Seerr">
-              <a href={`${seerrUrl}/issues/${d.seerr_id}`} target="_blank" rel="noreferrer">
-                Open in Seerr
-              </a>
-            </Pair>
-          )}
-        </dl>
-
         <div className="issue-thread">
           {d.comment_list.length === 0 && <p className="muted small">No message.</p>}
           {d.comment_list.map((n, i) => (
             <div key={i} className="issue-note">
               <div className="issue-note-head">
-                <strong>{n.author ?? "Someone"}</strong>
-                <span className="muted small">{when(n.created_at)}</span>
+                <strong>{n.author ?? "Someone in Seerr"}</strong>
+                <span className="muted small" title={when(n.created_at)}>
+                  {ago(n.created_at)}
+                </span>
               </div>
               <p>{n.message}</p>
             </div>
@@ -570,15 +517,44 @@ function IssueCard({
           )}
         </div>
         {fromSeerr && admin && (
-          <p className="muted small">This came from Seerr, so notes and resolutions go back there too, signed with your name.</p>
+          <p className="muted small issue-aside">
+            From Seerr: notes and resolutions go back there, signed with your name.
+            {seerrUrl && (
+              <>
+                {" "}
+                <a href={`${seerrUrl}/issues/${d.seerr_id}`} target="_blank" rel="noreferrer">
+                  Open in Seerr
+                </a>
+              </>
+            )}
+          </p>
         )}
       </section>
 
-      <section className="card-section">
-        <h3>{admin ? "Plays of this file" : "Your plays of this file"}</h3>
-        {d.plays.length === 0 ? (
-          <p className="muted small">No plays recorded{admin ? " for this file" : ""}.</p>
-        ) : (
+      {/* The play it was reported from, which is the half nobody remembers to
+          write down. */}
+      {c && (
+        <section className="card-section">
+          <h3>The play it was reported from</h3>
+          <dl className="spec">
+            <Pair label="Device">{[c.player, c.product ?? c.platform].filter(Boolean).join(", ") || "Not recorded"}</Pair>
+            <Pair label="Network">{c.location === "wan" ? "Remote" : c.location === "lan" ? "Local" : "Not recorded"}</Pair>
+            <Pair label="Playback">
+              <span className={c.transcode_decision === "transcode" ? "pill warn" : "pill"}>{c.transcode_decision ?? "not recorded"}</span>
+            </Pair>
+            <Pair label="Stalls">
+              <span className={c.stalls ? "issue-stalled" : undefined}>
+                {c.stalls ? `${plural(c.stalls, "time")}, ${c.stall_seconds}s in all` : "None"}
+              </span>
+            </Pair>
+            {c.percent_complete != null && <Pair label="Watched">{Math.round(c.percent_complete)}%</Pair>}
+          </dl>
+        </section>
+      )}
+
+      {d.plays.length > 0 && (
+        <section className="card-section">
+          <h3>{admin ? "Plays of this file" : "Your plays of this file"}</h3>
           <div className="issue-plays-wrap">
             <table className="issue-plays">
               <thead>
@@ -614,13 +590,13 @@ function IssueCard({
               </tbody>
             </table>
           </div>
-        )}
-        {d.rating_key && nav.filterTo && d.plays.length > 0 && (
-          <button className="btn" onClick={() => nav.filterTo?.("History", { rating_key: d.rating_key!, ratingKeyLabel: d.title ?? "" })}>
-            {d.plays.length > 10 ? `All ${d.plays.length} in History` : "Open in History"}
-          </button>
-        )}
-      </section>
+          {d.rating_key && nav.filterTo && (
+            <button className="btn" onClick={() => nav.filterTo?.("History", { rating_key: d.rating_key!, ratingKeyLabel: d.title ?? "" })}>
+              {d.plays.length > 10 ? `All ${d.plays.length} in History` : "Open in History"}
+            </button>
+          )}
+        </section>
+      )}
 
       {(d.other_reports ?? []).length > 0 && (
         <section className="card-section">
@@ -641,79 +617,81 @@ function IssueCard({
 
       <section className="card-section">
         <h3>The file</h3>
-        <WhereIs d={d} admin={admin} />
-        {!d.file ? (
-          <p className="muted small">
-            {d.found_under
-              ? `Nothing in the library under the reported key${d.rating_key ? ` (${d.rating_key})` : ""}, but the same title is here under ${d.found_under}, so Plex has renumbered it since the report.`
-              : `This server has no file for the reported item${admin && d.rating_key ? ` (${d.rating_key})` : ""}. It may have been removed, or the report names something never added.`}
-          </p>
-        ) : admin ? (
-          <FileCardView f={d.file} days={365} />
-        ) : (
-          <ViewerFile f={d.file} />
-        )}
+        <IssueFile d={d} admin={admin} />
       </section>
     </div>
   );
 }
 
-/* Whether the file is on the disk now, which is a different question from
-   whether the library has a row for it. They disagree exactly when something
-   has been deleted, moved or unmounted. */
-function WhereIs({ d, admin }: { d: IssueDetail; admin: boolean }) {
-  const w = d.whereis;
-  if (!w || w.state === "unknown") return null;
-  if (w.state === "gone") {
-    return (
-      <p className="note bad-note" role="alert">
-        {admin
-          ? "The library has a record of this file and it is not on the disk. It has been deleted or moved."
-          : "The file is not on the server any more, so it needs replacing rather than fixing."}
-        {admin && w.path ? <span className="muted small file-path"> {w.path}</span> : null}
-      </p>
-    );
-  }
-  // Somebody who cannot mount anything has nothing to do about a mount.
-  if (!admin) return null;
-  if (w.state === "unreachable") {
-    return (
-      <p className="note">
-        This container cannot reach where the file is kept, so whether it is still there cannot be checked. Mount it, or
-        set the path map, under Settings, Library.
-        {w.path ? <span className="muted small file-path"> {w.path}</span> : null}
-      </p>
-    );
-  }
-  return (
-    <p className="note">
-      On the disk{w.size ? `, ${size(w.size)}` : ""}.
-      {w.changed ? " It is a different size from the last scan, so it has been replaced since." : ""}
-      {w.path ? <span className="muted small file-path"> {w.path}</span> : null}
-    </p>
-  );
-}
+const SEVERITY: Record<string, { label: string; tone: string }> = {
+  high: { label: "Fix first", tone: "pill bad" },
+  medium: { label: "Worth fixing", tone: "pill warn" },
+  low: { label: "Tidy up", tone: "pill" },
+};
 
-/* The file, for somebody who cannot change it. What is wrong with it, said
-   plainly, without the buttons that act on it: those need an admin, and a
-   button that only ever answers "not allowed" is worse than none. */
-function ViewerFile({ f }: { f: FileDetail }) {
+/* The file, as evidence rather than as a workshop.
+ *
+ * What it is, whether it is on the disk, and what is already known to be wrong
+ * with it, each on a line. Replacing it, searching for another copy and
+ * rewriting its tracks are the Library's job and stay there, one click away:
+ * pulled in here they were most of the card, and none of them is what a
+ * report is asking. */
+function IssueFile({ d, admin }: { d: IssueDetail; admin: boolean }) {
+  const nav = useNav();
+  const f = d.file;
+  const w = d.whereis;
+  if (!f) {
+    return (
+      <p className="muted small">
+        {d.found_under
+          ? `Nothing in the library under the reported key, but the same title is here under ${d.found_under}, so Plex has renumbered it since the report.`
+          : "This server has no file for it. It may have been removed, or the report names something never added."}
+      </p>
+    );
+  }
+  const name = w?.path ? w.path.split(/[\\/]/).pop() : null;
   return (
     <>
       <dl className="spec">
         <Pair label="Format">{fileFormat(f) || "Not checked yet"}</Pair>
+        <Pair label="Size">{[size(w?.size ?? f.file_size), mbps(f.file_bitrate)].filter(Boolean).join(", ") || "Not known"}</Pair>
+        {w && w.state !== "unknown" && (w.state !== "unreachable" || admin) && (
+          <Pair label="Disk">
+            {w.state === "present" ? (
+              w.changed ? "There, replaced since the last scan" : "There"
+            ) : w.state === "gone" ? (
+              <span className="pill bad">Missing</span>
+            ) : (
+              <span title="This container cannot reach where the file is kept. Mount it, or set the path map, under Settings, Library.">
+                Cannot be checked from here
+              </span>
+            )}
+          </Pair>
+        )}
+        {admin && name && (
+          <Pair label="File">
+            {/* The name, which is the part that says which file. The folders
+                above it are in the tooltip. */}
+            <span className="issue-file-name" title={w?.path ?? undefined}>{name}</span>
+          </Pair>
+        )}
       </dl>
       {f.findings.length > 0 ? (
-        <>
-          <p className="muted small">Already known about this file:</p>
-          <ul className="issue-known">
-            {f.findings.map((x) => (
-              <li key={x.key}>{x.title}</li>
-            ))}
-          </ul>
-        </>
+        <ul className="issue-findings">
+          {f.findings.map((x) => (
+            <li key={x.key}>
+              {admin && <span className={(SEVERITY[x.severity] ?? SEVERITY.low).tone}>{(SEVERITY[x.severity] ?? SEVERITY.low).label}</span>}
+              <span>{x.title}</span>
+            </li>
+          ))}
+        </ul>
       ) : (
         <p className="muted small">Nothing about the file itself stands out.</p>
+      )}
+      {admin && nav.openLibrary && (
+        <button className="btn" onClick={() => nav.openLibrary?.({ ratingKey: f.rating_key, mediaType: f.media_type ?? "movie" })}>
+          Fix it in the Library
+        </button>
       )}
     </>
   );

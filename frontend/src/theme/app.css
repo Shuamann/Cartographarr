@@ -367,6 +367,95 @@ input:focus-visible {
   background: transparent;
 }
 
+/* Inputs here sit at the control height like everything else, rather than
+   the few pixels taller the base rule makes them. */
+.setup-card input:not([type="radio"]) {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* The first question, as two answers to read rather than two buttons to
+   press: each says what it brings, and the radio is the control. */
+.setup-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.setup-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.setup-choice.on {
+  border-color: var(--accent);
+}
+.setup-choice input {
+  width: auto;
+  min-height: 0;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+.setup-choice > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* A row of controls: an input that takes the room, buttons at their width. */
+.setup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.setup-row input {
+  flex: 1 1 14rem;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+
+/* The code to type at plex.tv, large enough to read across a room while
+   somebody types it on another device. */
+.setup-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.setup-code-value {
+  font-size: var(--text-xl);
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+.setup-waiting {
+  flex-basis: 100%;
+}
+
+.setup-server {
+  margin-top: var(--space-3);
+}
+/* An address keeps its start, which is the part that says which one. */
+.setup-address {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono, monospace);
+  font-size: var(--text-sm);
+}
+
 .setup-card footer {
   display: flex;
   align-items: center;
@@ -3918,17 +4007,17 @@ label.locked .pill {
   border-left: 2px solid var(--accent);
 }
 
-/* What was said, oldest first, as a short conversation. */
+/* What was said, oldest first. A rule down the side and the name above each
+   message, rather than a box around each one: a conversation of boxes reads
+   as a stack of forms. */
 .issue-thread {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
+  gap: var(--space-3);
 }
 .issue-note {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border-strong);
 }
 .issue-note-head {
   display: flex;
@@ -3936,8 +4025,40 @@ label.locked .pill {
   gap: var(--space-2);
 }
 .issue-note p {
-  margin: var(--space-1) 0 0;
+  margin: 2px 0 0;
   overflow-wrap: anywhere;
+}
+.issue-aside {
+  margin: var(--space-2) 0 0;
+}
+
+/* What is already known to be wrong with the file, one finding a line. */
+.issue-findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+.issue-findings li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* The same width for every severity, so the findings line up to read. */
+.issue-findings .pill {
+  min-width: 11ch;
+  justify-content: center;
+  text-align: center;
+}
+.issue-file-name {
+  display: inline-block;
+  max-width: 48ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 /* A line of controls: an input that takes the room, and buttons at their own
@@ -3995,13 +4116,6 @@ label.locked .pill {
 .issue-plays tr.mine td {
   font-weight: 600;
 }
-/* What a viewer is told is already known about the file: titles only, since
-   the fixes are for whoever runs the server. */
-.issue-known {
-  margin: var(--space-1) 0 0;
-  padding-left: var(--space-5);
-}
-
 /* The facts in an opened report are label and value cells, which the
    narrow-screen rule for .spec does not expect: it sizes a first column to its
    contents, and a whole cell at its one-line width runs off a phone. One

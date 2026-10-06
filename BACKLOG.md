@@ -184,6 +184,29 @@ Each of these cost real time. They are written down so they cost it once.
 
 ## Known gaps in what has already shipped
 
+### An install on Plex alone records no plays
+
+Setup now lets somebody connect to Plex and nothing else, and everything live
+works that way: streams, rules, bans, stopping a stream, the library, its
+tracks and the artwork. What does not is everything built from the record of
+plays. The History table is written only by the Tautulli sync, so with no
+Tautulli it stays empty, and so do the History tab, the map, Endpoints (devices
+are worked out from plays), the sharing signals and the people list, which is
+also still read from Tautulli. Setup says so in plain words rather than letting
+somebody find out.
+
+This is what stands between Tautulli being optional and Tautulli being needed
+for half the app. The live tracker already sees every stream start and end, and
+already writes a stream record for each, so the material is there. What it
+needs is a play written at the end of each stream in the shape History already
+has, from Plex's own fields, and the care the import section below describes
+about play identity: a paused and resumed play is one play, and counting it
+twice moves every figure in the app. The tracker is driven from the enforcer,
+so the two want doing together.
+
+Users from Plex belong with it, since a play from somebody the people list does
+not know cannot be put against a name.
+
 ### The scan walks shows one at a time
 
 The Plex scan walks shows one at a time, a request each, in one worker
@@ -365,8 +388,9 @@ it is cheap: both sources are already readable through one shape.
 
 ### Users and libraries from Plex
 
-Still read through Tautulli. Plex knows both. Lower value than the two above
-because the slow sync runs rarely and nothing is waiting on it.
+Still read through Tautulli. Plex knows both. Users matter more than they did:
+an install on Plex alone has no people list without them. See the first of the
+known gaps above.
 
 ---
 
