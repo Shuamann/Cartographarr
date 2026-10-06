@@ -4,6 +4,23 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.88.0 - 2026-10-06
+
+### Added
+- With Plex chosen, the audio and subtitle tracks in every file are read from Plex as well, which was the last
+  thing still going through Tautulli. Plex will not put tracks in a library listing, but it does answer for a
+  hundred files in one request, which Tautulli's API has no form for at all. Measured on this library: 2,000 files
+  in 19 seconds, against 636 ms a file through Tautulli, and 313 requests for the whole library against 31,250.
+- Each track keeps what it kept before: the codec, channels, language and bitrate of every audio track, and the
+  codec, language, whether it is forced and whether it sits in the file or beside it for every subtitle.
+
+### Changed
+- Nothing about what is stored. 400 files Tautulli had already described were read again from Plex and compared
+  field by field: every audio track list and every subtitle track list matched exactly, and 21 other columns
+  matched on all but a handful of files where Plex had been re-matched since Tautulli last looked. The dynamic
+  range wording is Tautulli's own, worked out against every file in the library it had called anything other than
+  SDR, so rules and reports that match on "HDR10" or "Dolby Vision" carry on working.
+
 ## 0.87.0 - 2026-10-06
 
 ### Added

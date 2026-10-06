@@ -8,6 +8,7 @@ matching need for titles nobody has played yet.
 """
 
 import asyncio
+import json
 import xml.etree.ElementTree as ElementTree
 from types import SimpleNamespace
 
@@ -227,3 +228,188 @@ def test_a_request_is_never_matched_to_an_episode_by_tmdb_id(client):
     with session_scope() as db:
         db.add(MediaItem(rating_key=4101, title="Paul", media_type="movie", tmdb_id="39513"))
     assert match_requests([request])["missing"][0]["title"] == "Paul"
+
+# ---- the tracks in a file ----------------------------------------------------
+#
+# Plex has no way to put these in a listing: asked for a section with
+# includeStreams=1 against a real server it returns the items and not one
+# Stream element. It does take a comma separated list of rating keys, which
+# Tautulli's API has no form for at all, so the same work is one request per
+# hundred files here against one request per file through Tautulli.
+
+
+DETAIL_KEYS = {
+    "rating_key", "parent_rating_key", "grandparent_rating_key", "section_id", "media_type", "title",
+    "full_title", "grandparent_title", "parent_media_index", "media_index", "year", "thumb",
+    "grandparent_thumb", "parent_thumb", "art", "duration", "content_rating", "summary", "file_bitrate",
+    "file_container", "file_size", "file_path", "versions", "video_codec", "video_resolution",
+    "video_bit_depth", "video_dynamic_range", "audio_codec", "audio_channels", "audio_tracks",
+    "subtitle_tracks", "imdb_id", "tmdb_id", "tvdb_id",
+}
+
+
+def a_stream(kind, **over):
+    base = dict(streamType=kind, codec=None, language=None, languageCode=None, key=None, forced=None)
+    return SimpleNamespace(**{**base, **over})
+
+
+def a_file(streams, **over):
+    part = SimpleNamespace(
+        file="/media/movies/Paul (2011)/Paul.mkv", size=8_123_456_789, container="mkv", streams=streams,
+    )
+    return a_media(parts=[part], **over)
+
+
+def with_tracks(**over):
+    streams = [
+        a_stream(1, codec="hevc", bitDepth=10, colorTrc="smpte2084", DOVIPresent=None),
+        a_stream(2, codec="eac3", channels=6, languageCode="eng", bitrate=768),
+        a_stream(2, codec="aac", channels=2, languageCode="spa", bitrate=None),
+        a_stream(3, codec="srt", languageCode="eng", key="/library/streams/9001"),
+        a_stream(3, codec="pgs", languageCode="jpn", forced=True),
+    ]
+    return a_film(media=[a_file(streams)], **over)
+
+
+def test_a_detail_row_has_every_field_the_tautulli_one_writes():
+    """The same reasoning as the scan's row: a field quietly missing shows as a
+    blank on a page rather than as an error."""
+    assert DETAIL_KEYS <= set(library.detail_row(with_tracks()))
+
+
+def test_the_audio_tracks_come_back_in_order_with_what_is_kept_about_them():
+    row = library.detail_row(with_tracks())
+    assert json.loads(row["audio_tracks"]) == [
+        {"codec": "eac3", "channels": 6, "language": "eng", "bitrate": 768},
+        {"codec": "aac", "channels": 2, "language": "spa", "bitrate": None},
+    ]
+
+
+def test_a_subtitle_beside_the_file_is_external_and_one_inside_it_is_not():
+    """Plex does not say which it is. A subtitle stored beside the file is
+    fetched by its own key and one inside the file has none, which was checked
+    against 1,100 tracks Tautulli had already described, with no exceptions."""
+    row = library.detail_row(with_tracks())
+    assert json.loads(row["subtitle_tracks"]) == [
+        {"codec": "srt", "language": "eng", "forced": False, "location": "external"},
+        {"codec": "pgs", "language": "jpn", "forced": True, "location": "embedded"},
+    ]
+
+
+def test_the_dynamic_range_is_said_the_way_four_years_of_rows_say_it():
+    """SDR, HDR10, Dolby Vision and Dolby Vision/HDR10 are Tautulli's words.
+    Rules and reports people have already written match on them, so this is
+    not the place to improve the vocabulary. Each was read off real files.
+    """
+    sdr = a_stream(1, bitDepth=8)
+    assert library._range(sdr) == "SDR"
+    assert library._range(a_stream(1, colorTrc="smpte2084", bitDepth=10)) == "HDR10"
+    assert library._range(a_stream(1, colorTrc="arib-std-b67", bitDepth=10)) == "HLG"
+    assert library._range(a_stream(1, DOVIPresent="1", bitDepth=10)) == "Dolby Vision"
+    assert library._range(a_stream(1, DOVIPresent="1", colorTrc="smpte2084")) == "Dolby Vision/HDR10"
+    assert library._range(None) is None
+
+
+def test_bt709_is_not_hdr():
+    """It is a transfer characteristic like any other and most files carry it.
+    Treating anything named as HDR would have called the whole library HDR."""
+    assert library._range(a_stream(1, colorTrc="bt709", bitDepth=8)) == "SDR"
+
+
+def test_an_item_with_no_file_still_gives_a_row():
+    row = library.detail_row(a_film(media=[]))
+    assert row["rating_key"] == 4101 and row["title"] == "Paul"
+    assert row["audio_tracks"] is None and row["subtitle_tracks"] is None
+    assert row["video_dynamic_range"] is None
+
+
+def test_several_versions_are_counted_and_the_first_is_described():
+    row = library.detail_row(a_film(media=[a_file([a_stream(2, codec="eac3", channels=6)]), a_media()]))
+    assert row["versions"] == 2
+    assert row["file_container"] == "mkv"
+
+
+class FakeServer:
+    """Records what it was asked for, because the point is how many requests."""
+
+    def __init__(self, items):
+        self.items = {i.ratingKey: i for i in items}
+        self.asked = []
+
+    def fetchItems(self, path):
+        self.asked.append(path)
+        keys = path.rsplit("/", 1)[-1].split(",")
+        return [self.items[int(k)] for k in keys if int(k) in self.items]
+
+
+def test_the_keys_go_up_in_batches_rather_than_one_at_a_time(monkeypatch):
+    """The whole reason for reading these from Plex. One request per file is
+    what it costs through Tautulli, and that is 31,250 requests on this
+    library against 313.
+    """
+    items = [with_tracks(ratingKey=k) for k in range(1, 251)]
+    fake = FakeServer(items)
+    monkeypatch.setattr("app.plex.server.server", lambda: fake)
+    rows = library.details([i.ratingKey for i in items])
+    assert len(rows) == 250
+    assert len(fake.asked) == 3, fake.asked
+    assert all(len(path.rsplit("/", 1)[-1].split(",")) <= library.DETAIL_BATCH for path in fake.asked)
+
+
+def test_a_key_plex_no_longer_knows_gets_an_empty_row(monkeypatch):
+    """Without one, history keeps referencing a deleted item and the unread
+    filter asks about it again on every single run."""
+    fake = FakeServer([with_tracks(ratingKey=1)])
+    monkeypatch.setattr("app.plex.server.server", lambda: fake)
+    rows = library.details([1, 2])
+    gone = [r for r in rows if r["rating_key"] == 2][0]
+    assert set(gone) == {"rating_key"}, "nothing is claimed about it, but it is accounted for"
+
+
+def test_a_batch_that_fails_does_not_take_the_rest_with_it(monkeypatch):
+    class Grumpy(FakeServer):
+        def fetchItems(self, path):
+            self.asked.append(path)
+            if len(self.asked) == 1:
+                raise RuntimeError("Plex said no")
+            return super().fetchItems(path)
+
+    items = [with_tracks(ratingKey=k) for k in range(1, 151)]
+    fake = Grumpy(items)
+    monkeypatch.setattr("app.plex.server.server", lambda: fake)
+    rows = library.details([i.ratingKey for i in items])
+    described = [r for r in rows if "title" in r]
+    assert len(described) == 50, "the second batch still arrived"
+    assert len(rows) == 150, "and the first batch's keys are accounted for"
+
+
+def test_the_setting_sends_the_file_details_to_plex_too(client, monkeypatch):
+    """The scan knowing which source to use was only half of it. Reading the
+    tracks still went through Tautulli whatever the setting said, one request
+    per file, and that is the slow half of the whole job."""
+    from app import settings_store
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.plex import server
+    from app.services import library_scan
+
+    claim(client)
+    settings_store.save({"library_source": "plex"})
+    plex, _ = a_server()
+    monkeypatch.setattr(server, "server", lambda fresh=False: plex)
+    asyncio.run(library_scan.scan(None))
+
+    fake = FakeServer([with_tracks(ratingKey=4101)])
+    monkeypatch.setattr(server, "server", lambda fresh=False: fake)
+
+    class NoTautulli:
+        async def call(self, cmd, **params):
+            raise AssertionError(f"asked Tautulli for {cmd}")
+
+    result = asyncio.run(library_scan.read_details(NoTautulli()))
+    assert result["read"] > 0
+    with session_scope() as db:
+        film = db.get(MediaItem, 4101)
+        assert json.loads(film.audio_tracks)[0]["codec"] == "eac3"
+        assert json.loads(film.subtitle_tracks)[0]["location"] == "external"
+        assert film.video_dynamic_range == "HDR10" and film.video_bit_depth == 10

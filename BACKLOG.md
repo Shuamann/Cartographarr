@@ -184,15 +184,9 @@ Each of these cost real time. They are written down so they cost it once.
 
 ## Known gaps in what has already shipped
 
-### File details still come through Tautulli
+### The scan walks shows one at a time
 
-The library scan reads from Plex when the setting says so, but the second
-stage, reading every audio and subtitle track a file has, still asks Tautulli
-one title at a time. Plex can answer it too: the tracks are on each part's
-streams once an item is fetched in full. Until then, choosing Plex for the
-library still leans on Tautulli for Messy files.
-
-The Plex scan also walks shows one at a time, a request each, in one worker
+The Plex scan walks shows one at a time, a request each, in one worker
 thread. At about ten milliseconds a request that is fine for a scan every six
 hours, so it was left simple. If a very large TV library makes it slow, list
 episodes a section at a time instead, which is one paged listing rather than a
