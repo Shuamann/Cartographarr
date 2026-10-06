@@ -959,12 +959,15 @@ def match_requests(requests: list[dict[str, Any]]) -> dict[str, Any]:
                 items[item.rating_key] = item
 
         # A title Plex no longer has may still be findable by its TMDB id,
-        # which is the same film under a key that changed.
+        # which is the same film under a key that changed. Never an episode's:
+        # that is TMDB's id for the episode, a different number space from the
+        # film or show a request names, and the Plex scan fills one in for
+        # every episode in the library, so a coincidence would find one.
         by_tmdb: dict[str, MediaItem] = {}
         tmdb_wanted = {str(r.get("media", {}).get("tmdbId")) for r, _ in wanted if (r.get("media") or {}).get("tmdbId")}
         if tmdb_wanted:
             for item in db.execute(
-                select(MediaItem).where(MediaItem.tmdb_id.in_(sorted(tmdb_wanted)))
+                select(MediaItem).where(MediaItem.tmdb_id.in_(sorted(tmdb_wanted)), MediaItem.media_type != "episode")
             ).scalars():
                 if item.tmdb_id:
                     by_tmdb.setdefault(str(item.tmdb_id), item)

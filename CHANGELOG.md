@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.87.0 - 2026-10-06
+
+### Added
+- The library source setting now does what it says. With Plex chosen, the library scan reads every film and
+  episode from Plex itself rather than through Tautulli, and stores the same rows, so Problem files, 4K copies,
+  library sizes and everything else built on the scan carry on unchanged.
+- A scan from Plex fills in the IMDb, TMDB and TVDB ids for the whole library at once. Before, they arrived one
+  title at a time, and only once somebody played it, so deep links and request matching did nothing for anything
+  unwatched.
+- It also stores each file's path, which the on-disk check and tidying are built on.
+
+### Fixed
+- A request whose title had changed key could be matched by TMDB id to an unrelated episode. An episode's TMDB id
+  is the episode's own, a different number from the film or show a request names, so episodes are no longer looked
+  at. With every episode now carrying one, a coincidence was only a matter of time.
+
 ## 0.86.0 - 2026-10-05
 
 ### Fixed
@@ -23,6 +39,7 @@ copy on GitHub to say what an update brings.
 - The explanations themselves are shorter and plainer. They had grown into paragraphs arguing their own case.
 - The Settings heading above Add account reads "Accounts" rather than "People", which is what it lists, and no
   longer reads as the tab now called Endpoints.
+
 
 ## 0.84.1 - 2026-10-05
 
