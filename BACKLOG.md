@@ -11,6 +11,177 @@ it survives without them.
 
 ---
 
+## How this app is built, and why
+
+Read this part first. The list below makes sense only against it, and most of
+it was arrived at by measuring rather than by deciding, so the numbers are
+kept: they are the argument.
+
+### Where the data comes from
+
+Three services, with a clear division of labour.
+
+**Plex** is the source of truth for anything happening now. A live session from
+Plex carries the viewer's address, whether they are local, relayed and secure,
+the device, the player and the account. That is everything recorded about a
+stream, which is why nothing is lost by asking Plex rather than asking
+something that asks Plex. It answers in about nine milliseconds. The library
+listing gives the file path, size, container, codecs, bitrate, duration, the
+real pixel dimensions and the external ids, at roughly half a millisecond an
+item.
+
+**Tautulli** is a recorder. It watches Plex and writes down what it sees, and
+that is why it holds something Plex does not: an address against a play from
+years ago. Plex's own history was checked against a real server and carries no
+address, no transcode decision and no duration watched. So Tautulli is the only
+possible source for plays from before this app was watching, which makes it an
+import rather than a dependency. Everything else it does, Plex can do directly.
+
+**Seerr** is the only source of requests, because neither Plex nor the arrs
+have a concept of somebody asking for something that does not exist yet. Issues
+are different: they are already kept here, and Seerr is only a place to import
+from.
+
+One fact that makes the whole switch possible and was verified rather than
+assumed: the account id Plex reports in a session is the same number this app
+already files everything under. Every ban, every privacy scope and the whole of
+history key on it. Had those been different id spaces, changing the source
+would have silently broken every per person feature.
+
+### Both sources answer in the same shape
+
+An adapter turns a Plex session into the field names Tautulli returns, exactly,
+so the tracker, the rules, the ban list, the map and the stream cards do not
+know or care which source answered. A test compares the adapter's keys against
+the list the rest of the app reads, because a field quietly missing would be a
+blank on a card rather than an error.
+
+The subtle part is the one word a session is judged by. Plex answers the
+transcode question per stream; this app wants one answer for the session. A
+real stream had its video copied and its audio converted, which Tautulli calls
+a transcode and which reading the video decision alone calls a copy. Every rule
+anybody writes matches on that word. Taking the wrong one would have stopped
+those rules firing with no error anywhere. It takes Tautulli's meaning, and
+there is a test named after the stream that caught it.
+
+### What a ban is, and what it is not
+
+A ban is an explicit act: somebody opened a dialog, named one device or one
+address, typed a reason and chose how long. A rule is a standing pattern that
+may well be written speculatively. They are not the same kind of thing and
+should not share a default. Rules start recording only; the ban list acts
+unless told otherwise.
+
+Two faults once made bans silently do nothing, and both are worth remembering
+because they are the same shape. The ban list's switch was unset and unset fell
+through to an old global dry run flag that starts on. And the address ban rule
+is handed a negative id so its cooldown stays stable between sweeps, while the
+code decided which settings a rule answered to by testing only whether that id
+was negative, which the country rules are too. The lesson in both: a safety
+default that cannot be distinguished from a broken feature is a broken feature.
+
+Built in stops are also deliberately exempt from the logging cooldown. The
+cooldown exists so a stubborn client cannot fill the log, which is right for a
+rule that fires now and then and wrong for a ban: a stop that does not land
+should be tried again on the next poll, not a minute later.
+
+### Honesty about what is known
+
+A recurring decision, applied in several places, and worth keeping.
+
+Where the app cannot answer something, it says so rather than giving a figure
+it cannot support. Library space has no history before the daily note began, so
+a library with nothing written down reads as "no history yet" and not as
+"unchanged": those are different answers and the second gets believed. A file
+this container cannot reach is said differently from a file that is gone,
+because one is a mount to fix and the other is a file to replace. Detail that
+only Plex reports is left empty on a stream recorded through Tautulli rather
+than guessed. Not told and no are different answers.
+
+The same principle decides what is not built. Space gained or lost could not be
+reported until the scan began writing down what each library held, because
+nothing records when a file arrived and the figure would have been invented.
+
+### How the interface is meant to look
+
+The reference is Seerr's issue list: artwork that bleeds across a row behind a
+scrim, a poster, the year above the title, the facts as label and value pairs,
+and one clear action. Not boxes of text. A row that carries its artwork says
+what it is about before anybody reads a word, and the art is already on disk
+because the poster is.
+
+Rules that fell out of doing it:
+
+- The scrim is opaque where the words are and nearly gone at the far edge, so
+  text contrast never depends on which picture a row happened to get.
+- Every control is one height. Six button styles at four different heights
+  meant any row holding more than one of them stepped up and down the page,
+  which is most of what "cluttered" turns out to mean when you go looking.
+- One scale for text and one for space, in the token layer, so a page is not
+  six sizes picked one at a time.
+- A fact belongs on one line. Columns are sized to their contents and packed
+  left rather than stretched, because a dozen short values spread across an
+  ultrawide are harder to read than the same values in a block.
+- When something must be truncated, the part that identifies it survives. A
+  title clipped to "The Show - S01 - ..." has cut off the thing somebody is
+  reading it for.
+- The app asks its own questions. The browser's confirm, prompt and alert are
+  gone and a test stops them coming back: they arrive in the wrong typeface,
+  say "127.0.0.1 says" above the question, cannot show a warning in red, and
+  carry a tickbox that silently answers no to everything afterwards.
+- A confirmation is worth asking only when the answer could be no. Several were
+  deleted rather than restyled, because a dialog that is only ever clicked
+  through is training for clicking through the ones that matter.
+
+### Traps that have already been paid for
+
+Each of these cost real time. They are written down so they cost it once.
+
+- **A query with an OR can pick the wrong index.** Finding a show's artwork
+  through its episodes, asked as one statement with an OR and a media type
+  test, made SQLite prefer the media type index and scan every episode in the
+  library. Asked as two statements it uses the keys it was given. Thirty two
+  milliseconds a poster became under a third of one. Adding the obvious index
+  first changed the plan and not the time, which is why the fix is measured
+  rather than reasoned.
+- **A new HTTP client per request is a new TLS handshake.** Fetching artwork
+  that way cost four times what the picture did. One client, held open, for
+  anything fetched in bulk.
+- **Discovery is expensive and the answer does not change.** Letting the Plex
+  library find the server takes twenty seconds because it waits out addresses
+  that are unreachable from outside the house. Connecting to a stored address
+  takes a fifth of a second.
+- **The tests reload the application modules.** A name bound at module level in
+  a service points at the class from before the reload, and SQLAlchemy renders
+  it as the same table joined to itself. Import models inside the function.
+- **A button inside a button is neither valid nor well behaved.** Making the
+  parts of a card clickable meant turning the card into something that behaves
+  like a button rather than being one.
+- **Measure before optimising, and after.** More than once the obvious cause
+  was not the cause: the index that did not help, the test suite whose cost was
+  the scheduler rather than the fixtures, the poster slowness that was the
+  handshake. Every performance claim in the changelog has a number behind it
+  because every one of them was checked.
+
+### Working practice
+
+- Nothing ships without the full test suite passing, a sweep of every page in a
+  real browser, and a scan of the diff for anything personal.
+- The version is bumped in four places and the changelog gets an entry, every
+  time.
+- Commits are made as Shua Theater, and the message explains the reasoning
+  rather than listing the files.
+- No em dashes anywhere. A test enforces it.
+- Nothing from a real install is ever committed: no addresses, no account
+  names, no tokens, no counts off somebody's server. A suggestions document
+  full of them was once pushed and had to be removed from history. The
+  reasoning survives without them, which is why this file reads as it does.
+- Guards are cheap and worth adding when a mistake is made twice: the em dash
+  test, the duplicate class name test, the browser dialog test and the tab
+  label test all exist because something slipped through once.
+
+---
+
 ## Known gaps in what has already shipped
 
 ### The library source setting does nothing yet

@@ -10,3 +10,6 @@ dist/
 build/
 frontend/dist
 *.tsbuildinfo
+
+# Worktrees the app makes for background agents.
+.claude/worktrees/
