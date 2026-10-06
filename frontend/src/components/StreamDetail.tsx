@@ -78,6 +78,9 @@ function EpisodeLinks({ session }: { session: LiveSession }) {
       >
         {code.slice(0, at)}
       </button>
+      <span className="muted"> - </span>
+      {/* The episode's name is part of its own link, because a two character
+          target is a poor one and the name is the thing being pointed at. */}
       <button
         className="linkish title-link"
         title="Open this episode"
@@ -91,8 +94,8 @@ function EpisodeLinks({ session }: { session: LiveSession }) {
         }
       >
         {code.slice(at)}
+        {name ? ` · ${name}` : ""}
       </button>
-      {name ? ` · ${name}` : ""}
     </>
   );
 }

@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.84.1 - 2026-10-05
+
+### Changed
+- Every part of a tile in Now playing goes where it names: the show, the season, the episode, the person and the
+  device. The tile still opens when pressed anywhere else, by keyboard as well.
+- An episode reads as "S02 - E03", and the episode's own name is part of its link, because two characters is a poor
+  thing to aim at and the name is what is being pointed at.
+- A title too long for its tile gives up the show name first and never the numbers. Clipping the whole line left
+  "The Chosen - S01 - ...", which cuts off the part somebody is looking for.
+
 ## 0.84.0 - 2026-10-05
 
 ### Added

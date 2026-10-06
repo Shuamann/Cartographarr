@@ -4546,6 +4546,43 @@ label.locked .pill {
   background: var(--surface-3);
 }
 
+/* A title on a tile, in parts that give way in a sensible order.
+ *
+ * Clipping the whole line left "The Chosen - S01 - ..." , which cuts off the
+ * one part somebody is looking for. The show name shrinks first, the episode
+ * name after it, and the numbers never: they are four characters and they are
+ * the point. */
+.card-title {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+.card-title-show {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-title-code,
+.card-title-sep {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* A flex item eats the spaces around its text, so the gap is drawn rather
+   than typed. */
+.card-title-sep {
+  padding: 0 5px;
+}
+.card-title-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A title that goes where it names. Inherits its size so a heading still
    reads as a heading, and the two halves of S01E06 sit together. */
 .title-link {

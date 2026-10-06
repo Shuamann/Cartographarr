@@ -1,5 +1,5 @@
 import Loading from "../components/Loading";
-import { displayTitle } from "../lib/titles";
+import { displayTitle, episodeCode } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
 import TravelFlags from "../components/TravelFlags";
@@ -297,6 +297,79 @@ function NowPlaying({
 
 /* What a glance should answer: who, on what, how far in, playing or paused,
  * whether the server is working to send it, at what quality and what cost. */
+/* The title on a tile, in the parts that go somewhere: the show, the season,
+   the episode with its name, or for a film just the film. */
+function CardTitle({ session }: { session: LiveSession }) {
+  const nav = useNav();
+  const code = episodeCode(session);
+  const show = session.grandparent_rating_key ? Number(session.grandparent_rating_key) : null;
+  const season = session.parent_media_index == null ? null : Number(session.parent_media_index);
+  const key = session.rating_key ? Number(session.rating_key) : null;
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+  if (!nav.openLibrary) return <>{displayTitle(session)}</>;
+  if (!code || !show || !/^S\d+E\d+$/.test(code)) {
+    return (
+      <button
+        className="linkish title-link"
+        onClick={(e) => {
+          stop(e);
+          nav.openLibrary?.({ ratingKey: key, mediaType: session.media_type ?? "movie" });
+        }}
+      >
+        {displayTitle(session)}
+      </button>
+    );
+  }
+  const at = code.indexOf("E");
+  return (
+    <>
+      {/* The show gives way first and the numbers never do: "The Chosen -
+          S01 - ..." tells you less than the thing it cut off. */}
+      <button
+        className="linkish title-link card-title-show"
+        onClick={(e) => {
+          stop(e);
+          nav.openLibrary?.({ show, title: session.grandparent_title });
+        }}
+      >
+        {session.grandparent_title}
+      </button>
+      <span className="muted card-title-sep">-</span>
+      <button
+        className="linkish title-link card-title-code"
+        onClick={(e) => {
+          stop(e);
+          nav.openLibrary?.({ show, season, title: session.grandparent_title });
+        }}
+      >
+        {code.slice(0, at)}
+      </button>
+      <span className="muted card-title-sep">-</span>
+      <button
+        className="linkish title-link card-title-code"
+        onClick={(e) => {
+          stop(e);
+          nav.openLibrary?.({ show, season, ratingKey: key, title: session.grandparent_title });
+        }}
+      >
+        {code.slice(at)}
+      </button>
+      {session.title ? (
+        <button
+          className="linkish title-link card-title-name"
+          onClick={(e) => {
+            stop(e);
+            nav.openLibrary?.({ show, season, ratingKey: key, title: session.grandparent_title });
+          }}
+        >
+          {` · ${session.title}`}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 function StreamCard({
   session,
   selected,
@@ -306,6 +379,7 @@ function StreamCard({
   selected: boolean;
   onClick: () => void;
 }) {
+  const nav = useNav();
   const progress = Math.min(Math.max(Number(session.progress_percent ?? 0), 0), 100);
   const who = session.friendly_name || session.username || "Unknown";
   const paused = (session.state || "").toLowerCase() === "paused";
@@ -320,7 +394,21 @@ function StreamCard({
   const resumed = from != null && from >= 2 ? from : null;
 
   return (
-    <button className={selected ? "stream-card on" : "stream-card"} onClick={onClick}>
+    /* A div rather than a button, because the things inside it are buttons and
+       a button inside a button is not valid and does not behave. It keeps the
+       keyboard behaviour a button would have had. */
+    <div
+      className={selected ? "stream-card on" : "stream-card"}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
       {/* The same blurred show as the opened card, so the strip and the panel
           below it look like the same thing. Decoration only. */}
       {session.rating_key ? (
@@ -341,10 +429,40 @@ function StreamCard({
         <div className="stream-poster" />
       )}
       <span className="stream-body">
-        <strong className="clip">{displayTitle(session)}</strong>
-        <span className="muted small clip">{who}</span>
+        {/* Every part of this names something that can be opened: the show,
+            the season, the episode, the person and the device. */}
+        <strong className="card-title">
+          <CardTitle session={session} />
+        </strong>
         <span className="muted small clip">
-          {session.player}
+          {session.user_id != null && nav.openUser ? (
+            <button
+              className="linkish title-link"
+              onClick={(e) => {
+                e.stopPropagation();
+                nav.openUser?.(session.user_id as number);
+              }}
+            >
+              {who}
+            </button>
+          ) : (
+            who
+          )}
+        </span>
+        <span className="muted small clip">
+          {session.machine_id && nav.openDevice ? (
+            <button
+              className="linkish title-link"
+              onClick={(e) => {
+                e.stopPropagation();
+                nav.openDevice?.(session.machine_id as string);
+              }}
+            >
+              {session.player}
+            </button>
+          ) : (
+            session.player
+          )}
           {session.geo?.is_hosting && <span className="pill vpn">VPN</span>}
         </span>
         <span className="stream-facts">
@@ -370,7 +488,7 @@ function StreamCard({
           )}
         </span>
       </span>
-    </button>
+    </div>
   );
 }
 
