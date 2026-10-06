@@ -759,10 +759,34 @@ async def _heartbeat(result: dict) -> None:
         log.debug("uptime kuma ping failed: %s", exc)
 
 
-async def run_slow_sync(client: TautulliClient) -> dict:
-    """Users and libraries. Rarely change, own schedule."""
+async def run_slow_sync(client: TautulliClient | None) -> dict:
+    """Users and libraries. Rarely change, own schedule.
+
+    From Plex when there is no Tautulli to ask, which is the difference
+    between a people list holding everybody the server is shared with and one
+    holding only those who have pressed play.
+    """
     from app.services.streams import read_plex_upload
 
-    result = {"users": await sync_users(client), "libraries": await sync_libraries(client)}
-    await read_plex_upload(client)
+    if client is None:
+        result = await plex_people()
+    else:
+        result = {"users": await sync_users(client), "libraries": await sync_libraries(client)}
+        await read_plex_upload(client)
     return result
+
+
+async def plex_people() -> dict:
+    """Everyone with access, and the libraries, read from Plex itself."""
+    import asyncio
+
+    from app.plex import people as plex_people_reader
+
+    rows = await asyncio.to_thread(plex_people_reader.read)
+    sections = await asyncio.to_thread(plex_people_reader.libraries)
+    with session_scope() as session:
+        # Never removed. Somebody taken off the share still has four years of
+        # plays, and a row vanishing would orphan all of it.
+        _upsert(session, User, rows)
+        _upsert(session, Library, sections)
+    return {"users": len(rows), "libraries": len(sections)}

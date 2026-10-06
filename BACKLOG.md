@@ -186,17 +186,14 @@ Each of these cost real time. They are written down so they cost it once.
 
 ### What an install on Plex alone still reads from Tautulli
 
-Plays are recorded from Plex as they finish when Tautulli is not connected, so
-History, the map and Endpoints fill on an install with Plex alone. Two things
-are still Tautulli's:
+Nothing, as of the people list and the libraries coming from Plex too. Plays
+are recorded from Plex as they finish, the scan and the tracks read from Plex,
+and everyone the server is shared with is listed whether or not they have ever
+pressed play.
 
-- **The people list**, beyond those who have played. Anybody who plays gets a
-  name from the stream itself, but somebody the server is shared with who has
-  never pressed play is unknown until they do. Plex can list them; see Users
-  and libraries from Plex below.
-- **Libraries**, by name. The library scan reads every section from Plex, but
-  the table of libraries the pages name them by is still filled by the slow
-  sync.
+What remains true is the one thing Plex cannot answer: the address against a
+play from before this app was watching. That is why Tautulli is an import
+rather than a dependency, and why the check that nothing is missing exists.
 
 A play recorded here has a negative id, so it can never meet one of
 Tautulli's. Connecting Tautulli later removes any play of ours it also
@@ -211,14 +208,6 @@ hours, so it was left simple. If a very large TV library makes it slow, list
 episodes a section at a time instead, which is one paged listing rather than a
 request per show, after checking against a real server that the listing
 carries the show and season keys.
-
-### Tables that grow forever
-
-`stream_sessions`, `stream_events`, `audit_log` and `enforcement_log` have no
-pruning. `bandwidth_samples` is kept for a year and `task_runs` is capped per
-task, so the pattern exists and these were simply never given it. Not urgent
-at any volume seen so far, which is why it has not been done, but it is the
-kind of thing noticed two years late.
 
 ---
 
@@ -353,14 +342,6 @@ agree:
 
 This is the test that would have caught the transcode decision mismatch, and
 it is cheap: both sources are already readable through one shape.
-
-### Users and libraries from Plex
-
-Still read through Tautulli. Plex knows both. Users matter more than they did:
-on Plex alone the people list holds only those who have played. See the first
-of the known gaps above.
-
----
 
 ## Issues as the system of record, and the screen for it
 

@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.97.0 - 2026-10-06
+
+### Added
+- With no Tautulli, the people list and the libraries come from Plex. Everyone the server is shared with is
+  listed, with their name, email and which libraries they can see, whether or not they have ever pressed play.
+  Before this, somebody shared with was unknown until they watched something.
+- Which leaves nothing on an install with Plex alone that still needs Tautulli, except the one thing Plex cannot
+  answer: the address against a play from before this app was watching.
+
+### Fixed
+- Somebody taken off the share keeps their row and their history. Two people on a real server are in the user
+  list and no longer on the share list, and a row vanishing would orphan four years of plays.
+
 ## 0.96.0 - 2026-10-06
 
 ### Added

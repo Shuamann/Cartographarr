@@ -111,7 +111,17 @@ async def _backup_cycle() -> dict | str:
 
 
 async def _slow_cycle() -> dict:
-    _tautulli_or_skip()
+    if not is_configured():
+        raise tasks.Skipped("Not set up yet")
+    # Plex can list everyone the server is shared with, which Tautulli is not
+    # needed for. With Tautulli connected it stays the source, because it also
+    # knows who it has dropped from its own list.
+    if not tautulli_configured():
+        from app.plex.server import configured as plex_configured
+
+        if not plex_configured():
+            raise tasks.Skipped(NO_TAUTULLI)
+        return await sync_service.run_slow_sync(None)
     client = TautulliClient(current())
     try:
         return await sync_service.run_slow_sync(client)

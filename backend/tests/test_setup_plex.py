@@ -104,14 +104,23 @@ def test_a_fresh_install_with_nothing_set_reaches_the_app_through_plex(client, m
     shown = {row["key"]: row["value"] for row in client.get("/api/settings").json()}
     assert shown["plex_token"] != TOKEN and TOKEN not in client.get("/api/settings").text
 
-    # The job that only Tautulli can do says why it is not running, rather
-    # than failing every few minutes against an address nobody gave it.
-    try:
-        asyncio.run(main._slow_cycle())
-    except tasks.Skipped as skipped:
-        assert "Tautulli is not connected" in str(skipped)
-    else:
-        raise AssertionError("the user list was read without Tautulli")
+    # The people list and the libraries come from Plex, which is where they
+    # were always going to have to come from on an install with no Tautulli:
+    # otherwise the list holds only those who have pressed play.
+    from app.plex import people as plex_people
+
+    monkeypatch.setattr(plex_people, "read", lambda machine_identifier=None: [
+        {"user_id": 7, "username": "owner", "friendly_name": "Owner", "email": "o@example.test",
+         "thumb": None, "is_active": True, "is_home_user": True, "deleted_in_tautulli": False,
+         "shared_libraries": "[]", "allow_sync": None},
+        {"user_id": 9, "username": "guest", "friendly_name": "A Guest", "email": "g@example.test",
+         "thumb": None, "is_active": True, "is_home_user": False, "deleted_in_tautulli": False,
+         "shared_libraries": "[\"1\"]", "allow_sync": None},
+    ])
+    monkeypatch.setattr(plex_people, "libraries", lambda: [{"section_id": 1, "name": "Films", "type": "movie"}])
+    assert asyncio.run(main._slow_cycle()) == {"users": 2, "libraries": 1}
+    names = {u["user_id"]: u["friendly_name"] for u in client.get("/api/users").json()}
+    assert names == {7: "Owner", 9: "A Guest"}
     # The history sync still runs: plays are recorded from Plex as they
     # finish, and devices and places are built from them.
     assert asyncio.run(main._cycle())["history"] == 0
