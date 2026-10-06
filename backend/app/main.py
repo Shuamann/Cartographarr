@@ -216,6 +216,35 @@ tasks.register(tasks.Task(
     "issues", "Read reported issues", "Problems people reported in Seerr, kept beside what this app knows about the file.",
     _issue_sync, lambda: 300,
 ))
+async def _history_check() -> dict | str:
+    """Ask Tautulli whether anything it recorded is missing here.
+
+    The one change where everything can look normal and be wrong is switching
+    where the data comes from: a day nobody fetched looks exactly like a day
+    nobody watched anything. One request covers two thousand days, so this is
+    cheap enough to run on a timer and say so either way.
+    """
+    from app.services import handover
+
+    _tautulli_or_skip()
+    client = TautulliClient(current())
+    try:
+        found = await handover.compare(client)
+        if not found.get("asked"):
+            raise tasks.Skipped(found.get("reason") or "Tautulli did not answer")
+        if not found["missing"]:
+            return f"nothing missing across {found['days']} days"
+        filled = await handover.fill(client, found)
+        return {**{k: v for k, v in found.items() if k not in ("missing_days", "extra_days")}, **filled}
+    finally:
+        await client.aclose()
+
+
+tasks.register(tasks.Task(
+    "history_check", "Check nothing is missing",
+    "Counts what Tautulli recorded against what is here, day by day, and fetches any day that is short.",
+    _history_check, lambda: 24 * 3600,
+))
 async def _automations() -> dict | str:
     from app.services import automations
 

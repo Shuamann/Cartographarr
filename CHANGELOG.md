@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.96.0 - 2026-10-06
+
+### Added
+- A "Check nothing is missing" task. It counts, day by day across the whole of Tautulli's history, what Tautulli
+  recorded against what is here, and names any day that is short. Run against a real install: 2,000 days
+  compared, 19,046 plays on each side, in under a second.
+- Where a day is short it fetches that day and nothing else, one request per day rather than a walk through four
+  years. Running it twice is safe and boring, because history is keyed on Tautulli's own row id and written with
+  an upsert, so a play already here arrives with the id it already has.
+- Days with more plays here than Tautulli has are reported separately rather than ignored. On their own they are
+  expected, since this app records from Plex directly when Tautulli is not connected, but a lot of them on days
+  Tautulli was running is what counting something twice looks like.
+
 ## 0.95.0 - 2026-10-06
 
 ### Added

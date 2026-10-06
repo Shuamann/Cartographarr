@@ -313,54 +313,26 @@ has not been written.
 
 ### Importing Tautulli's history
 
-A one-time backfill of finished plays, so Tautulli can be switched off without
-losing what it recorded before this app was watching. Nothing starts one
-today: there is no button, no progress and no record that it ever ran. Until
-there is, choosing Plex quietly means choosing to have only what happens from
-now on, which is not a choice anybody would make knowingly.
-
-What it needs:
-
-- A button in Settings, under the source choice, that says how far back it
-  will go and what it will bring. It runs in the background like the other
-  jobs, reports progress on Tasks, and can be run again without doubling
-  anything.
-- A record of what the last import covered: when it ran, the span of dates it
-  asked for, how many plays it read, how many were new and how many were
-  already here. Without that, running it twice is an act of faith.
-- Switching the source to Plex should say, there and then, that older history
-  comes from Tautulli and offer the import. Nobody should have to read this
-  file to find that out.
-
-It brings only what is missing. Importing what is already here would double
-every figure in the app, so the import has to recognise a play it already
-holds and skip it, and running it twice has to be safe and boring. The upsert
-the library scan uses is the pattern: the same row arriving again changes
-nothing.
-
-Which makes the more useful half of this a question rather than a copy: what
-does Tautulli have that this app does not? Answering it is most of the work
-and is worth having on its own, because it is also the check that the import
+Mostly already true, which was worth finding out before building it again.
+The history sync pages through everything Tautulli has on its first run and
+writes with an upsert keyed on Tautulli's own row id, so a play that is
+already here changes nothing when it arrives a second time. There was never a
+separate import to write; what was missing was a way to ask whether it had
 worked.
 
-- Compare the two, day by day, over the whole of Tautulli's history: how many
-  plays it recorded against how many are here. A day that matches is done. A
-  day short by three is the thing to go and fetch.
-- Say where the gaps are and how big, before importing anything. A missing
-  week in 2022 and a missing hour last Tuesday are different problems: one is
-  Tautulli's history being older than this app, the other is something having
-  gone wrong recently and worth knowing about.
-- Fetch only those days, and compare again afterwards. An import that says it
-  read 4,000 plays is not evidence of anything; a gap report that comes back
-  empty is.
-- Run the comparison on its own, without importing, whenever anybody asks. It
-  is the only honest answer to "is anything missing".
+That is now the "Check nothing is missing" task. It counts, day by day across
+the whole of Tautulli's history, what Tautulli recorded against what is here,
+and fetches only the days that are short, one request per day rather than a
+walk through four years. Run against this install: 2,000 days compared, 19,046
+plays on each side, nothing missing and nothing counted twice.
 
-The care needed is play identity. A paused and resumed play is one play, and
-the import has to agree with how plays are already counted here or every
-figure in the app moves. Reference ids exist for exactly this and the import
-should use them, both for recognising a play already held and for counting a
-day, rather than inventing a rule.
+What is left:
+
+- A button rather than a task. Switching the source to Plex should offer the
+  check there and then, and say that older history comes from Tautulli, rather
+  than leaving somebody to find the task on their own.
+- The report is a task message. The days that are short deserve a screen when
+  there are any; there is nothing to show while the answer is nothing.
 
 ### Checking the handover actually worked
 
