@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.83.0 - 2026-10-05
+
+### Added
+- Live activity can be read from Plex itself instead of through Tautulli, chosen by a setting. Plex answers in
+  about nine milliseconds and carries the viewer's address, whether they are local, relayed and secure, the device,
+  the player and the account, which is everything this app records about a stream. The whole sweep is roughly three
+  times quicker.
+- A Plex connection that is held rather than discovered. Asking plexapi to find the server takes twenty seconds,
+  because it tries every address Plex advertises including ones unreachable from outside the house. Connecting to a
+  known address takes a fifth of a second, so the address is found once and kept.
+
+### Changed
+- Both sources answer in the same shape, so nothing that reads a session knows which was asked. That includes the
+  one word a session is judged by: a stream whose video is copied and whose audio is converted is a transcode, the
+  way Tautulli has always reported it, because that is what every rule written here matches on.
+
 ## 0.82.0 - 2026-10-05
 
 ### Fixed

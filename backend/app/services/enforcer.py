@@ -283,19 +283,34 @@ async def _add_requests(sessions: list[Session], context: dict[str, dict[str, An
 
 
 async def live_context() -> tuple[list[Session], dict[str, dict[str, Any]], str | None]:
-    """Current sessions and their context, for the enforcer and for previews."""
-    client = TautulliClient(current())
-    try:
-        activity = await client.call("get_activity") or {}
-    except Exception as exc:  # noqa: BLE001
-        return [], {}, redact(exc)
-    finally:
-        await client.aclose()
+    """Current sessions and their context, for the enforcer and for previews.
+
+    Either source answers in the same shape, so nothing below this line knows
+    or cares which one was asked. Plex answers it in about nine milliseconds
+    and carries the viewer's address, whether they are local, relayed and
+    secure, the device and the account, which is everything recorded about a
+    stream.
+    """
+    import asyncio
+
+    if current().activity_source == "plex":
+        from app.plex import activity as plex_activity
+
+        try:
+            activity = await asyncio.to_thread(plex_activity.read)
+        except Exception as exc:  # noqa: BLE001
+            return [], {}, redact(exc)
+    else:
+        client = TautulliClient(current())
+        try:
+            activity = await client.call("get_activity") or {}
+        except Exception as exc:  # noqa: BLE001
+            return [], {}, redact(exc)
+        finally:
+            await client.aclose()
     sessions: list[Session] = activity.get("sessions") or []
     # Database work, every few seconds: kept off the event loop so a slow
     # query never holds up the pages people are loading.
-    import asyncio
-
     await asyncio.to_thread(tracker.observe, sessions, None, activity)
     context = await asyncio.to_thread(_build_context, sessions)
     counter = window_counter()

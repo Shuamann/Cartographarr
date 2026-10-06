@@ -124,6 +124,30 @@ class Settings(BaseSettings):
     goes through Tautulli. Find it in any Plex XML request, or in Tautulli's
     settings."""
 
+    plex_url: str = ""
+    """The address of the Plex server, for talking to it directly.
+
+    Stored rather than discovered. Asking plexapi to find the server takes
+    twenty seconds, because it tries every address Plex advertises, including
+    a docker bridge and a LAN address unreachable from outside the house, and
+    waits out each one. Connecting to a known address takes a fifth of a
+    second. Settings finds it once and writes it here."""
+
+    activity_source: str = "tautulli"
+    """Where live activity is read from: tautulli or plex.
+
+    Plex answers this directly in nine milliseconds, with the viewer's address,
+    whether they are local, relayed or secure, the device, the player and the
+    account, which is everything recorded about a stream. Tautulli remains the
+    default until somebody chooses otherwise."""
+
+    library_source: str = "tautulli"
+    """Where the library is read from: tautulli or plex.
+
+    Plex gives the file path, size, codecs, bitrate, duration and the IMDb,
+    TMDB and TVDB ids in one pass, at about half a millisecond an item, which
+    is more than Tautulli reports and one hop fewer."""
+
     plex_machine_identifier: str = ""
     """Server id for app.plex.tv deep links. Optional; without it the Plex
     button just isn't rendered."""
