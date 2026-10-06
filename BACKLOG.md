@@ -184,28 +184,24 @@ Each of these cost real time. They are written down so they cost it once.
 
 ## Known gaps in what has already shipped
 
-### An install on Plex alone records no plays
+### What an install on Plex alone still reads from Tautulli
 
-Setup now lets somebody connect to Plex and nothing else, and everything live
-works that way: streams, rules, bans, stopping a stream, the library, its
-tracks and the artwork. What does not is everything built from the record of
-plays. The History table is written only by the Tautulli sync, so with no
-Tautulli it stays empty, and so do the History tab, the map, Endpoints (devices
-are worked out from plays), the sharing signals and the people list, which is
-also still read from Tautulli. Setup says so in plain words rather than letting
-somebody find out.
+Plays are recorded from Plex as they finish when Tautulli is not connected, so
+History, the map and Endpoints fill on an install with Plex alone. Two things
+are still Tautulli's:
 
-This is what stands between Tautulli being optional and Tautulli being needed
-for half the app. The live tracker already sees every stream start and end, and
-already writes a stream record for each, so the material is there. What it
-needs is a play written at the end of each stream in the shape History already
-has, from Plex's own fields, and the care the import section below describes
-about play identity: a paused and resumed play is one play, and counting it
-twice moves every figure in the app. The tracker is driven from the enforcer,
-so the two want doing together.
+- **The people list**, beyond those who have played. Anybody who plays gets a
+  name from the stream itself, but somebody the server is shared with who has
+  never pressed play is unknown until they do. Plex can list them; see Users
+  and libraries from Plex below.
+- **Libraries**, by name. The library scan reads every section from Plex, but
+  the table of libraries the pages name them by is still filled by the slow
+  sync.
 
-Users from Plex belong with it, since a play from somebody the people list does
-not know cannot be put against a name.
+A play recorded here has a negative id, so it can never meet one of
+Tautulli's. Connecting Tautulli later removes any play of ours it also
+delivers, matched by person, item and a start within two minutes. The import
+of older plays, when it is built, should match the same way.
 
 ### The scan walks shows one at a time
 
@@ -389,8 +385,8 @@ it is cheap: both sources are already readable through one shape.
 ### Users and libraries from Plex
 
 Still read through Tautulli. Plex knows both. Users matter more than they did:
-an install on Plex alone has no people list without them. See the first of the
-known gaps above.
+on Plex alone the people list holds only those who have played. See the first
+of the known gaps above.
 
 ---
 

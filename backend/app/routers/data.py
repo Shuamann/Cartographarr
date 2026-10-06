@@ -227,6 +227,12 @@ async def history_detail(row_id: int, scope: ViewerScope) -> dict:
     """
     base = await asyncio.to_thread(_history_locally, row_id, scope)
 
+    # A negative id is a play this app recorded from Plex as it finished.
+    # Tautulli never saw it, so there is nothing to ask it for.
+    if row_id < 0:
+        base["stream"] = None
+        base["stream_error"] = "Recorded from Plex as it played. The detail Tautulli keeps for each play is not kept for these."
+        return base
     if not tautulli_configured():
         base["stream"] = None
         base["stream_error"] = "The detail of a past play comes from Tautulli, which is not connected"

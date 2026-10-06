@@ -344,11 +344,14 @@ def put_settings(admin: AdminUser, values: dict[str, Any] = Body(...)) -> list[d
 async def sync_run(admin: AdminUser, full: bool = False) -> dict:
     if not is_configured():
         raise HTTPException(409, f"Not configured yet. Missing: {', '.join(missing_required())}")
-    if not tautulli_configured():
-        raise HTTPException(409, "Plays, users and libraries are read from Tautulli, which is not connected")
     if _sync_lock.locked():
         raise HTTPException(409, "A sync is already running")
     audit.record(admin, "sync.run", "Started a full resync" if full else "Started a sync")
+    if not tautulli_configured():
+        # Nothing to read, but the plays recorded from Plex still have devices,
+        # places and sharing signals to be built from them.
+        async with _sync_lock:
+            return await sync_service.run_sync(None, current(), full=full)
 
     async with _sync_lock:
         settings = current()
