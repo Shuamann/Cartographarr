@@ -175,7 +175,7 @@ export function mbps(kbps: number | null | undefined): string {
   return kbps ? `${(kbps / 1000).toFixed(1)} Mbps` : "";
 }
 
-function format(f: FileInfo): string {
+export function fileFormat(f: FileInfo): string {
   return [
     f.video_resolution,
     f.video_codec?.toUpperCase(),
@@ -778,7 +778,7 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
       <dl className="kv">
         <div>
           <dt>Format</dt>
-          <dd>{format(f) || "Not checked yet"}</dd>
+          <dd>{fileFormat(f) || "Not checked yet"}</dd>
         </div>
         {f.store && (
           <div>
@@ -1465,7 +1465,7 @@ function ReleasePicker({
           <h2 id="release-picker-title">Replace {title}</h2>
           {found.data && (
             <p className="muted small">
-              Current file: {format(found.data.current)}
+              Current file: {fileFormat(found.data.current)}
               {found.data.current.file_size ? ` \u00b7 ${size(found.data.current.file_size)}` : ""}
               {found.data.current.file_bitrate ? ` \u00b7 ${mbps(found.data.current.file_bitrate)}` : ""}
             </p>

@@ -56,11 +56,22 @@ def _comments(issue: Issue) -> list[dict[str, Any]]:
         return []
 
 
-def _brief(issue: Issue, names: dict[int, str], years: dict[int, int] | None = None) -> dict[str, Any]:
+def _brief(issue: Issue, names: dict[int, str], items: dict[int, Any] | None = None) -> dict[str, Any]:
+    item = (items or {}).get(issue.rating_key or -1)
     return {
         # The year a row shows above its title, read from the library rather
         # than from the report, which never carried one.
-        "year": (years or {}).get(issue.rating_key or -1),
+        "year": item.year if item is not None else None,
+        # The title in its parts, so a row that has to shorten it can give up
+        # the show name and keep the episode number. A report keeps one string,
+        # "The Show - Episode", and cutting that from the end loses the part
+        # somebody is looking for.
+        "show_title": item.grandparent_title if item is not None else None,
+        "episode_title": item.title if item is not None and item.media_type == "episode" else None,
+        # A row with no title is a placeholder, written when something asked
+        # Plex for a key it no longer has, so that nothing asks again. It is
+        # the opposite of being in the library.
+        "in_library": item is not None and item.title is not None,
         "id": issue.id,
         "seerr_id": issue.seerr_id,
         "source": issue.source,
@@ -101,12 +112,15 @@ def list_issues(
             u.user_id: u.friendly_name or u.username
             for u in db.execute(select(User).where(User.user_id.in_([i.reporter_user_id for i in issues if i.reporter_user_id]))).scalars()
         }
-        keys = [i.rating_key for i in issues if i.rating_key]
-        years = dict(
-            db.execute(
-                select(MediaItem.rating_key, MediaItem.year).where(MediaItem.rating_key.in_(keys))
+        keys = sorted({i.rating_key for i in issues if i.rating_key})
+        items = {
+            row.rating_key: row
+            for row in db.execute(
+                select(MediaItem.rating_key, MediaItem.year, MediaItem.grandparent_title, MediaItem.title,
+                       MediaItem.media_type).where(MediaItem.rating_key.in_(keys))
             ).all()
-        ) if keys else {}
+        } if keys else {}
+        evidence = _evidence(db, keys, mine)
         totals = select(Issue.status, func.count()).group_by(Issue.status)
         kinds = select(Issue.issue_type, func.count()).where(Issue.status == "open").group_by(Issue.issue_type)
         if mine is not None:
@@ -115,7 +129,7 @@ def list_issues(
         counts = dict(db.execute(totals).all())
         by_type = dict(db.execute(kinds).all())
         return {
-            "items": [_brief(i, names, years) for i in issues],
+            "items": [{**_brief(i, names, items), **_row_evidence(evidence, i, mine)} for i in issues],
             "open": counts.get("open", 0),
             "resolved": counts.get("resolved", 0),
             "by_type": by_type,
@@ -123,6 +137,43 @@ def list_issues(
             "seerr_configured": _seerr_configured(),
             "mine_only": mine is not None,
         }
+
+
+def _evidence(db, keys: list[int], mine: int | None) -> dict[int, dict[int | None, list[int]]]:
+    """Plays and stalls of each reported file, per person, in two queries.
+
+    Per person because the question a row answers is whose problem it is: the
+    reporter stalling while everybody else played it cleanly points at their
+    connection, and everybody stalling points at the file. A viewer is only
+    ever counted against their own plays.
+    """
+    out: dict[int, dict[int | None, list[int]]] = {}
+    for i in range(0, len(keys), 500):
+        chunk = keys[i : i + 500]
+        plays = select(History.rating_key, History.user_id, func.count()).where(History.rating_key.in_(chunk))
+        stalls = select(StreamEvent.rating_key, StreamEvent.user_id, func.count()).where(StreamEvent.rating_key.in_(chunk))
+        if mine is not None:
+            plays = plays.where(History.user_id == mine)
+            stalls = stalls.where(StreamEvent.user_id == mine)
+        for key, uid, count in db.execute(plays.group_by(History.rating_key, History.user_id)).all():
+            out.setdefault(key, {}).setdefault(uid, [0, 0])[0] += int(count)
+        for key, uid, count in db.execute(stalls.group_by(StreamEvent.rating_key, StreamEvent.user_id)).all():
+            out.setdefault(key, {}).setdefault(uid, [0, 0])[1] += int(count)
+    return out
+
+
+def _row_evidence(evidence: dict[int, dict[int | None, list[int]]], issue: Issue, mine: int | None) -> dict[str, Any]:
+    """The reporter's plays against everybody else's, for one row."""
+    people = evidence.get(issue.rating_key or -1, {})
+    reporter = issue.reporter_user_id
+    theirs = people.get(reporter, [0, 0]) if reporter is not None else [0, 0]
+    out: dict[str, Any] = {"reporter_plays": theirs[0], "reporter_stalls": theirs[1]}
+    if mine is None:
+        others = [counts for uid, counts in people.items() if uid != reporter]
+        out["other_people"] = sum(1 for counts in others if counts[0])
+        out["other_plays"] = sum(counts[0] for counts in others)
+        out["other_stalls"] = sum(counts[1] for counts in others)
+    return out
 
 
 def _seerr_configured() -> bool:
@@ -206,6 +257,8 @@ def _payload(issue_id: int, days: int) -> dict[str, Any] | None:
             if item is not None:
                 data["found_under"] = item.rating_key
         data["file_title"] = (item.full_title or item.title) if item else None
+        if item is not None:
+            data.update(_brief(issue, names, {issue.rating_key or -1: item}))
         data["whereis"] = _whereis(item)
         # What live recording saw while this file played: why it transcoded,
         # and whether it stalled.
@@ -550,9 +603,15 @@ def _as_reported_by(data: dict[str, Any], mine: int) -> dict[str, Any]:
     file = data.get("file")
     if file:
         file = {k: v for k, v in file.items() if k not in ("file_path", "platforms", "stall_causes", "transcode_causes")}
+    # Whether the file is there is theirs to know, since it answers their
+    # report. Where it lives is not.
+    whereis = data.get("whereis")
+    if whereis:
+        whereis = {**whereis, "path": None}
     return {
         **data,
         "file": file,
+        "whereis": whereis,
         "plays": [p for p in data.get("plays") or [] if p.get("user_id") == mine],
         "streams": [],
         "other_reports": [],

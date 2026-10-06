@@ -89,6 +89,40 @@ def test_an_episode_report_lands_on_the_episode_with_its_evidence(client, monkey
     assert detail["plays"][1]["mine"] is False
 
 
+def test_a_row_says_whose_problem_it_looks_like(client, monkeypatch):
+    """The question behind most reports is whether it is the file or the person.
+    The reporter stalling while somebody else played it cleanly is the first
+    thing worth knowing, so the row carries it rather than the detail alone."""
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+
+    row = client.get("/api/issues").json()["items"][0]
+    assert (row["reporter_plays"], row["reporter_stalls"]) == (1, 2)
+    assert (row["other_people"], row["other_plays"], row["other_stalls"]) == (1, 1, 0)
+    assert row["in_library"] is True
+
+
+def test_a_row_can_shorten_its_title_without_losing_the_episode(client, monkeypatch):
+    """A report keeps one string, "Show - Episode". Cut from the end, a long
+    show name pushes out the episode, which is the part being reported, so the
+    row is given the parts and decides what gives way."""
+    from app.services import issues as service
+
+    claim(client)
+    seed_library()
+    fake_seerr(monkeypatch, [issue(11)])
+    asyncio.run(service.sync())
+
+    row = client.get("/api/issues").json()["items"][0]
+    assert (row["show_title"], row["episode_title"], row["season"], row["episode"]) == ("The Office (US)", "Turf War", 8, 23)
+    detail = client.get(f"/api/issues/{row['id']}").json()
+    assert (detail["show_title"], detail["episode_title"]) == ("The Office (US)", "Turf War")
+
+
 def test_resolved_and_deleted_issues_and_filters(client, monkeypatch):
     from app.services import issues as service
 
@@ -125,6 +159,27 @@ def test_a_movie_report_and_one_with_no_match(client, monkeypatch):
     # A file this server does not have is still listed, with nothing attached.
     unmatched = client.get(f"/api/issues/{items[21]['id']}").json()
     assert unmatched["rating_key"] == 999 and unmatched["file"] is None and unmatched["plays"] == []
+    assert items[20]["in_library"] is True and items[21]["in_library"] is False
+
+
+def test_a_placeholder_row_does_not_put_a_title_back_in_the_library(client, monkeypatch):
+    """Asking Plex for a key it no longer has writes an empty row, so the same
+    question is not asked forever. Drawing the row's artwork asks that
+    question, so a report on a removed film read "Not in the library" until
+    the page was looked at, and then stopped saying so."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import issues as service
+
+    claim(client)
+    fake_seerr(monkeypatch, [issue(21, kind=4, rating_key=999, media_type="movie", season=None, episode=None)])
+    asyncio.run(service.sync())
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=999, synced_at=datetime.now(UTC)))
+
+    row = client.get("/api/issues").json()["items"][0]
+    assert row["in_library"] is False
+    assert client.get(f"/api/issues/{row['id']}").json()["in_library"] is False
 
 
 def test_a_viewer_sees_and_reports_only_their_own(client):
@@ -151,11 +206,15 @@ def test_a_viewer_sees_and_reports_only_their_own(client):
     assert made.status_code == 200
     listing = client.get("/api/issues").json()
     assert [i["id"] for i in listing["items"]] == [made.json()["id"]] and listing["mine_only"] is True
+    # Their own plays of it, and nothing about anybody else's.
+    assert listing["items"][0]["reporter_plays"] == 1 and "other_people" not in listing["items"][0]
 
     detail = client.get(f"/api/issues/{made.json()['id']}").json()
     assert detail["other_reports"] == [] and detail["streams"] == []
     assert all(p["user_id"] == 7 for p in detail["plays"])
     assert "file_path" not in (detail["file"] or {})
+    # Whether the file is there answers their report; where it is kept does not.
+    assert detail["whereis"]["state"] != "unknown" and detail["whereis"]["path"] is None
     # The play it was reported from is kept with it.
     assert detail["context"]["player"] == "iPhone" and detail["context"]["transcode_decision"] == "transcode"
 
