@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.99.0 - 2026-10-06
+
+### Added
+- A report of what Plex measured each person's devices using, a day at a time, going back as far as Plex kept it.
+  On a real server that is 1,445 days and 34.5 TB, four years before this app was installed. Nothing here could
+  reach back like that: the minute by minute samples start at install, and Tautulli never had the figures at all,
+  since it only knows what it was running to watch.
+- Local traffic is counted apart from remote, because remote is the figure an upload has to carry and the two
+  added together answer neither question. Grouped by person, by device, or by either against the other, over any
+  span, in the same reports screen as everything else.
+
 ## 0.98.0 - 2026-10-06
 
 ### Added

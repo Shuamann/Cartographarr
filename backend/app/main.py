@@ -250,6 +250,26 @@ async def _history_check() -> dict | str:
         await client.aclose()
 
 
+async def _plex_bandwidth() -> dict | str:
+    """Plex's own record of what each device used, a day at a time.
+
+    It reaches back years before this app was installed, which nothing else
+    here does, and the whole four years comes down in one request. Once a day
+    is plenty: the figures for a day do not change after it.
+    """
+    from app.plex import bandwidth
+    from app.plex.server import configured as plex_configured
+
+    if not plex_configured():
+        raise tasks.Skipped("Plex is not connected")
+    return await bandwidth.store()
+
+
+tasks.register(tasks.Task(
+    "plex_bandwidth", "Read Plex's upload figures",
+    "What Plex measured each person's devices using, a day at a time, going back as far as Plex kept it.",
+    _plex_bandwidth, lambda: 24 * 3600,
+))
 tasks.register(tasks.Task(
     "history_check", "Check nothing is missing",
     "Counts what Tautulli recorded against what is here, day by day, and fetches any day that is short.",

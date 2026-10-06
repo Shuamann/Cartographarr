@@ -230,12 +230,17 @@ on. The last state of each session is kept and only a change counts. Measured
 on a real server with streams running: one nudge in ninety seconds, against
 one every ten seconds before the fix.
 
-**Four years of its own bandwidth figures.** Per account, per device, LAN
-against WAN, in bytes, going back to 2022-10-01 at the coarsest granularity
-and still covering four years at the finest. Tautulli never had this because
-Tautulli only knows what it was running to watch. Nothing in the app uses it.
-It would answer "who actually uses the upload" over a span no amount of
-recording from now can reach for another four years.
+**Four years of its own bandwidth figures.** Done, as a report. Per account,
+per device, local apart from remote, a day at a time: 31,733 rows covering
+1,445 days and 34.5 TB on the server it was written against. It went into the
+reports engine rather than onto a page of its own, so the grouping, the
+charting and the spans were already built, and the question it was wanted for
+is answered by picking a measure and a grouping like any other.
+
+Two ids needed mapping and both were measured: Plex calls the owner 1 against
+the server while everybody else is already the account id this app files plays
+under, and the figures carry Plex's own device number rather than the client
+identifier everything else keys on.
 
 **602 devices it remembers**, with name, platform, a client identifier on 601
 of them, and a created date. That created date is a real first-seen, where the

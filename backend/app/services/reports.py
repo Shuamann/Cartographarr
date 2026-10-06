@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.filters import Filters, _epoch
 from app.models import (
     BandwidthSample,
+    PlexBandwidth,
     Device,
     EnforcementLog,
     History,
@@ -446,6 +447,42 @@ SOURCES["server"] = Source(
         Measure("peak_hardware", "Peak hardware transcodes", "count", lambda: func.max(BandwidthSample.hw_transcodes)),
     ],
     columns={},
+)
+
+SOURCES["upload"] = Source(
+    key="upload",
+    label="Upload used",
+    blurb=(
+        "What Plex measured each person's devices using, a day at a time, local traffic apart from remote. "
+        "Plex has kept this since long before this app was installed: four years on the server it was written "
+        "against."
+    ),
+    table=PlexBandwidth,
+    admin_only=True,
+    epoch_time=True,
+    time_column=lambda: PlexBandwidth.at,
+    measures=[
+        Measure("bytes", "Traffic", "bytes", lambda: func.coalesce(func.sum(PlexBandwidth.bytes), 0)),
+        Measure("remote_bytes", "Remote traffic", "bytes",
+                lambda: func.coalesce(func.sum(case((PlexBandwidth.lan.is_(False), PlexBandwidth.bytes), else_=0)), 0),
+                hint="What actually went out over the internet, which is the figure an upload has to carry."),
+        Measure("local_bytes", "Local traffic", "bytes",
+                lambda: func.coalesce(func.sum(case((PlexBandwidth.lan.is_(True), PlexBandwidth.bytes), else_=0)), 0)),
+        Measure("days", "Days with any", "count", lambda: func.count(func.distinct(PlexBandwidth.at))),
+        Measure("people", "Different people", "count", lambda: func.count(func.distinct(PlexBandwidth.user_id))),
+        Measure("devices", "Different devices", "count", lambda: func.count(func.distinct(PlexBandwidth.device_id))),
+    ],
+    columns={
+        "user": lambda: PlexBandwidth.user_id,
+        "device": lambda: PlexBandwidth.machine_id,
+        # Said in the same words the rest of the app uses for the same thing,
+        # so a report here reads like a report anywhere else.
+        "location": lambda: case((PlexBandwidth.lan.is_(True), "lan"), else_="wan"),
+    },
+    filter_columns={
+        "user_id": lambda: PlexBandwidth.user_id,
+        "machine_id": lambda: PlexBandwidth.machine_id,
+    },
 )
 
 SOURCES["issues"] = Source(

@@ -475,6 +475,37 @@ class StreamSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column()
 
 
+class PlexBandwidth(Base):
+    """What Plex measured each device using, a day at a time.
+
+    Plex has kept this since long before this app existed: four years on the
+    server it was written against, per account, per device, local traffic apart
+    from remote. Nothing else here can answer who actually uses the upload over
+    a span like that, because the minute samples below only start when this
+    version was installed.
+
+    Keyed exactly as Plex gives it, which was checked rather than assumed:
+    across 31,733 daily rows no two shared a time, an account, a device and a
+    side of the network, so the same import run twice writes the same rows.
+    """
+
+    __tablename__ = "plex_bandwidth"
+    __table_args__ = (Index("ix_plex_bandwidth_at", "at"),)
+
+    at: Mapped[int] = mapped_column(Integer, primary_key=True)  # unix time, start of the day
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    """Plex's own number for the device, which is what the figures carry."""
+
+    lan: Mapped[bool] = mapped_column(Boolean, primary_key=True)
+    machine_id: Mapped[str | None] = mapped_column(String(255))
+    """The client identifier, where Plex can name the device. This is what
+    history, the ban list and the device pages key on; the number above is not.
+    Nullable because a device Plex has forgotten still has its figures."""
+
+    bytes: Mapped[int | None] = mapped_column(BigInteger)
+
+
 class BandwidthSample(Base):
     """The busiest moment of one minute: upload, streams and transcodes."""
 
