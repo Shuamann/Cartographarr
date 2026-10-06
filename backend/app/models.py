@@ -420,6 +420,26 @@ class StreamSession(Base):
     subtitle_decision: Mapped[str | None] = mapped_column(String(32))
     container_decision: Mapped[str | None] = mapped_column(String(32))
     transcode_hw: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Detail only Plex reports, so these stay empty on a stream recorded
+    # through Tautulli rather than being wrong.
+    #
+    # The hardware pair is the useful one. Plex says separately whether
+    # hardware was asked for and whether it was actually used, and asked for
+    # but not granted is the case somebody wants explained. Nothing could say
+    # it before: a server doing no hardware transcoding at all looked the same
+    # as one never asked.
+    transcode_hw_requested: Mapped[bool | None] = mapped_column(Boolean)
+    transcode_hw_decode: Mapped[bool | None] = mapped_column(Boolean)
+    transcode_hw_encode: Mapped[bool | None] = mapped_column(Boolean)
+    transcode_protocol: Mapped[str | None] = mapped_column(String(16))
+    video_profile: Mapped[str | None] = mapped_column(String(32))
+    video_frame_rate: Mapped[str | None] = mapped_column(String(16))
+    audio_channels: Mapped[int | None] = mapped_column(Integer)
+    # Which track was actually being played and read, rather than which the
+    # file happens to contain.
+    audio_language: Mapped[str | None] = mapped_column(String(64))
+    subtitle_language: Mapped[str | None] = mapped_column(String(64))
     transcode_speed_min: Mapped[float | None] = mapped_column(Float)
     causes: Mapped[str | None] = mapped_column(String(255))
     primary_cause: Mapped[str | None] = mapped_column(String(32))

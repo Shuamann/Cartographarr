@@ -166,6 +166,28 @@ def server_time(_: AdminUser) -> dict:
     }
 
 
+@router.get("/plex/servers")
+async def plex_servers(_: AdminUser) -> dict:
+    """Every server this token can reach, with an address for each.
+
+    The one slow call, which is the reason the address is stored afterwards:
+    letting the library find it costs twenty seconds every time, because Plex
+    advertises addresses that are unreachable from outside the house and each
+    one has to be waited out.
+    """
+    import asyncio
+
+    from app.plex import server as plex_server
+
+    try:
+        found = await asyncio.to_thread(plex_server.discover)
+    except plex_server.NotConfigured as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"Plex said: {redact(exc)}") from exc
+    return {"servers": found}
+
+
 @router.get("/settings")
 def get_settings() -> list[dict]:
     """Every setting, its value, and whether the environment owns it.

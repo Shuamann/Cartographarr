@@ -43,9 +43,14 @@ const AREAS: Area[] = [
       },
       {
         title: "Plex",
-        note: "The server id comes from Tautulli and enables the Plex link. A token is only needed to manage sharing.",
+        note: "A token lets this app talk to Plex directly, which is where sharing is managed and where the live streams and the library can be read from. Find servers looks up the address once: discovering it takes about twenty seconds because Plex advertises addresses that are unreachable from outside the house, and connecting to a known one takes a fifth of a second, so it is worth storing.",
         test: "plex",
-        keys: ["plex_token", "plex_machine_identifier"],
+        keys: ["plex_token", "plex_url", "plex_machine_identifier"],
+      },
+      {
+        title: "Where the live data comes from",
+        note: "Tautulli watches Plex and writes down what it sees, which is why it is the only thing that has an address against a play from years ago. For anything happening now, Plex can be asked directly: it answers in about nine milliseconds with the viewer's address, whether they are local, relayed and secure, the device, the player and the account, which is everything recorded about a stream. History from before this app was watching stays with Tautulli either way.",
+        keys: ["activity_source", "library_source"],
       },
     ],
   },
@@ -375,6 +380,9 @@ const LABELS: Record<string, string> = {
   automation_download_cap: "All rules together may queue",
   automation_daily_cap: "A rule may act at most",
   tautulli_url: "Tautulli URL",
+  plex_url: "Plex address",
+  activity_source: "Live streams from",
+  library_source: "The library from",
   tautulli_local_url: "Local URL",
   tautulli_api_key: "API key",
   tautulli_verify_ssl: "Verify SSL certificate",
@@ -487,6 +495,67 @@ const SHAPES: Record<string, FieldShape> = {
   trusted_proxy_ips: { kind: "chips" },
   apprise_urls: { kind: "lines" },
 };
+
+/* Finding the Plex address, once.
+ *
+ * Letting the library discover it costs twenty seconds every time, because
+ * Plex advertises addresses that are unreachable from outside the house and
+ * each one has to be waited out. Done here, stored, and never done again.
+ * Local addresses are offered first because they are the quick ones from
+ * inside the house, and a relay last because it is the slow one. */
+function FindServers({ onPick }: { onPick: (url: string, machineId: string) => void }) {
+  const [looking, setLooking] = useState(false);
+  const [found, setFound] = useState<
+    { name: string; machine_identifier: string; owned: boolean; addresses: { uri: string; local: boolean; relay: boolean }[] }[]
+  >([]);
+  const [error, setError] = useState<string | null>(null);
+
+  async function look() {
+    setLooking(true);
+    setError(null);
+    try {
+      const r = await api.get<{ servers: typeof found }>("/plex/servers");
+      setFound(r.servers);
+      if (r.servers.length === 0) setError("That token can see no servers.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLooking(false);
+    }
+  }
+
+  return (
+    <div className="plex-find">
+      <button className="btn" onClick={look} disabled={looking}>
+        {looking ? "Looking, this takes a moment…" : "Find servers"}
+      </button>
+      {error && <p className="note bad-note" role="alert">{error}</p>}
+      {found.map((s) => (
+        <div key={s.machine_identifier} className="mini">
+          <div className="min0">
+            <strong>{s.name}</strong> {s.owned ? <span className="pill ok">yours</span> : <span className="pill">shared with you</span>}
+            <div className="row wrap" style={{ gap: "6px", marginTop: "6px" }}>
+              {s.addresses.map((a) => (
+                <button
+                  key={a.uri}
+                  className="ms-btn"
+                  title={a.uri}
+                  onClick={() => onPick(a.uri, s.machine_identifier)}
+                >
+                  {a.relay ? "Relay" : a.local ? "On the network" : "Remote"}
+                </button>
+              ))}
+            </div>
+            <p className="muted small">
+              Pick the one this container can reach. On the same machine as Plex that is usually the network one.
+              Nothing is saved until you press Save.
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* The cookie's HTTPS lock is off by default, which is right on a LAN and
  * wrong the moment the app is reachable over TLS. Nothing noticed the
@@ -785,6 +854,15 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             value={masked && !(key in draft) ? "" : String(value ?? "").split(",").map((x) => x.trim()).join("\n")}
             onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
           />
+        ) : key === "activity_source" || key === "library_source" ? (
+          <select
+            disabled={locked}
+            value={String(value ?? "tautulli")}
+            onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+          >
+            <option value="tautulli">Tautulli</option>
+            <option value="plex">Plex, directly</option>
+          </select>
         ) : key === "digest_weekday" ? (
           <select
             disabled={locked}
@@ -990,6 +1068,9 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
               />
             )}
             {section.title === "Server upload" && <UploadSource />}
+            {section.title === "Plex" && (
+              <FindServers onPick={(url, id) => setDraft({ ...draft, plex_url: url, plex_machine_identifier: id })} />
+            )}
             {section.title === "Sessions" && (
               <HttpsHint on={Boolean(draft.session_cookie_secure ?? byKey.get("session_cookie_secure")?.value)} />
             )}

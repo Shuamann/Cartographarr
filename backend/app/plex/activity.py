@@ -40,6 +40,22 @@ def _int(value: Any) -> int | None:
         return None
 
 
+def _float(value: Any) -> float | None:
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _flag(obj: Any, name: str) -> bool | None:
+    """True, False, or not said. Plex leaves these out rather than saying no,
+    and "we were not told" is not the same answer as "no"."""
+    if obj is None:
+        return None
+    value = getattr(obj, name, None)
+    return None if value is None else bool(value)
+
+
 def _first(items):
     return items[0] if items else None
 
@@ -58,14 +74,19 @@ def _session(video: Any) -> dict[str, Any]:
     session = _first(session) if isinstance(session, list) else session
     transcode = getattr(video, "transcodeSession", None)
 
-    stream_video = stream_audio = None
+    stream_video = stream_audio = stream_subtitle = None
     if part is not None:
         for stream in getattr(part, "streams", []) or []:
             kind = getattr(stream, "streamType", None)
-            if kind == 1 and stream_video is None:
+            # The selected one, where Plex says which: a file with six audio
+            # tracks has one that is actually being played.
+            chosen = bool(getattr(stream, "selected", False))
+            if kind == 1 and (stream_video is None or chosen):
                 stream_video = stream
-            elif kind == 2 and stream_audio is None:
+            elif kind == 2 and (stream_audio is None or chosen):
                 stream_audio = stream
+            elif kind == 3 and (stream_subtitle is None or chosen):
+                stream_subtitle = stream
 
     duration = _int(getattr(video, "duration", None)) or 0
     offset = _int(getattr(video, "viewOffset", None)) or 0
@@ -139,6 +160,30 @@ def _session(video: Any) -> dict[str, Any]:
         "summary": getattr(video, "summary", None),
         "content_rating": getattr(video, "contentRating", None),
         "originally_available_at": str(getattr(video, "originallyAvailableAt", "") or "") or None,
+        # Detail Tautulli does not report, kept because this app exists to
+        # judge how a stream went.
+        #
+        # The hardware ones are the useful find. Plex says whether hardware
+        # was asked for and, separately, whether it was actually used to
+        # decode and to encode. Asked for and not granted is the case somebody
+        # wants explained, and nothing could say it before.
+        "transcode_hw_requested": _flag(transcode, "transcodeHwRequested"),
+        "transcode_hw_decode": _flag(transcode, "transcodeHwDecoding"),
+        "transcode_hw_encode": _flag(transcode, "transcodeHwEncoding"),
+        "transcode_hw_full": _flag(transcode, "transcodeHwFullPipeline"),
+        "transcode_protocol": getattr(transcode, "protocol", None) if transcode else None,
+        "transcode_progress": _float(getattr(transcode, "progress", None) if transcode else None),
+        "video_profile": getattr(media, "videoProfile", None) if media else None,
+        "video_frame_rate": getattr(media, "videoFrameRate", None) if media else None,
+        "video_width": _int(getattr(media, "width", None)) if media else None,
+        "video_height": _int(getattr(media, "height", None)) if media else None,
+        "audio_channels": _int(getattr(media, "audioChannels", None)) if media else None,
+        # Which track they are actually listening to and reading, which is the
+        # question behind half the findings this app makes about a file.
+        "audio_language": getattr(stream_audio, "language", None) if stream_audio else None,
+        "subtitle_language": getattr(stream_subtitle, "language", None) if stream_subtitle else None,
+        "subtitle_codec": getattr(stream_subtitle, "codec", None) if stream_subtitle else None,
+        "optimized_for_streaming": _flag(media, "optimizedForStreaming"),
     }
 
 

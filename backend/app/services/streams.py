@@ -158,6 +158,17 @@ def row_for(s: dict[str, Any], now: float) -> dict[str, Any]:
         "subtitle_decision": s.get("subtitle_decision") or None,
         "container_decision": s.get("container_decision") or None,
         "transcode_hw": _hw(s),
+        # Only Plex reports these, so a stream recorded through Tautulli
+        # leaves them empty rather than claiming something it was not told.
+        "transcode_hw_requested": s.get("transcode_hw_requested"),
+        "transcode_hw_decode": s.get("transcode_hw_decode"),
+        "transcode_hw_encode": s.get("transcode_hw_encode"),
+        "transcode_protocol": s.get("transcode_protocol"),
+        "video_profile": s.get("video_profile"),
+        "video_frame_rate": s.get("video_frame_rate"),
+        "audio_channels": _int(s.get("audio_channels")),
+        "audio_language": s.get("audio_language"),
+        "subtitle_language": s.get("subtitle_language"),
         "transcode_speed_min": _plausible_speed(_float(s.get("transcode_speed"))),
         "causes": ",".join(causes) or None,
         "primary_cause": causes[0] if causes else None,

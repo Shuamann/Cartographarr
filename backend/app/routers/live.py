@@ -1361,10 +1361,24 @@ async def _tautulli_health() -> Health:
 async def _plex_health() -> Health:
     import asyncio
 
+    from app.plex import server as plex_server
     from app.plex import sharing
 
     if not sharing.configured():
         return Health(False, "Needs a Plex token")
+
+    # With an address stored, say whether it actually answers and how quickly,
+    # because that is the thing the live source depends on.
+    if plex_server.configured():
+        direct = await asyncio.to_thread(plex_server.reachable)
+        if direct.get("ok"):
+            return Health(
+                True,
+                f"{direct['name']} answered in {direct['ms']} ms",
+                str(direct.get("version") or ""),
+            )
+        return Health(False, f"The stored address did not answer: {direct.get('error')}")
+
     status = await asyncio.to_thread(sharing.status)
     return Health(bool(status.get("ok")), str(status.get("detail") or ""))
 

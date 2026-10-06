@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.84.0 - 2026-10-05
+
+### Added
+- The source switch is in Settings, under Plex and Tautulli, with Find servers to look the address up once and
+  store it. The Plex test now says whether the stored address answers and how quickly, since that is what the live
+  source depends on.
+- A stream recorded from Plex keeps what Tautulli never reported: whether hardware transcoding was asked for and,
+  separately, whether it was actually used to decode and to encode. Asked for and not granted is the case worth
+  explaining, and a server doing none of it looked exactly like one that was never asked.
+- Also kept: the video profile and frame rate, the real width and height, the audio channel count, the streaming
+  protocol, and which audio and subtitle track was actually selected rather than which the file happens to contain.
+
 ## 0.83.0 - 2026-10-05
 
 ### Added

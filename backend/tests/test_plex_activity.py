@@ -91,3 +91,49 @@ def test_the_shape_matches_what_tautulli_returns():
     s = activity._session(a_session())
     missing = [f for f in live_router.SESSION_FIELDS if f not in s]
     assert not missing, f"fields the rest of the app expects and Plex is not filling: {missing}"
+
+
+def test_the_detail_only_plex_reports():
+    """Plex says whether hardware was asked for and, separately, whether it
+    was used. Asked for and not granted is the case somebody wants explained,
+    and a server doing no hardware transcoding looked exactly like one that
+    was never asked."""
+    ts = SimpleNamespace(
+        videoDecision="transcode", audioDecision="copy", subtitleDecision=None,
+        container="mp4", speed=0.0, throttled=True, videoCodec="h264", audioCodec="eac3",
+        transcodeHwRequested=True, transcodeHwDecoding=None, transcodeHwEncoding=None,
+        transcodeHwFullPipeline=False, protocol="dash", progress=78.0,
+    )
+    s = activity._session(a_session(transcode=ts))
+    assert s["transcode_hw_requested"] is True
+    assert s["transcode_hw_decode"] is None, "not told is not the same as no"
+    assert s["transcode_protocol"] == "dash"
+    assert s["transcode_progress"] == 78.0
+
+
+def test_the_track_actually_being_played_is_the_one_recorded():
+    """A file with several audio tracks has one that is selected, and that is
+    the one the viewer is hearing."""
+    streams = [
+        SimpleNamespace(streamType=2, codec="ac3", language="German", channels=6, selected=False),
+        SimpleNamespace(streamType=2, codec="aac", language="English", channels=2, selected=True),
+        SimpleNamespace(streamType=3, codec="srt", language="English", selected=True),
+        SimpleNamespace(streamType=1, codec="hevc", language=None, selected=True),
+    ]
+    media = SimpleNamespace(
+        container="mkv", videoResolution="1080", bitrate=5639, videoCodec="hevc",
+        audioCodec="eac3", audioChannels=2, videoProfile="main 10", videoFrameRate="24p",
+        width=1920, height=1080, optimizedForStreaming=True,
+        parts=[SimpleNamespace(streams=streams)],
+    )
+    s = activity._session(a_session(media=[media]))
+    assert s["audio_language"] == "English", "the selected track, not the first"
+    assert s["subtitle_language"] == "English"
+    assert s["video_profile"] == "main 10" and s["video_frame_rate"] == "24p"
+    assert s["video_width"] == 1920 and s["audio_channels"] == 2
+
+
+def test_nothing_is_claimed_about_a_stream_with_no_transcode():
+    s = activity._session(a_session())
+    for key in ("transcode_hw_requested", "transcode_hw_decode", "transcode_protocol"):
+        assert s[key] is None, key
