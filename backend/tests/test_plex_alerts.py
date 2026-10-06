@@ -1,0 +1,112 @@
+"""Plex telling us something changed, instead of us asking every five seconds.
+
+The poll is the floor and stays exactly as it was. This only asks the enforcer
+to run now rather than in a moment, which is the difference between a banned
+device being stopped as it starts playing and being stopped up to a poll
+later.
+"""
+
+import asyncio
+
+from app.plex import alerts
+
+
+def playing(state):
+    return {"type": "playing", "PlaySessionStateNotification": [{"sessionKey": "9", "state": state}]}
+
+
+def test_a_stream_nobody_has_seen_before_is_worth_waking_for():
+    seen = {}
+    assert alerts.worth_waking(playing("playing"), seen) is True
+    assert seen == {"9": "playing"}
+
+
+def test_the_same_stream_carrying_on_is_not():
+    """This is the whole difficulty. Every playing stream pings about every
+    ten seconds with its position, and that ping says "playing", exactly as a
+    stream that has just started does. Waking for all of them would ask the
+    enforcer to run constantly for no new information, which is worse than the
+    poll it is meant to improve on."""
+    seen = {}
+    assert alerts.worth_waking(playing("playing"), seen) is True
+    for _ in range(5):
+        assert alerts.worth_waking(playing("playing"), seen) is False
+
+
+def test_pausing_and_resuming_each_count():
+    seen = {}
+    alerts.worth_waking(playing("playing"), seen)
+    assert alerts.worth_waking(playing("paused"), seen) is True
+    assert alerts.worth_waking(playing("paused"), seen) is False
+    assert alerts.worth_waking(playing("playing"), seen) is True
+
+
+def test_a_stream_that_stopped_is_forgotten():
+    """Otherwise the record of what is playing grows for the life of the
+    process, and the same session key coming round again would be missed."""
+    seen = {}
+    alerts.worth_waking(playing("playing"), seen)
+    assert alerts.worth_waking(playing("stopped"), seen) is True
+    assert seen == {}
+    assert alerts.worth_waking(playing("playing"), seen) is True
+
+
+def test_anything_else_is_not_worth_waking_for():
+    seen = {}
+    assert alerts.worth_waking({"type": "timeline"}, seen) is False
+    assert alerts.worth_waking({"type": "activity"}, seen) is False
+    assert alerts.worth_waking({"type": "playing"}, seen) is False
+    assert alerts.worth_waking({}, seen) is False
+
+
+def test_the_address_becomes_a_socket_address_and_carries_the_token():
+    from types import SimpleNamespace
+
+    secure = alerts._url(SimpleNamespace(plex_url="https://example.plex.direct:32400/", plex_token="abc"))
+    assert secure.startswith("wss://example.plex.direct:32400/:/websockets/notifications")
+    assert secure.endswith("X-Plex-Token=abc")
+    plain = alerts._url(SimpleNamespace(plex_url="http://192.0.2.10:32400", plex_token="abc"))
+    assert plain.startswith("ws://192.0.2.10:32400/")
+
+
+def test_it_waits_rather_than_spinning_when_plex_is_not_set_up(monkeypatch):
+    """A server with no token must not reconnect in a loop. Nothing is lost by
+    waiting: the poll is doing the work either way."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("app.settings_store.current", lambda: SimpleNamespace(plex_token=None, plex_url=None))
+    waited = []
+
+    async def no_sleep(seconds, stopping):
+        waited.append(seconds)
+        stopping.set()
+
+    monkeypatch.setattr(alerts, "_sleep_or_stop", no_sleep)
+    stopping = asyncio.Event()
+    asyncio.run(alerts.listen(lambda: None, stopping))
+    assert waited == [alerts.RETRY_SECONDS]
+
+
+def test_shutdown_does_not_wait_out_the_retry():
+    """Asked to stop in the middle of a wait, it stops, rather than holding up
+    the whole app for half a minute."""
+
+    async def run():
+        stopping = asyncio.Event()
+        task = asyncio.create_task(alerts._sleep_or_stop(30, stopping))
+        await asyncio.sleep(0)
+        stopping.set()
+        await asyncio.wait_for(task, timeout=1)
+
+    asyncio.run(run())
+
+
+def test_the_poll_is_still_registered_and_unchanged():
+    """The whole design rests on this. A websocket that quietly dies would
+    otherwise be a feature that quietly stops, with nothing saying so."""
+    import pathlib
+
+    source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
+    assert '"enforce", "Check live streams"' in source
+    assert "activity_poll_seconds" in source, "the poll still sets its own interval"
+    assert "plex_alerts.listen" in source, "and the listener runs beside it"

@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.95.0 - 2026-10-06
+
+### Added
+- Plex now tells this app when something starts, stops or pauses, instead of being asked every five seconds. A
+  banned device used to keep playing until the next poll came round; now the check runs the moment Plex says
+  something happened.
+- The poll is unchanged and still runs on its timer. The socket only asks it to run sooner, so a connection that
+  drops costs nothing but the speed, and it reconnects by itself. No new dependency: the websockets library was
+  already here.
+- Only a real change wakes it. Every playing stream pings about every ten seconds with its position, and that
+  ping says "playing" exactly as a new stream does, so the last state of each session is kept and only a
+  difference counts. Measured on a real server with streams running: one check in ninety seconds, against one
+  every ten seconds before that was sorted out.
+
 ## 0.94.0 - 2026-10-06
 
 ### Added

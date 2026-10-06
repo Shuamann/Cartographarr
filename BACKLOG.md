@@ -203,6 +203,54 @@ kind of thing noticed two years late.
 
 ---
 
+## What else Plex has, now that it is asked directly
+
+Every number here was measured against a real server with roughly 31,000
+files, 48 accounts and four years of history. They are written down because
+the useful ones are not the ones that were expected.
+
+**A websocket it pushes events to.** Done. The poll is untouched and remains
+the floor; the socket only asks it to run now rather than in a moment, so a
+websocket that dies quietly costs nothing but the speed it was added for.
+
+The difficulty was not the connection, which took no new dependency. It was
+telling a stream that just started from one carrying on: every playing stream
+pings about every ten seconds with its position and that ping says "playing",
+exactly as a new stream does. Waking on all of them asked the enforcer to run
+constantly for no new information, which is worse than the poll it improves
+on. The last state of each session is kept and only a change counts. Measured
+on a real server with streams running: one nudge in ninety seconds, against
+one every ten seconds before the fix.
+
+**Four years of its own bandwidth figures.** Per account, per device, LAN
+against WAN, in bytes, going back to 2022-10-01 at the coarsest granularity
+and still covering four years at the finest. Tautulli never had this because
+Tautulli only knows what it was running to watch. Nothing in the app uses it.
+It would answer "who actually uses the upload" over a span no amount of
+recording from now can reach for another four years.
+
+**602 devices it remembers**, with name, platform, a client identifier on 601
+of them, and a created date. That created date is a real first-seen, where the
+app currently infers one from the first play it happens to have. Relevant to
+trusted devices and to the new device alert.
+
+**Intro and credit markers**, on 14 of 16 episodes checked, and chapters. No
+use has suggested itself, which is why nothing was built; noted so the next
+person does not go looking for whether they exist.
+
+**624 collections**, recently added, on deck, 48 accounts, 33 shares, the 174
+server settings, the maintenance tasks and whatever the server is doing right
+now. All readable, none used.
+
+**What Plex's history does not have**, checked rather than assumed: no IP
+address, no transcode decision, no duration watched, no view offset. It does
+have the device id, which maps to the client identifier a ban is written
+against, so historical device attribution is available directly and only the
+address is not. That single gap is the whole reason Tautulli is still needed,
+and it is why the import is an import rather than a dependency.
+
+---
+
 ## Trusting more than a device
 
 Trusted devices shipped: a tick on the Endpoints screen beside the ban

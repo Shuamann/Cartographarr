@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from app.routers import admin, auth, branding, data, home, issues, library, live
 from app.services import capabilities, enforcer
 from app.services import sync as sync_service
 from app.settings_store import current, is_configured, missing_required
+from app.plex import alerts as plex_alerts
 from app.tautulli.client import TautulliClient
 
 log = logging.getLogger(__name__)
@@ -260,6 +262,14 @@ async def lifespan(app: FastAPI):
     await tasks.run("capabilities", trigger="startup")
     app.state.scheduler = scheduler
 
+    # Plex pushes playback events. The poll above is the floor and stays
+    # exactly as it was; this only asks it to run now rather than in a moment,
+    # which is the difference between a banned device being stopped when it
+    # starts playing and being stopped up to a poll later.
+    stopping = asyncio.Event()
+    listener = asyncio.create_task(plex_alerts.listen(lambda: tasks.run("enforce", trigger="plex"), stopping))
+    app.state.plex_listener = listener
+
     if is_configured():
         log.info("%s ready", settings.app_name)
     else:
@@ -272,6 +282,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        stopping.set()
+        listener.cancel()
+        with suppress(asyncio.CancelledError):
+            await listener
         scheduler.shutdown(wait=False)
         from app.routers.data import close_image_client
 
