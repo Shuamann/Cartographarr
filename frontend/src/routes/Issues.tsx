@@ -155,9 +155,10 @@ function code(season: number, episode: number): string {
 /* The title, in parts that give way in the right order.
  *
  * A report keeps one string, "The Show - The Episode", and clipping that from
- * the end cuts off the episode, which is the thing being reported. The show
- * name gives way first, the episode name after it, and the numbers never do.
- * Same parts and the same classes as the stream tiles. */
+ * the end can cut off the season and episode, which say which one is being
+ * reported. Split into parts, the same classes as the stream tiles decide
+ * what gives way: the episode's own name first, a very long show name only
+ * past most of the line, and the numbers never. */
 function IssueTitle({ r }: { r: IssueRow }) {
   const full = r.title ?? (r.rating_key ? `Item ${r.rating_key}` : "No longer in the library");
   const numbered = r.season != null && r.episode != null;

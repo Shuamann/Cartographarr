@@ -184,17 +184,14 @@ Each of these cost real time. They are written down so they cost it once.
 
 ## Known gaps in what has already shipped
 
-### The library source setting does nothing yet
+### The scan walks shows one at a time
 
-Settings offers "The library from: Tautulli or Plex, directly". Nothing reads
-it. The live activity switch beside it is wired and works; this one is a
-control with no wire behind it, which is worse than not offering it.
-
-Either finish the Plex library scanner or hide the control until it exists.
-Plex gives the file path, size, container, codecs, bitrate, duration, the real
-pixel dimensions and the IMDb, TMDB and TVDB ids in one pass at about half a
-millisecond an item, which is more than Tautulli reports and one hop fewer, so
-it is worth finishing rather than removing.
+The Plex scan walks shows one at a time, a request each, in one worker
+thread. At about ten milliseconds a request that is fine for a scan every six
+hours, so it was left simple. If a very large TV library makes it slow, list
+episodes a section at a time instead, which is one paged listing rather than a
+request per show, after checking against a real server that the listing
+carries the show and season keys.
 
 ### Banning rides on "Run rules"
 
@@ -299,10 +296,35 @@ What it needs:
   comes from Tautulli and offer the import. Nobody should have to read this
   file to find that out.
 
+It brings only what is missing. Importing what is already here would double
+every figure in the app, so the import has to recognise a play it already
+holds and skip it, and running it twice has to be safe and boring. The upsert
+the library scan uses is the pattern: the same row arriving again changes
+nothing.
+
+Which makes the more useful half of this a question rather than a copy: what
+does Tautulli have that this app does not? Answering it is most of the work
+and is worth having on its own, because it is also the check that the import
+worked.
+
+- Compare the two, day by day, over the whole of Tautulli's history: how many
+  plays it recorded against how many are here. A day that matches is done. A
+  day short by three is the thing to go and fetch.
+- Say where the gaps are and how big, before importing anything. A missing
+  week in 2022 and a missing hour last Tuesday are different problems: one is
+  Tautulli's history being older than this app, the other is something having
+  gone wrong recently and worth knowing about.
+- Fetch only those days, and compare again afterwards. An import that says it
+  read 4,000 plays is not evidence of anything; a gap report that comes back
+  empty is.
+- Run the comparison on its own, without importing, whenever anybody asks. It
+  is the only honest answer to "is anything missing".
+
 The care needed is play identity. A paused and resumed play is one play, and
 the import has to agree with how plays are already counted here or every
 figure in the app moves. Reference ids exist for exactly this and the import
-should use them rather than inventing a rule.
+should use them, both for recognising a play already held and for counting a
+day, rather than inventing a rule.
 
 ### Checking the handover actually worked
 
@@ -339,7 +361,7 @@ holds.
 
 ### The screen
 
-Done in 0.87.0, against Seerr's list as the reference. A row carries the
+Done in 0.89.0, against Seerr's list as the reference. A row carries the
 artwork, the title with its episode number kept whatever gives way, the one
 thing that is wrong, and the reporter's plays beside everybody else's, which
 answers whether it is the file or the person before anything is opened. An

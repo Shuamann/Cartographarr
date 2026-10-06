@@ -2,9 +2,11 @@
 
 Two stages, each its own background task:
 
-1. **Scan** lists every movie and episode through Tautulli's media info
-   (a page per movie library, a request per show and per season), with
-   bitrate, resolution, codecs, container and size. A few hundred quick
+1. **Scan** lists every movie and episode, from Tautulli's media info (a
+   page per movie library, a request per show and per season) or from Plex
+   directly, as the library source setting says, with bitrate, resolution,
+   codecs, container and size. Plex adds the file path and the IMDb, TMDB
+   and TVDB ids. A few hundred quick
    requests cover tens of thousands of files, so Problem files and 4K copies
    are complete within a minute. A file whose size changed is marked to be
    read again, and anything no longer in Plex drops out of the lists.
@@ -93,8 +95,29 @@ async def _pages(client, **params) -> list[dict[str, Any]]:
 
 
 async def scan(client) -> dict[str, Any]:
-    """List every movie and episode. Returns counts."""
+    """List every movie and episode. Returns counts.
+
+    Either source answers in the same rows, so storing them, the size history
+    and everything that reads media_items do not know which one was asked.
+    Plex also gives the file path and the external ids in the same pass.
+    """
+    from app.settings_store import current
+
     started = datetime.now(UTC)
+    if current().library_source == "plex":
+        from app.plex import library as plex_library
+
+        rows = await asyncio.to_thread(plex_library.read)
+    else:
+        rows = await _tautulli_rows(client)
+    counts = await asyncio.to_thread(_store, rows, started)
+    await asyncio.to_thread(_record_sizes, started)
+    return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
+            "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+
+
+async def _tautulli_rows(client) -> list[dict[str, Any]]:
+    """A page per movie library, a request per show and per season."""
     libraries = await client.call("get_libraries") or []
     semaphore = asyncio.Semaphore(CONCURRENCY)
     rows: list[dict[str, Any]] = []
@@ -131,11 +154,7 @@ async def scan(client) -> dict[str, Any]:
 
             for found in await asyncio.gather(*(one_show(s) for s in shows)):
                 rows.extend(found)
-
-    counts = await asyncio.to_thread(_store, rows, started)
-    await asyncio.to_thread(_record_sizes, started)
-    return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
-            "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+    return rows
 
 
 def _record_sizes(started: datetime) -> None:
@@ -222,8 +241,13 @@ def in_library():
 
 
 async def read_details(client, chunk: int = DETAILS_CHUNK) -> dict[str, int]:
-    """Read full metadata for files not read yet, one chunk per run."""
-    from app.services.sync import metadata_row
+    """Read full metadata for files not read yet, one chunk per run.
+
+    Either source fills the same columns. Plex is asked a hundred files at a
+    time, which it allows and Tautulli has no form for, so where this is one
+    request per file through Tautulli it is one per hundred direct.
+    """
+    from app.settings_store import current
 
     MediaItem = models.MediaItem
 
@@ -240,13 +264,12 @@ async def read_details(client, chunk: int = DETAILS_CHUNK) -> dict[str, int]:
     keys = await asyncio.to_thread(pending)
     if not keys:
         return {"read": 0, "left": 0}
-    semaphore = asyncio.Semaphore(CONCURRENCY)
+    if current().library_source == "plex":
+        from app.plex import library as plex_library
 
-    async def fetch(key: int) -> dict[str, Any]:
-        async with semaphore:
-            return await metadata_row(client, key)
-
-    results = await asyncio.gather(*(fetch(k) for k in keys))
+        results = await asyncio.to_thread(plex_library.details, keys)
+    else:
+        results = await _tautulli_details(client, keys)
 
     def save() -> int:
         now = datetime.now(UTC)
@@ -265,3 +288,16 @@ async def read_details(client, chunk: int = DETAILS_CHUNK) -> dict[str, int]:
 
     left = await asyncio.to_thread(save)
     return {"read": len(keys), "left": left}
+
+
+async def _tautulli_details(client, keys: list[int]) -> list[dict[str, Any]]:
+    """One request per file, which is all Tautulli's API offers."""
+    from app.services.sync import metadata_row
+
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+
+    async def fetch(key: int) -> dict[str, Any]:
+        async with semaphore:
+            return await metadata_row(client, key)
+
+    return list(await asyncio.gather(*(fetch(k) for k in keys)))

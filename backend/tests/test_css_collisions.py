@@ -123,3 +123,19 @@ def test_the_popup_card_does_not_lay_itself_out_by_the_window():
     assert "overflow: hidden auto;" in flyout, (
         "overflow-y on its own leaves overflow-x computing to auto, which is the scrollbar"
     )
+
+
+def test_a_tile_title_gives_up_the_episode_name_and_never_the_numbers():
+    """What survives a clip has to be what identifies the thing.
+
+    This was the wrong way round once. The show name gave way first, leaving
+    "Y... - S02 - E04", which keeps the two numbers and loses the one word
+    that makes them mean anything.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    show = css[css.index(".card-title-show {") :][:400]
+    assert "flex: 0 0 auto;" in show, "the show name does not shrink"
+    name = css[css.index(".card-title-name {") :][:300]
+    assert "flex: 1 1 0;" in name, "the episode's name takes what is left, and gives way first"

@@ -78,7 +78,7 @@ function EpisodeLinks({ session }: { session: LiveSession }) {
       >
         {code.slice(0, at)}
       </button>
-      <span className="muted"> - </span>
+      <span className="muted card-title-sep">-</span>
       {/* The episode's name is part of its own link, because a two character
           target is a poor one and the name is the thing being pointed at. */}
       <button

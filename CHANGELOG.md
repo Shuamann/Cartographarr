@@ -4,7 +4,7 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
-## 0.87.0 - 2026-10-06
+## 0.89.0 - 2026-10-06
 
 ### Changed
 - Issues, rebuilt around the question behind most reports: is it the file, or is it them? Each row puts the
@@ -12,8 +12,9 @@ copy on GitHub to say what an update brings.
   cleanly reads differently, at a glance, from a file that stalls for everyone.
 - Resolving and reopening are on the row. Nothing asks first, because either one is undone with one click. A note
   typed in an opened report goes with the resolution, so saying what was done and closing it is one click too.
-- A long show name gives way before the episode does. Rows clipped "The Show - Episode" from the end, which cut
-  off the part being reported; the episode number now never shortens.
+- A long title keeps its season and episode. Rows clipped "The Show - Episode" from the end, which could cut off
+  the numbers that say which episode is being reported. They now shorten the way the stream tiles do: the
+  episode's own name first, and the numbers never.
 - An opened report reads as facts rather than a paragraph: the device, the network, how it played, how often it
   stalled and how much was watched, then the conversation, then every play of the file one to a line.
 - Somebody who is not an admin sees their own reports, how their own plays went, and what is already known about
@@ -28,6 +29,45 @@ copy on GitHub to say what an update brings.
   asks Plex about the key, which leaves an empty placeholder row behind, and that row was being read as the film
   being back.
 - In an opened report on a phone, the facts ran off the right edge of the screen.
+
+## 0.88.0 - 2026-10-06
+
+### Added
+- With Plex chosen, the audio and subtitle tracks in every file are read from Plex as well, which was the last
+  thing still going through Tautulli. Plex will not put tracks in a library listing, but it does answer for a
+  hundred files in one request, which Tautulli's API has no form for at all. Measured on this library: 2,000 files
+  in 19 seconds, against 636 ms a file through Tautulli, and 313 requests for the whole library against 31,250.
+- Each track keeps what it kept before: the codec, channels, language and bitrate of every audio track, and the
+  codec, language, whether it is forced and whether it sits in the file or beside it for every subtitle.
+
+### Changed
+- Nothing about what is stored. 400 files Tautulli had already described were read again from Plex and compared
+  field by field: every audio track list and every subtitle track list matched exactly, and 21 other columns
+  matched on all but a handful of files where Plex had been re-matched since Tautulli last looked. The dynamic
+  range wording is Tautulli's own, worked out against every file in the library it had called anything other than
+  SDR, so rules and reports that match on "HDR10" or "Dolby Vision" carry on working.
+
+## 0.87.0 - 2026-10-06
+
+### Added
+- The library source setting now does what it says. With Plex chosen, the library scan reads every film and
+  episode from Plex itself rather than through Tautulli, and stores the same rows, so Problem files, 4K copies,
+  library sizes and everything else built on the scan carry on unchanged.
+- A scan from Plex fills in the IMDb, TMDB and TVDB ids for the whole library at once. Before, they arrived one
+  title at a time, and only once somebody played it, so deep links and request matching did nothing for anything
+  unwatched.
+- It also stores each file's path, which the on-disk check and tidying are built on.
+
+### Changed
+- A tile's title keeps the show, the season and the episode, and gives up the episode's name instead. It was the
+  other way round, which left "Y... - S02 - E04": the two numbers, and not the one word that makes them mean
+  anything. The show name now takes everything except the room the numbers need and a few characters of the name.
+- Less air around the dashes in a title, on the tiles and on the stream card both.
+
+### Fixed
+- A request whose title had changed key could be matched by TMDB id to an unrelated episode. An episode's TMDB id
+  is the episode's own, a different number from the film or show a request names, so episodes are no longer looked
+  at. With every episode now carrying one, a coincidence was only a matter of time.
 
 ## 0.86.0 - 2026-10-05
 
@@ -48,6 +88,7 @@ copy on GitHub to say what an update brings.
 - The explanations themselves are shorter and plainer. They had grown into paragraphs arguing their own case.
 - The Settings heading above Add account reads "Accounts" rather than "People", which is what it lists, and no
   longer reads as the tab now called Endpoints.
+
 
 ## 0.84.1 - 2026-10-05
 

@@ -4646,9 +4646,15 @@ label.locked .pill {
   min-width: 0;
   overflow: hidden;
 }
+/* The show name, the season and the episode all survive. Giving up the show
+   first left "Y... - S02 - E04", which names the one part nobody needed: the
+   numbers mean nothing without the show they belong to. Only a show name wider
+   than most of the tile is clipped, and the numbers still fit beside it. */
 .card-title-show {
-  flex: 0 1 auto;
-  min-width: 3ch;
+  flex: 0 0 auto;
+  /* Everything except the room the numbers need and a few characters of the
+     episode's name, or 60% of a narrow tile, whichever leaves more. */
+  max-width: max(60%, calc(100% - 136px));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4661,10 +4667,12 @@ label.locked .pill {
 /* A flex item eats the spaces around its text, so the gap is drawn rather
    than typed. */
 .card-title-sep {
-  padding: 0 5px;
+  padding: 0 2px;
 }
+/* Which makes the episode's name the part that gives way, with a basis of
+   nothing so it takes what is left and no more. */
 .card-title-name {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
