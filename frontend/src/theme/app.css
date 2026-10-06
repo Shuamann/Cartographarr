@@ -144,6 +144,15 @@ main {
   inset: 0;
 }
 
+/* MapLibre's own zoom buttons come at 29 pixels square, which is under the
+   height every other control here shares and under what is worth aiming a
+   thumb at on a phone. Specific for the same reason the rule above is: the
+   map's stylesheet arrives in the lazily loaded chunk and lands last. */
+.view-body .maplibregl-ctrl-group button {
+  width: var(--control-h);
+  height: var(--control-h);
+}
+
 .map-banner {
   position: absolute;
   top: 12px;
@@ -2568,7 +2577,17 @@ label.locked .pill {
   margin-top: 14px;
 }
 
-@media (max-width: 900px) {
+/* Between the two column rule and a phone, the second column is given what is
+   left rather than its contents, so a long value wraps inside it instead of
+   widening the grid.
+
+   Only between. This had no lower bound, so it also beat the single column
+   rule a narrow card is supposed to get, and a phone was shown two columns
+   about 190 and 140 pixels wide: an address with its city on it wrapped to
+   five lines, and the facts beside it stopped lining up with anything. It
+   never ran off the screen, which is why it was not caught by looking for
+   that. */
+@media (min-width: 700px) and (max-width: 900px) {
   .spec {
     grid-template-columns: max-content minmax(0, 1fr);
   }
@@ -4447,7 +4466,11 @@ label.locked .pill {
 }
 
 .legend-tab {
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 99px;
   background: var(--surface);
@@ -4826,6 +4849,21 @@ label.locked .pill {
   background: var(--accent);
   border-color: var(--accent);
 }
+/* The tick that vouches for a device. Grey until it is given, then the colour
+   the rest of the app uses for a thing that is as it should be. */
+.btn.trust span {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-3);
+}
+.btn.trust.on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.btn.trust.on span {
+  color: var(--ok);
+}
+
 /* A title that goes where it names. Inherits its size so a heading still
    reads as a heading, and the two halves of S01E06 sit together. */
 .title-link {

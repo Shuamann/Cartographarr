@@ -152,6 +152,19 @@ def ignore_patterns() -> dict[tuple[int, str, str], int]:
         }
 
 
+def trusted_devices() -> set[tuple[int, str]]:
+    """Every (account, device) somebody has vouched for."""
+    from app.models import Device
+
+    with session_scope() as db:
+        return {
+            (user_id, machine_id)
+            for machine_id, user_id in db.execute(
+                select(Device.machine_id, Device.user_id).where(Device.trusted_at.is_not(None))
+            ).all()
+        }
+
+
 def find_flags(settings: Settings) -> int:
     """Walk each account's plays in order and flag the impossible jumps."""
     with session_scope() as db:
@@ -185,6 +198,7 @@ def find_flags(settings: Settings) -> int:
     found: list[dict] = []
     previous_by_user: dict[int, tuple] = {}
     patterns = ignore_patterns()
+    trusted = trusted_devices()
 
     for row in rows:
         last = previous_by_user.get(row.user_id)
@@ -197,6 +211,22 @@ def find_flags(settings: Settings) -> int:
         # against two addresses, and that is somebody walking through their
         # own front door rather than two people sharing a password.
         if last.machine_id and last.machine_id == row.machine_id:
+            continue
+
+        # Both ends are devices somebody said belong to this account. A phone
+        # on mobile data, a laptop carried to work, a VPN whose exit moves
+        # between cities: the ordinary life of one household, which this rule
+        # has no way to tell from sharing and which somebody has now told it.
+        #
+        # Both, never one. A trusted device playing alongside one nobody
+        # recognises is the case most worth seeing, so half a trusted pair
+        # leaves the signal standing.
+        if (
+            last.machine_id
+            and row.machine_id
+            and (row.user_id, last.machine_id) in trusted
+            and (row.user_id, row.machine_id) in trusted
+        ):
             continue
 
         # Too vague to draw a conclusion from. A 1000 km stated error can

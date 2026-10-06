@@ -182,6 +182,13 @@ class Settings(BaseSettings):
     in every one of five hundred tests."""
 
     enforce_enabled: bool = True
+    """The rules somebody wrote, and only those.
+
+    The ban list and the blocked countries are enforced by the same sweep but
+    are not rules: each is an explicit act against a named device, address or
+    place. Turning this off to quieten one rule should not quietly stop every
+    ban on the server, which it did."""
+
     enforce_dry_run: bool = True
     """No longer set in the UI: each rule, and the ban list, has its own record
     only switch on the Rules page. Two jobs remain. It is the starting value
@@ -321,6 +328,23 @@ class Settings(BaseSettings):
 
     Only ever about what the sync just found, never the backlog. Quiet unless
     notifications are set up."""
+
+    keep_streams_days: int = 1095
+    """How long the detailed record of each stream is kept. 0 keeps everything.
+
+    Not the plays, which are history and are kept whatever this says. This is
+    what live activity recorded while a stream was running: the decisions, the
+    causes, the buffering, the bandwidth. Three years because the reports can
+    be asked for any window up to ten, and somebody throwing away two year old
+    streams should have chosen to rather than found out."""
+
+    keep_logs_days: int = 1095
+    """How long the audit log and the enforcement log are kept. 0 keeps
+    everything.
+
+    A record of what was done rather than of what was watched. Sharing changes
+    cannot be undone from here, so what something looked like before is worth
+    keeping well past the point it is worth reporting on."""
 
     backup_keep: int = 7
     """How many database snapshots to keep beside the live one. 0 turns it off.

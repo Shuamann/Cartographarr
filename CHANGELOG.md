@@ -4,6 +4,36 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.94.0 - 2026-10-06
+
+### Added
+- Devices can be trusted. A green tick on the Endpoints screen, beside the ban control, says this device belongs
+  to this account.
+- Trusting quiets one thing: a pair of plays is not raised as one account in two places when the device at each
+  end is a trusted device of that account. A phone on mobile data, a laptop carried to work, a VPN whose exit
+  moves between cities are the ordinary life of a household, and the signal had no way to tell them from sharing.
+- Both ends, never one. A trusted device playing alongside one nobody recognises is the case most worth seeing,
+  so trusting half a pair leaves the signal standing. There is a test for each of those three, and a fourth that
+  the signal still fires when neither device is trusted, since a rule that quiets a signal looks exactly like a
+  rule that never fired.
+- Nobody is going to tick two hundred devices, so the ones with a settled history on one account and none on any
+  other can be trusted in one go. On a real library that offered 82 of 234. The tick stays the final word: any of
+  them can be untrusted afterwards.
+- Trust is per account, because a device is one row per account that has used it. A shared television trusted for
+  the person who owns it says nothing about the person who signed into it afterwards.
+
+## 0.93.0 - 2026-10-06
+
+### Fixed
+- The facts on a stream card read properly on a phone. A rule meant for a middling window had a ceiling and no
+  floor, so it also beat the single column a narrow card is supposed to get: a phone was drawn two columns about
+  190 and 140 pixels wide, an address with its city on it wrapped to five lines, and the facts beside it lined up
+  with nothing. Nothing ever ran off the screen, which is why looking for that never found it.
+- The map's own zoom buttons were 29 pixels square and the Key pill was 33, against the 32 every other control in
+  the app shares. Measured across all twelve pages at desktop and phone width, every input, select and button is
+  now that height. The only things at another are the text links in History, which are links drawn as buttons and
+  belong inline.
+
 ## 0.92.0 - 2026-10-06
 
 ### Changed
@@ -34,6 +64,23 @@ copy on GitHub to say what an update brings.
   now kept, filled in from the Plex users this app knows, and the first comment, which Seerr always makes the
   reporter's, is signed by the reporter.
 - A film reported in Seerr read as "Special, episode 0", from the season and episode Seerr sends for a film.
+
+## 0.91.0 - 2026-10-06
+
+### Fixed
+- Turning off Run rules no longer turns off the ban list. Bans are enforced by the same sweep that runs the
+  rules, and the switch returned before that sweep had even assembled them, so quietening one noisy rule
+  silently stopped every ban on the server with nothing anywhere saying so. Run rules now governs the rules
+  somebody wrote. The ban list and the blocked countries are explicit acts against a named device, address or
+  place, each already has its own record only switch, and they keep working either way.
+
+### Added
+- Four tables that grew forever are pruned: the record of each stream, the buffering during it, the audit log
+  and the enforcement log. Bandwidth samples and task runs already had this, so the pattern existed and these
+  were simply never given it.
+- Two settings under Syncing say how long each is kept, three years by default, 0 to keep everything. It is a
+  setting rather than a number in the code because a report can be asked for any window up to ten years, and
+  throwing away old streams should be something you chose rather than something you found out.
 
 ## 0.90.0 - 2026-10-06
 

@@ -560,6 +560,11 @@ export type DeviceDetail = Profile & {
   first_seen: number | null;
   last_seen: number | null;
   is_new_unreviewed: boolean;
+  /* True only when every account on this device is trusted, since trust is
+     per account and a shared device trusted for one person is not the same
+     thing as a trusted device. */
+  trusted: boolean;
+  trusted_by: string | null;
   owners: {
     user_id: number;
     name: string;
@@ -571,6 +576,7 @@ export type DeviceDetail = Profile & {
     places: { city: string | null; region: string | null; country: string | null; is_hosting: boolean; plays: number }[];
     last_watched: { title: string | null; started: number | null } | null;
     deleted_in_tautulli: boolean;
+    trusted: boolean;
   }[];
 };
 

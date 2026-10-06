@@ -715,13 +715,19 @@ async def run_once() -> dict[str, Any]:
     if error:
         log.warning("enforcer could not read activity: %s", error)
         return {"checked": 0, "matched": 0, "acted": 0, "error": error}
-    if not settings.enforce_enabled:
-        return {"checked": len(sessions), "matched": 0, "acted": 0}
-
-    with session_scope() as db:
-        rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True)).order_by(Rule.id)).scalars())
-        for rule in rules:
-            db.expunge(rule)
+    # Run rules governs the rules somebody wrote. It does not govern the ban
+    # list or the blocked countries, which are not rules: each is an explicit
+    # act against a named device, address or place, with its own record only
+    # switch beside it. Turning off a noisy rule used to turn off every ban on
+    # the server, silently, because the sweep that enforces them is the same
+    # sweep.
+    if settings.enforce_enabled:
+        with session_scope() as db:
+            rules = list(db.execute(select(Rule).where(Rule.enabled.is_(True)).order_by(Rule.id)).scalars())
+            for rule in rules:
+                db.expunge(rule)
+    else:
+        rules = []
     # A ban wins over anything else that would match, then the country list,
     # then saved rules: a place can stop a stream, but a banned device or
     # address is the stronger statement.

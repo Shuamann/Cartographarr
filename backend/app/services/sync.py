@@ -691,13 +691,13 @@ async def run_sync(client: TautulliClient, settings: Settings, full: bool = Fals
     flags = travel.find_flags(settings)
 
     # A stall that looked like a one-off can become a pattern later.
-    from app.services import stalls, streams
+    from app.services import housekeeping, stalls
 
     try:
         stalls.reclassify()
-        streams.prune()
+        housekeeping.prune()
     except Exception:  # noqa: BLE001 - housekeeping must not fail the sync
-        log.exception("stall and sample housekeeping failed")
+        log.exception("stall and pruning housekeeping failed")
 
     result = {
         "history": history,

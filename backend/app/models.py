@@ -83,6 +83,21 @@ class Device(Base):
     last_seen: Mapped[int | None] = mapped_column(Integer)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
     is_new_unreviewed: Mapped[bool] = mapped_column(Boolean, default=True)
+    trusted_at: Mapped[datetime | None] = mapped_column()
+    """When somebody said this device belongs to this account.
+
+    Set means trusted; the time is kept because a flag with no date cannot
+    answer how long ago somebody decided, and the question of whether trust
+    should go stale is open rather than settled.
+
+    It quiets one thing and nothing else: a pair of plays is not raised as one
+    account in two places when the device at each end is a trusted device of
+    that account. Both ends, never one. A device somebody recognises playing
+    alongside one they do not is exactly what sharing looks like, so trusting
+    half a pair has to leave the signal standing."""
+
+    trusted_by: Mapped[str | None] = mapped_column(String(255))
+    """Who said so. A decision that quiets a signal is worth attributing."""
 
 
 class IpLocation(Base):
