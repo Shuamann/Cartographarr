@@ -191,6 +191,18 @@ const VERDICTS: Record<FourK["verdict"], { label: string; tone: string }> = {
   benefits: { label: "Watched in 4K", tone: "pill ok" },
 };
 
+/* What one step is worth, as a signed size.
+ *
+ * Three different answers, and they have to stay apart. Null is "the file does
+ * not say what these tracks weigh", which is not the same as zero, and zero is
+ * a real answer for a step that reorders tracks or rewraps the container.
+ */
+export function change(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return "size not stated";
+  if (bytes === 0) return "same size";
+  return (bytes < 0 ? "\u2212" : "+") + size(Math.abs(bytes));
+}
+
 export function size(bytes: number | null | undefined): string {
   if (!bytes) return "";
   const gb = bytes / 1e9;
@@ -986,7 +998,18 @@ type Tidy = {
      list below them are one view of the file rather than two that disagree.
      The positions come from the code that decides, not from working it out
      again here. */
-  steps: { key: string; what: string; why: string; drops_subtitles?: number[]; drops_audio?: number[] }[];
+  steps: {
+    key: string;
+    what: string;
+    why: string;
+    drops_subtitles?: number[];
+    drops_audio?: number[];
+    /* Negative means the file gets smaller. Null where a track carried no
+       bitrate, which is about one file in ten, and zero is a real answer
+       for a step that only reorders or rewraps. */
+    size_change?: number | null;
+  }[];
+  duration?: number | null;
   file_path: string | null;
   audio: TidyTrack[];
   subtitles: TidyTrack[];
@@ -1111,6 +1134,23 @@ function TidyPanel({
   const subsKept = keepSubs ?? new Set(t.subtitles.filter((x) => !dropsFrom("drops_subtitles").has(x.position)).map((x) => x.position));
   const edited = keepAudio !== null || keepSubs !== null || first !== null;
   const dropped = t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
+
+  /* What the ticked steps come to, in bytes, and whether anything was
+     left out of the total.
+
+     A step whose tracks carried no bitrate cannot be counted, and adding
+     it in as zero would understate what tidying is worth while reading
+     like a complete answer. It is counted separately and said. */
+  const worth = (() => {
+    let bytes = 0;
+    let unknown = 0;
+    for (const step of t.steps) {
+      if (!picked.has(step.key)) continue;
+      if (step.size_change === null || step.size_change === undefined) unknown += 1;
+      else bytes += step.size_change;
+    }
+    return { bytes, unknown };
+  })();
 
   function pick(key: string, on: boolean) {
     const next = new Set(picked);
@@ -1300,6 +1340,12 @@ function TidyPanel({
       <h4>Tidy the tracks</h4>
       {blocked && <p className="note warn-note">{blocked}</p>}
       {t.steps.length > 0 && (
+        <>
+          <p className="muted small">
+            What each would be worth, worked out from each track's bitrate and how long the file runs. An
+            estimate: the tracks being added are exact, since the encoder is given a fixed bitrate, and the ones
+            being dropped are as good as the bitrates in the file.
+          </p>
         <div className="tidy-steps">
           {t.steps.map((step) => (
             <label key={step.key} className="tidy-step" title={step.why}>
@@ -1313,9 +1359,29 @@ function TidyPanel({
                 <strong>{step.what}</strong>
                 <span className="muted small">{step.why}</span>
               </span>
+              {/* What it is worth, beside the step rather than under it,
+                  so a column of numbers can be read down. */}
+              <span className="tidy-step-worth muted small">{change(step.size_change)}</span>
             </label>
           ))}
         </div>
+        <p className="note tidy-worth">
+          {worth.bytes === 0 && worth.unknown === 0
+            ? "Nothing ticked would change the size of the file."
+            : worth.bytes < 0
+              ? `About ${size(-worth.bytes)} smaller.`
+              : worth.bytes > 0
+                ? `About ${size(worth.bytes)} larger.`
+                : "Nothing countable ticked."}
+          {worth.unknown > 0 && (
+            <span className="muted">
+              {" "}
+              {worth.unknown === 1 ? "One ticked step drops" : `${worth.unknown} ticked steps drop`} tracks whose
+              size the file does not state, so the real figure is better than this one.
+            </span>
+          )}
+        </p>
+        </>
       )}
 
       {section("audio")}

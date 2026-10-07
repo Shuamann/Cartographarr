@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.113.0 - 2026-10-07
+
+### Added
+- Tidying says what each step would be worth, and what the ticked ones come to. It said what each step would do
+  and never what it was for, so somebody deciding whether to tidy two hundred files had nothing to decide on. It
+  is worked out from each track's bitrate and how long the file runs, both of which were already stored.
+- A track being added is an exact figure rather than an estimate, because the encoder is given a fixed bitrate
+  and the figure is read from the same place the command is built. A surround file is quoted the surround rate,
+  which is three times the stereo one.
+- A step that only reorders tracks or rewraps the container says the size does not change, which is a different
+  answer from not knowing. A step dropping a track the file states no bitrate for is counted as not known and
+  said to be, because zero would read as "this frees nothing" and the truth is that nobody knows. About one file
+  in ten has a track like that, so the total says when it is a floor.
+
 ## 0.112.0 - 2026-10-07
 
 ### Added

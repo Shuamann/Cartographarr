@@ -5900,3 +5900,15 @@ label.locked .pill {
 .server-work-job {
   min-width: 0;
 }
+
+/* What one tidy step is worth, in a column of its own so the numbers can be
+   read down rather than hunted for at the end of each line. */
+.tidy-step-worth {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tidy-worth {
+  margin-top: var(--space-2);
+}
