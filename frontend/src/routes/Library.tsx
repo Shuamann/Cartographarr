@@ -3519,7 +3519,14 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
     if (!shown) return;
     setError(null);
     try {
-      const preview = await api.post<{ queued: number; skipped: number; not_done: { why: string }[] }>(
+      const preview = await api.post<{
+        queued: number;
+        skipped: number;
+        not_done: { why: string }[];
+        /* Negative is smaller, the same sign one file uses. */
+        size_change: number;
+        size_unknown: number;
+      }>(
         "/library/tidy/many",
         { kind: lens, days, limit: shown, dry_run: true },
       );
@@ -3536,6 +3543,19 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
                 Each one is read and written once, with the steps worked out from that file rather than the same
                 thing done to all of them. The picture is never re-encoded, and the original is replaced only
                 after the result is checked.
+              </p>
+              <p>
+                {/* The number that makes this a decision rather than a count.
+                    Dropping spare dubs across a list frees real room, and
+                    adding a playable track across one costs it, and until now
+                    the question said neither. */}
+                {preview.size_change < 0
+                  ? `Together they would free about ${size(-preview.size_change)}.`
+                  : preview.size_change > 0
+                    ? `Together they would take about ${size(preview.size_change)} more.`
+                    : "Together they would not change how much room is used."}
+                {preview.size_unknown > 0 &&
+                  ` ${preview.size_unknown} of them drop tracks the file states no size for, so the real figure is better than that.`}
               </p>
               <p>
                 They run one at a time and the Remediation queue shows which. Any of them can be stopped before it

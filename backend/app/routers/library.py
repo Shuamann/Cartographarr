@@ -652,24 +652,46 @@ async def tidy_many(
     )
     rows = found.get("items", [])
 
-    def plan_for(rating_key: int) -> list[str]:
+    def plan_for(rating_key: int) -> tuple[list[str], int | None]:
+        """The steps for one file, and what they would come to in bytes.
+
+        None for the size where any step could not say, which is about one
+        file in ten: a total missing a term is not a total, and the answer the
+        list gives has to say when it is a floor rather than quietly
+        understating itself.
+        """
         with session_scope() as db:
             item = db.get(MediaItem, rating_key)
             if item is None:
-                return []
-            return [step["key"] for step in mediafix.plan(item)["steps"]]
+                return [], 0
+            steps = mediafix.plan(item)["steps"]
+            changes = [step.get("size_change") for step in steps]
+            total = None if any(c is None for c in changes) else sum(c or 0 for c in changes)
+            return [step["key"] for step in steps], total
 
     queued, skipped = [], []
+    # Negative is smaller, the same sign one file uses, so the two agree.
+    total_bytes = 0
+    unknown = 0
     for row in rows:
         key = row.get("rating_key")
         if key is None:
             continue
-        steps = await asyncio.to_thread(plan_for, key)
+        steps, size_change = await asyncio.to_thread(plan_for, key)
         if not steps:
             skipped.append({"rating_key": key, "title": row.get("title"), "why": "nothing to do to it"})
             continue
+        # Counted here, past the files with nothing to do to them: what a
+        # file nobody is going to touch would have come to is not part of
+        # the answer.
+        if size_change is None:
+            unknown += 1
+        else:
+            total_bytes += size_change
         if dry_run:
-            queued.append({"rating_key": key, "title": row.get("title"), "steps": steps})
+            queued.append({
+                "rating_key": key, "title": row.get("title"), "steps": steps, "size_change": size_change,
+            })
             continue
         try:
             job = await asyncio.to_thread(mediafix.queue, key, steps, admin.username, None)
@@ -691,6 +713,11 @@ async def tidy_many(
         "files": queued[:200],
         "not_done": skipped[:50],
         "dry_run": dry_run,
+        # What the whole lot would come to. Counted over the files that would
+        # actually be queued, since one with nothing to do to it changes
+        # nothing either way.
+        "size_change": total_bytes,
+        "size_unknown": unknown,
     }
 
 

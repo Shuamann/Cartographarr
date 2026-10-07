@@ -136,3 +136,67 @@ def test_a_file_of_unknown_length_can_say_nothing_about_size(client):
 
 def test_the_plan_carries_how_long_the_file_runs(client):
     assert mediafix.plan(item(audio=[track(bitrate=192)]))["duration"] == HOUR
+
+
+def test_a_whole_list_totals_what_it_would_come_to(client, monkeypatch):
+    """A dry run that says "two hundred files" answers how many and not
+    whether it is worth it."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import cleanup
+    from tests.test_auth import claim
+
+    claim(client)
+    with session_scope() as db:
+        for key, bitrate in ((1, 1500), (2, 900)):
+            db.add(MediaItem(
+                rating_key=key, media_type="movie", title=f"Film {key}", full_title=f"Film {key}",
+                file_path=f"/movies/{key}.mkv", file_container="mkv", duration=HOUR, section_id=1,
+                audio_tracks=json.dumps([
+                    {"codec": "ac3", "language": "eng", "bitrate": 640, "channels": 6},
+                    {"codec": "dca", "language": "jpn", "bitrate": bitrate, "channels": 6},
+                ]),
+                subtitle_tracks=json.dumps([]),
+            ))
+
+    monkeypatch.setattr(cleanup, "attention", lambda *a, **k: {
+        "items": [{"rating_key": 1, "title": "Film 1"}, {"rating_key": 2, "title": "Film 2"}]
+    })
+    monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
+        preferred_audio_language="", keep_subtitle_languages="", keep_audio_languages="eng",
+    ))
+
+    out = client.post("/api/library/tidy/many", json={"kind": "messy", "dry_run": True}).json()
+    assert out["queued"] == 2
+    assert out["size_unknown"] == 0
+    # Both dubs dropped, 1500 and 900 kbps over an hour, less the AAC stereo
+    # track each one is offered because neither has one, at 192 kbps. Adds and
+    # drops net off against each other, which is the point of one sign: the
+    # answer is what the disk ends up with, not what was taken away.
+    assert out["size_change"] == -int((1500 + 900 - 192 * 2) * 1000 / 8 * 3600)
+
+
+def test_a_file_whose_tracks_state_no_size_is_counted_apart(client, monkeypatch):
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import cleanup
+    from tests.test_auth import claim
+
+    claim(client)
+    with session_scope() as db:
+        db.add(MediaItem(
+            rating_key=1, media_type="movie", title="Film", full_title="Film",
+            file_path="/movies/1.mkv", file_container="mkv", duration=HOUR, section_id=1,
+            audio_tracks=json.dumps([
+                {"codec": "ac3", "language": "eng", "bitrate": 640, "channels": 6},
+                {"codec": "dca", "language": "jpn", "bitrate": None, "channels": 6},
+            ]),
+            subtitle_tracks=json.dumps([]),
+        ))
+    monkeypatch.setattr(cleanup, "attention", lambda *a, **k: {"items": [{"rating_key": 1, "title": "Film"}]})
+    monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
+        preferred_audio_language="", keep_subtitle_languages="", keep_audio_languages="eng",
+    ))
+    out = client.post("/api/library/tidy/many", json={"kind": "messy", "dry_run": True}).json()
+    assert out["size_unknown"] == 1
+    assert out["size_change"] == 0

@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.113.1 - 2026-10-07
+
+### Added
+- Tidying a whole list says what the whole lot would come to before it asks. A question that says "tidy 200
+  files?" answers how many and not whether it is worth doing. Adds and drops net off against each other, so the
+  figure is what the disk ends up with rather than what was taken away, and files whose tracks state no size are
+  counted apart so the figure is never quietly understated.
+
 ## 0.113.0 - 2026-10-07
 
 ### Added
