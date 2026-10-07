@@ -380,6 +380,10 @@ type SpaceReport = {
     files: number;
     size: number;
     change_week: number | null;
+    /* How long that figure actually covers. A new install has days rather
+       than a week of them, and three days must not be shown as a week. */
+    week_days: number | null;
+    week_since: string | null;
     files_week: number | null;
     change_month: number | null;
   }[];
@@ -393,14 +397,22 @@ type SpaceReport = {
  * Null is not zero. "Nothing has changed" and "nobody wrote down what it was"
  * are different answers, and a library that reads as unchanged when the truth
  * is that there is no history yet is the kind of wrong that gets believed. */
-function moved(bytes: number | null): { text: string; tone: string } {
+function moved(bytes: number | null, days: number | null): { text: string; tone: string } {
   if (bytes === null) return { text: "no history yet", tone: "muted small" };
   // Under a gigabyte either way is a file being replaced, not the library
   // growing, and saying "up 0.2 GB" every week is noise.
-  if (Math.abs(bytes) < 1e9) return { text: "about the same", tone: "muted small" };
+  if (Math.abs(bytes) < 1e9) return { text: over("about the same", days), tone: "muted small" };
   return bytes > 0
-    ? { text: `up ${size(bytes)}`, tone: "muted small space-up" }
-    : { text: `down ${size(-bytes)}`, tone: "muted small space-down" };
+    ? { text: over(`up ${size(bytes)}`, days), tone: "muted small space-up" }
+    : { text: over(`down ${size(-bytes)}`, days), tone: "muted small space-down" };
+}
+
+/* A figure measured over three days is not a week's, and labelling it one
+   would be the page quietly overstating what it knows. Said only while it is
+   short, so an established install reads as it always has. */
+function over(text: string, days: number | null): string {
+  if (days === null || days >= 7) return text;
+  return `${text} in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
 /* What the libraries take and what is left on the disks.
@@ -425,7 +437,7 @@ function Space() {
       </p>
       <div className="mini-list">
         {s.libraries.map((l) => {
-          const week = moved(l.change_week);
+          const week = moved(l.change_week, l.week_days);
           return (
             <div key={l.section_id} className="mini">
               <div className="min0">
@@ -2339,6 +2351,9 @@ type Store = {
   // mounted into this container.
   path: string | null;
   free: number | null;
+  /* True where the capacity was written down rather than read off the disk,
+     and the space in use counted from the files this app knows about. */
+    stated?: boolean;
   total: number | null;
   used: number | null;
   shared_with: string[];
@@ -2511,10 +2526,15 @@ function StorageSection({ days }: { days: number }) {
  * same four terabytes on three rows and invite somebody to add them up. */
 function Disks({ stores, warnAt = 10, criticalAt = 3 }: { stores: Store[]; warnAt?: number; criticalAt?: number }) {
   // One card per disk, whichever stores point at it.
-  const byPath = new Map<string, { path: string; free: number; total: number; used: number; on: string[] }>();
+  const byPath = new Map<
+    string,
+    { path: string; free: number; total: number; used: number; on: string[]; stated?: boolean }
+  >();
   for (const s of stores) {
     if (!s.path || s.total === null || s.free === null || s.used === null) continue;
-    const row = byPath.get(s.path) ?? { path: s.path, free: s.free, total: s.total, used: s.used, on: [] };
+    const row = byPath.get(s.path) ?? {
+      path: s.path, free: s.free, total: s.total, used: s.used, on: [], stated: s.stated,
+    };
     row.on.push(s.store);
     byPath.set(s.path, row);
   }
@@ -2554,6 +2574,7 @@ function Disks({ stores, warnAt = 10, criticalAt = 3 }: { stores: Store[]; warnA
               </span>
               <p className="muted small">
                 {size(d.used)} of {size(d.total)} used ({full.toFixed(0)}%)
+                {d.stated ? " · size as written down, used counted from the files here" : ""}
                 {d.on.length > 1 ? ` · shared by ${d.on.join(", ")}` : ` · ${d.on[0]}`}
               </p>
             </div>

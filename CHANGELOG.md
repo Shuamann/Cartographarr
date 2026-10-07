@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.108.0 - 2026-10-07
+
+### Fixed
+- Every library read "no history yet this week" while the line underneath said four days were written down, which
+  is a page disagreeing with itself. It was also withholding a real answer: one library had gained 1.4 TB and 183
+  files over those days. It uses the oldest record it has and says how long the figure covers, so three days is
+  never shown as a week's.
+
+### Added
+- A disk's real size can be written down where the share will not say. A user share that answers for the whole
+  array reports a total nothing can correct from the outside: a 20 TB NAS read as 61 TB free, and the host agreed,
+  because the share told it so. Stating the capacity replaces the total, and what is in use is then counted from
+  the files this app can see there.
+- The Storage page says which kind of answer it is looking at, since a figure worked out from what is known is not
+  a figure read off the disk, and presenting it as one would be the app being confidently wrong about an array.
+
 ## 0.107.2 - 2026-10-07
 
 ### Changed

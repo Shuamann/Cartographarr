@@ -375,6 +375,17 @@ class Settings(BaseSettings):
     """The hour to send it, in the server's own time. Settings shows what the
     server thinks the time is, in case TZ is not what you meant."""
 
+    disk_sizes: str = ""
+    """How big a disk really is, where it will not say, one per line.
+
+        /mnt/user/media2 = 20 TB
+
+    A share that answers for the whole array rather than for itself reports a
+    total nothing can correct from the outside: a twenty terabyte NAS read as
+    sixty one terabytes free, and the host agreed, because the share told it
+    so. Stating the capacity replaces the total, and what is in use is then
+    taken from the files this app can see there rather than from the disk."""
+
     disk_warn_percent: int = 10
     """Free space, as a percentage, below which a disk is worth a word. 0 is off.
 

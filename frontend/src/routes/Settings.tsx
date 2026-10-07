@@ -173,6 +173,11 @@ const AREAS: Area[] = [
         keys: ["keep_streams_days", "keep_logs_days"],
       },
       {
+        title: "How big a disk really is",
+        note: "Only needed where a share will not say. A user share that answers for the whole array reports a total nothing can correct from the outside: a 20 TB NAS read as 61 TB free, and the host agreed, because the share told it so. One per line, like /mnt/user/media2 = 20 TB. Stating it replaces the total, and what is in use is then counted from the files this app can see there rather than read off the disk, which the Storage page says.",
+        keys: ["disk_sizes"],
+      },
+      {
         title: "When a disk is getting full",
         note: "A media server fills up. It gives plenty of warning and nothing was watching for it. One message when a disk crosses the line, one when it has room again, and nothing in between: a warning sent every hour is a warning nobody reads. Needs notifications set up. 0 turns it off.",
         keys: ["disk_warn_percent", "disk_critical_percent"],
@@ -431,6 +436,7 @@ const LABELS: Record<string, string> = {
   digest_weekday: "On",
   digest_hour: "At",
   watch_alerts: "Tell me about new devices and signals",
+  disk_sizes: "Disk sizes",
   disk_warn_percent: "Warn when free space is under",
   disk_critical_percent: "And say so more loudly under",
   keep_streams_days: "Keep stream records for",
@@ -501,6 +507,7 @@ const SHAPES: Record<string, FieldShape> = {
   impossible_min_km: { unit: "km", min: 0, max: 5000, step: 10 },
   impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
   session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
+  disk_sizes: { kind: "lines" },
   disk_warn_percent: { unit: "percent", min: 0, max: 90, step: 1 },
   disk_critical_percent: { unit: "percent", min: 0, max: 90, step: 1 },
   keep_streams_days: { unit: "days", min: 0, max: 3650, step: 1 },

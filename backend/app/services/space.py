@@ -65,24 +65,76 @@ def _used(db: Session) -> list[dict[str, Any]]:
     ]
 
 
-def _was(db: Session, days: int) -> dict[int, tuple[int, int]]:
-    """What each library held on the most recent day at least `days` ago.
+def _was(db: Session, days: int | None) -> dict[int, tuple[int, int, str]]:
+    """What each library held, and on which day.
 
-    The nearest earlier day rather than that day exactly, because the scan
-    only writes on days the app was running, and a week off is better than no
-    answer at all.
+    With `days`, the most recent day at least that long ago: the nearest
+    earlier day rather than that day exactly, because the scan only writes on
+    days the app was running, and a week off is better than no answer at all.
+
+    With None, the oldest day there is. That is the fallback for a new install
+    where nothing is a week old yet, and it is why the day comes back with the
+    figures: a change measured over three days must not be presented as a
+    week's.
     """
     from app.models import LibrarySize
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
-    out: dict[int, tuple[int, int]] = {}
-    rows = db.execute(
-        select(LibrarySize.section_id, LibrarySize.on_day, LibrarySize.files, LibrarySize.bytes)
-        .where(LibrarySize.on_day <= cutoff)
-        .order_by(LibrarySize.section_id, LibrarySize.on_day.desc())
-    ).all()
-    for r in rows:
-        out.setdefault(r.section_id, (r.files, int(r.bytes or 0)))
+
+    stmt = select(LibrarySize.section_id, LibrarySize.on_day, LibrarySize.files, LibrarySize.bytes)
+    if days is not None:
+        stmt = stmt.where(LibrarySize.on_day <= (date.today() - timedelta(days=days)).isoformat())
+    order = LibrarySize.on_day.desc() if days is not None else LibrarySize.on_day.asc()
+    out: dict[int, tuple[int, int, str]] = {}
+    for r in db.execute(stmt.order_by(LibrarySize.section_id, order)).all():
+        out.setdefault(r.section_id, (r.files, int(r.bytes or 0), r.on_day))
     return out
+
+
+UNITS = {"": 1, "k": 1e3, "kb": 1e3, "m": 1e6, "mb": 1e6, "g": 1e9, "gb": 1e9,
+         "t": 1e12, "tb": 1e12, "p": 1e15, "pb": 1e15}
+
+
+def stated_sizes(setting: str) -> dict[str, int]:
+    """Capacities somebody has written down, by path.
+
+    One per line, `path = size`, with the size in whatever unit reads
+    naturally. Anything unparseable is ignored rather than guessed at: a typo
+    should cost the override, not the page.
+    """
+    import re
+
+    out: dict[str, int] = {}
+    for line in (setting or "").splitlines():
+        if "=" not in line:
+            continue
+        where, _, amount = line.partition("=")
+        where, amount = where.strip().rstrip("/"), amount.strip().lower().replace(" ", "")
+        found = re.fullmatch(r"([\d.]+)([a-z]*)", amount)
+        if not where or not found or found.group(2) not in UNITS:
+            continue
+        try:
+            out[where] = int(float(found.group(1)) * UNITS[found.group(2)])
+        except ValueError:
+            continue
+    return out
+
+
+def _stated_mount(path: str, stated: dict[str, int]) -> str | None:
+    """Which written down mount this path sits under, itself included."""
+    where = path.rstrip("/")
+    while where:
+        if where in stated:
+            return where
+        parent = where.rsplit("/", 1)[0]
+        if parent == where:
+            break
+        where = parent
+    return None
+
+
+def _stated_for(path: str, stated: dict[str, int]) -> int | None:
+    """The capacity written down for this mount, or for a parent of it."""
+    where = _stated_mount(path, stated)
+    return stated[where] if where else None
 
 
 def disks(groups: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
@@ -129,17 +181,68 @@ def disks(groups: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
             row["path"] = folder
         row["labels"].append(label)
 
+    from app.settings_store import current
+
+    stated = stated_sizes(current().disk_sizes)
+    here = _what_is_here(stated) if stated else {}
+
     out: dict[str, dict[str, Any]] = {}
     for row in by_device.values():
         row["labels"].sort(key=str.lower)
+        # A share that answers for the whole array reports a total nothing can
+        # correct from the outside, so it can be told. What is in use then
+        # comes from the files this app can see there, which is a different
+        # kind of answer and is said to be one.
+        mount = _stated_mount(row["path"], stated) if stated else None
+        size = stated.get(mount) if mount else None
+        if size:
+            # Looked up by the mount it was counted under, not by whichever
+            # folder a sample file happened to sit in.
+            used = here.get(mount, 0)
+            row["total"], row["used"], row["free"] = size, used, max(size - used, 0)
+            row["stated"] = True
         for label in row["labels"]:
             out[label] = {
                 "path": row["path"], "free": row["free"], "total": row["total"], "used": row["used"],
+                # True where the capacity was written down rather than read
+                # off the disk, and the space in use counted from the files
+                # this app knows about.
+                "stated": bool(row.get("stated")),
                 # Who else is on this disk, so its free space is read once.
                 "shared_with": [other for other in row["labels"] if other != label],
             }
     _mounts["key"], _mounts["at"], _mounts["value"] = key, now, out
     return out
+
+
+def _what_is_here(stated: dict[str, int]) -> dict[str, int]:
+    """How many bytes of media this app can see under each stated mount.
+
+    Only what it scanned. A share with something else on it reads as having
+    more room than it has, which is why the page says where the figure came
+    from rather than presenting it as the disk's own answer.
+    """
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import mediafix
+
+    totals: dict[str, int] = {}
+    with session_scope() as db:
+        rows = db.execute(
+            select(MediaItem.file_path, MediaItem.file_size).where(
+                MediaItem.file_path.is_not(None), MediaItem.file_size.is_not(None)
+            )
+        ).all()
+    for path, size in rows:
+        local = mediafix.local_path(path)
+        if not local:
+            continue
+        where = _stated_mount(local, stated)
+        if where:
+            totals[where] = totals.get(where, 0) + int(size or 0)
+    return totals
 
 
 def forget_mounts() -> None:
@@ -152,16 +255,31 @@ def report(db: Session) -> dict[str, Any]:
 
     used = _used(db)
     week, month = _was(db, 7), _was(db, 30)
+    # What to fall back on where nothing is old enough yet. Without this a new
+    # install says "no history yet" for its first week while sitting on four
+    # days of it, which is the page withholding a real answer.
+    earliest = _was(db, None)
+    today = date.today().isoformat()
     oldest = db.execute(select(func.min(LibrarySize.on_day))).scalar()
     days = db.execute(select(func.count(func.distinct(LibrarySize.on_day)))).scalar() or 0
 
     for row in used:
         for label, was in (("week", week), ("month", month)):
-            before = was.get(row["section_id"])
+            before = was.get(row["section_id"]) or earliest.get(row["section_id"])
+            # Today against today says nothing, so it is nothing rather than a
+            # change of zero.
+            if before is not None and before[2] >= today:
+                before = None
             # None rather than zero: "no change" and "nothing written down
             # yet" are different answers and the page says so.
             row[f"change_{label}"] = None if before is None else row["size"] - before[1]
             row[f"files_{label}"] = None if before is None else row["files"] - before[0]
+            # How long the figure actually covers, so one measured over three
+            # days is never shown as a week's.
+            row[f"{label}_since"] = None if before is None else before[2]
+            row[f"{label}_days"] = (
+                None if before is None else (date.today() - date.fromisoformat(before[2])).days
+            )
 
     return {
         "libraries": sorted(used, key=lambda r: -r["size"]),
