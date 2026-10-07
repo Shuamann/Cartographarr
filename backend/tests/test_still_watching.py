@@ -94,3 +94,65 @@ def test_it_says_how_many_it_left_out(client, monkeypatch):
     seed(last_play_days_ago=3)
     answer = client.get("/api/library/attention?kind=room&days=365").json()
     assert answer["watching"] == 1 and answer["watching_days"] == 60
+
+
+# ---- and the other reason a file has not been watched -------------------------
+
+
+def test_something_added_last_week_is_not_a_file_nobody_wants(client, monkeypatch):
+    """It has not been ignored. It has been added. On this library 1,102 of
+    the big never played files arrived in the last month, and offering them up
+    for the room is arguing with whoever put them there a fortnight ago."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import cleanup, library_scan
+
+    claim(client)
+    monkeypatch.setattr(library_scan, "in_library", lambda: True)
+    now = int(time.time())
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, media_type="movie", title="Just arrived", full_title="Just arrived",
+                         file_size=9_000_000_000, file_path="/films/new.mkv", section_id=1,
+                         added_at=now - 3 * DAY))
+        db.add(MediaItem(rating_key=2, media_type="movie", title="Been here ages", full_title="Been here ages",
+                         file_size=9_000_000_000, file_path="/films/old.mkv", section_id=1,
+                         added_at=now - 400 * DAY))
+    found = cleanup.candidates(days=365)
+    assert found["settling"] == 1
+    assert [row["rating_key"] for row in found["items"]] == [2]
+
+
+def test_a_file_with_no_added_date_is_judged_as_before(client, monkeypatch):
+    """Anything scanned before the date was being stored has none, and
+    treating a missing date as new would empty the list."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import cleanup, library_scan
+
+    claim(client)
+    monkeypatch.setattr(library_scan, "in_library", lambda: True)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, media_type="movie", title="No date", full_title="No date",
+                         file_size=9_000_000_000, file_path="/films/x.mkv", section_id=1, added_at=None))
+    found = cleanup.candidates(days=365)
+    assert found["settling"] == 0 and [r["rating_key"] for r in found["items"]] == [1]
+
+
+def test_an_old_file_nobody_played_in_years_is_not_spared_by_the_settling_rule(client, monkeypatch):
+    """The grace period is about never having been played, not about a file
+    somebody watched once in 2021."""
+    from app.db import session_scope
+    from app.models import History, MediaItem
+    from app.services import cleanup, library_scan
+
+    claim(client)
+    monkeypatch.setattr(library_scan, "in_library", lambda: True)
+    now = int(time.time())
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, media_type="movie", title="Watched long ago", full_title="Watched long ago",
+                         file_size=9_000_000_000, file_path="/films/x.mkv", section_id=1, added_at=now - 3 * DAY))
+        db.add(History(row_id=1, user_id=1, rating_key=1, started=now - 1500 * DAY,
+                       stopped=now - 1500 * DAY + 600, full_title="Watched long ago", media_type="movie"))
+    found = cleanup.candidates(days=365)
+    assert found["settling"] == 0
+    assert [r["reason"] for r in found["items"]] == ["not_played_in_years"]

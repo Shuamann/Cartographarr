@@ -38,6 +38,15 @@ def _kept() -> dict[int, str | None]:
         return {row.rating_key: row.reason for row in db.execute(select(KeepDecision)).scalars()}
 
 
+SETTLING_DAYS = 30
+"""How long something new gets before nobody having watched it means anything.
+
+A file added last week that nobody has played has not been ignored. It has
+been added. On this library 1,102 of the big never played files arrived in the
+last month, and offering them up for the room is arguing with whoever put them
+there a fortnight ago.
+"""
+
 WATCHING_DAYS = 60
 """How recently a show has to have been watched to count as being worked
 through.
@@ -122,7 +131,7 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             scaled[key] = (seen + int(count or 0), down + (0 if is_4k else int(count or 0)))
 
         out = []
-        spared = 0
+        spared = settling = 0
         for item in items:
             if item.rating_key in kept:
                 continue
@@ -138,6 +147,15 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             show = item.grandparent_rating_key
             if show is not None and int(show) in watching and reason[0] in ("never_played", "not_played_in_years"):
                 spared += 1
+                continue
+            # Added recently and not played is not the same fact as ignored.
+            # Nobody has had the chance yet.
+            if (
+                reason[0] == "never_played"
+                and item.added_at
+                and now - int(item.added_at) < SETTLING_DAYS * 86400
+            ):
+                settling += 1
                 continue
             out.append({
                 **describe_file(item),
@@ -161,6 +179,8 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
         "kept": len(kept),
         "watching": spared,
         "watching_days": WATCHING_DAYS,
+        "settling": settling,
+        "settling_days": SETTLING_DAYS,
         "days": days,
     }
 
@@ -270,6 +290,8 @@ def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> di
                 "found": found["found"],
                 "watching": found.get("watching", 0),
                 "watching_days": found.get("watching_days"),
+                "settling": found.get("settling", 0),
+                "settling_days": found.get("settling_days"),
             }
         else:
             found = library.problem_files(db, threshold_kbps, days, limit=wanted)

@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.107.1 - 2026-10-07
+
+### Fixed
+- The cleanup list no longer offers up something added last week. A file nobody has played that arrived three
+  days ago has not been ignored, it has been added, and suggesting its deletion is arguing with whoever put it
+  there. A month's grace, and the count is said rather than the list quietly shrinking.
+- A file with no recorded arrival date is judged as before, since everything scanned before that date was kept
+  has none and treating a missing date as new would empty the list.
+
 ## 0.107.0 - 2026-10-07
 
 ### Added
