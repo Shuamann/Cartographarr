@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.107.0 - 2026-10-07
+
+### Added
+- A word before a disk fills, rather than after. A media server fills up, it is the one thing that goes wrong on
+  every one of them eventually, it gives plenty of warning, and nothing was watching for it: the Storage page
+  said how much room was left and somebody had to go and look.
+- One message when a disk crosses the line, one when it has room again, and nothing in between, because a
+  warning sent every hour is a warning nobody reads. Two thresholds under Alerts and monitoring, 10% and 3% by
+  default, and 0 turns it off.
+- A mount this container cannot read is skipped rather than counted as a disk at zero, which would otherwise cry
+  wolf on every restart.
+
 ## 0.106.0 - 2026-10-07
 
 ### Added

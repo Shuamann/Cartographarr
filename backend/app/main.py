@@ -270,6 +270,26 @@ tasks.register(tasks.Task(
     "What Plex measured each person's devices using, a day at a time, going back as far as Plex kept it.",
     _plex_bandwidth, lambda: 24 * 3600,
 ))
+async def _room_check() -> dict | str:
+    """Is any disk getting full.
+
+    A media server fills up, it gives plenty of warning, and nothing was
+    watching for it. Hourly, because a disk does not fill in a minute and a
+    warning sent every minute is a warning nobody reads.
+    """
+    from app.services import room
+
+    found = await room.look()
+    if not found.get("watched"):
+        raise tasks.Skipped(found.get("reason") or "No disk this container can read")
+    return found if found.get("told") else f"{found['watched']} disks, all with room"
+
+
+tasks.register(tasks.Task(
+    "room_check", "Watch the disks",
+    "Warns once when a disk is getting full, and once when it has room again.",
+    _room_check, lambda: 3600,
+))
 tasks.register(tasks.Task(
     "history_check", "Check nothing is missing",
     "Counts what Tautulli recorded against what is here, day by day, and fetches any day that is short.",

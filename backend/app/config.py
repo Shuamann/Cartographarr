@@ -375,6 +375,17 @@ class Settings(BaseSettings):
     """The hour to send it, in the server's own time. Settings shows what the
     server thinks the time is, in case TZ is not what you meant."""
 
+    disk_warn_percent: int = 10
+    """Free space, as a percentage, below which a disk is worth a word. 0 is off.
+
+    A media server fills up. It is the one thing that goes wrong on every one
+    of them eventually, it gives plenty of warning, and nothing was watching
+    for it."""
+
+    disk_critical_percent: int = 3
+    """And below which it is worth a stronger word. Still one message: the
+    difference is what it says, not how often it says it."""
+
     task_alerts: bool = True
     """Send word through Apprise when a background job keeps failing.
 

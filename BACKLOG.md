@@ -414,17 +414,6 @@ so there is nothing to read; the minute samples this app takes are the only
 source and they do not include CPU. Worth a look only if that endpoint starts
 answering.
 
-### Intro and credit markers
-
-Measured: present on 14 of 16 episodes checked, with both an intro and a
-credits marker. Nothing uses them.
-
-The honest use is not skipping, which is the player's job. It is counting: a
-person who watched the last ninety seconds of an episode watched the credits,
-and a season "finished" at 94% may be a season finished. Several figures in
-this app treat percent complete as a proxy for watched, and markers would turn
-that proxy into a fact.
-
 ### Collections, as a thing you can act on
 
 624 of them on this server, now readable as a report grouping. The step beyond
@@ -470,6 +459,24 @@ Dashboard's lower half, Endpoints, Reports, Rules and Settings.
 
 Recorded so that nobody has the idea again and spends a night proving the same
 thing. Both of these sound good; the data does not support either.
+
+### Intro and credit markers, to make "finished" exact
+
+Several figures here treat percent complete as a proxy for watched, with
+eighty five per cent as the line. Plex knows exactly where the credits start,
+and asking for markers is nearly free: 200 milliseconds against 173 for fifty
+episodes in one request, which is the same request the tracks already come
+from.
+
+It would change nothing. Measured across 142 episodes with a credits marker:
+the credits start at a median of 93 per cent, the earliest anywhere was 88,
+and not one of them started before 85. The threshold is already below every
+marker on this library, so storing them would buy precision nobody could
+observe.
+
+Worth revisiting only for a library whose outros are much longer, where the
+measurement would come out differently. The number to check is how many
+episodes have credits beginning before the threshold; here it was zero.
 
 ### Abandoned plays as a quality signal
 
