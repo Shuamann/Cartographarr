@@ -1029,17 +1029,35 @@ code {
 }
 
 /* Choosing tracks on the file itself: two columns, one row per track. */
-.track-picks {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-  margin: 10px 0;
+/* Choosing which tracks a file keeps.
+ *
+ * Audio and subtitles are full width and stacked, not two columns side by
+ * side. They are never the same length: one audio track against ninety
+ * subtitles left one column empty and the other scrolling in a slot a third
+ * of the page wide, which is the shape the old one always had. */
+.track-group {
+  margin: var(--space-4) 0;
+}
+.track-group-head {
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+.track-group-head h4 {
+  margin: 0;
 }
 
-/* Fifty six subtitle tracks is a real file, not a silly one. The column
-   scrolls rather than pushing everything else off the page. */
-.track-picks .min0 {
-  max-height: 340px;
+/* The language is how the choice is actually made. Ninety tracks is fifteen
+   languages six times over, and nobody goes down ninety tick boxes, so each
+   language can be taken or dropped whole. */
+.track-languages {
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+/* Ninety subtitle tracks is a real file, not a silly one. The list scrolls
+   rather than pushing everything else off the page. */
+.track-list {
+  max-height: 320px;
   overflow-y: auto;
 }
 
@@ -1047,9 +1065,34 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 3px 0;
+  gap: var(--space-3);
+  padding: 2px 0;
   border-bottom: 1px solid var(--border);
+}
+/* A track on its way out still reads, but reads as going. */
+.track-row.dropping .track-lang,
+.track-row.dropping .track-facts,
+.track-row.dropping .track-title {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.track-row .check {
+  gap: var(--space-3);
+  flex: 1;
+}
+/* First and on its own, because it is what the eye is looking for. */
+.track-lang {
+  flex: 0 0 4ch;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.track-facts {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.track-title {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Tidying, opened from a file card. Each step is a line to tick with its

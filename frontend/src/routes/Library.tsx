@@ -964,28 +964,27 @@ type TidyTrack = {
   language: string | null;
   forced?: boolean;
   title?: string | null;
+  /* Since 0.90.0 the scan keeps all of this. Two rows reading "PGS eng" with
+     nothing between them is a choice nobody can make. */
+  layout?: string | null;
+  bitrate?: number | null;
+  sdh?: boolean;
+  dub?: boolean;
+  default?: boolean;
 };
 
 type Tidy = {
-  steps: { key: string; what: string; why: string }[];
+  /* Each step says which tracks it would drop, so the steps and the track
+     list below them are one view of the file rather than two that disagree.
+     The positions come from the code that decides, not from working it out
+     again here. */
+  steps: { key: string; what: string; why: string; drops_subtitles?: number[]; drops_audio?: number[] }[];
   file_path: string | null;
   audio: TidyTrack[];
   subtitles: TidyTrack[];
   local_path: string | null;
   tools: { ready: boolean };
 };
-
-function trackName(track: TidyTrack): string {
-  return [
-    (track.codec ?? "?").toUpperCase(),
-    track.channels ? `${track.channels} ch` : null,
-    track.language ?? "no language",
-    track.forced ? "forced" : null,
-    track.title,
-  ]
-    .filter(Boolean)
-    .join(" \u00b7 ");
-}
 
 type TidyJob = {
   id: number;
@@ -999,6 +998,68 @@ type TidyJob = {
   steps: string[];
   created_at?: string | null;
 };
+
+/* What a track is, in the order somebody reads it.
+ *
+ * The language first and on its own, because that is what the choice is made
+ * by: a list of ninety tracks is chosen through at the language level and
+ * nowhere else. Then what it is, then the handful of things that tell two
+ * tracks of the same language apart, which is the case that used to be
+ * impossible: two rows both reading "PGS eng" and no way to pick between them.
+ */
+function TrackRow({
+  track,
+  kept,
+  first,
+  onKeep,
+  onFirst,
+  disabled,
+}: {
+  track: TidyTrack;
+  kept: boolean;
+  first?: boolean | null;
+  onKeep: (on: boolean) => void;
+  onFirst?: () => void;
+  disabled: boolean;
+}) {
+  const facts = [
+    (track.codec ?? "?").toUpperCase(),
+    track.layout ?? (track.channels ? `${track.channels} ch` : null),
+    track.bitrate ? `${track.bitrate} kbps` : null,
+  ].filter(Boolean);
+  const flags = [
+    track.forced ? "forced" : null,
+    track.sdh ? "SDH" : null,
+    track.dub ? "for the dub" : null,
+    track.default ? "default" : null,
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className={kept ? "track-row" : "track-row dropping"}>
+      <label className="check min0">
+        <input type="checkbox" checked={kept} disabled={disabled} onChange={(e) => onKeep(e.target.checked)} />
+        <span className="track-lang">{(track.language ?? "??").toUpperCase()}</span>
+        <span className="muted small track-facts">{facts.join(" \u00b7 ")}</span>
+        {flags.map((flag) => (
+          <span key={flag} className="pill small">
+            {flag}
+          </span>
+        ))}
+        {track.title && <span className="muted small clip track-title">{track.title}</span>}
+      </label>
+      {onFirst && (
+        <button
+          className={first ? "btn trust on" : "btn trust"}
+          disabled={disabled || !kept}
+          title="Players take the first track unless somebody goes looking, which is how a film ends up playing its dub"
+          onClick={onFirst}
+        >
+          {first ? "plays first" : "play first"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function TidyPanel({
   ratingKey,
@@ -1021,8 +1082,25 @@ function TidyPanel({
   const [first, setFirst] = useState<number | null>(null);
 
   const picked = chosen ?? new Set(t.steps.map((s) => s.key));
-  const audioKept = keepAudio ?? new Set(t.audio.map((a) => a.position));
-  const subsKept = keepSubs ?? new Set(t.subtitles.map((x) => x.position));
+
+  /* What the ticked steps alone would drop.
+   *
+   * Shown in the track list so there is one view of the file. Until somebody
+   * touches a track the steps decide, which is also what the server does:
+   * a choice is only sent when one was made, and a choice made by hand
+   * outranks the steps for that kind.
+   */
+  function dropsFrom(which: "drops_audio" | "drops_subtitles") {
+    const gone = new Set<number>();
+    for (const step of t.steps) {
+      if (!picked.has(step.key)) continue;
+      for (const position of step[which] ?? []) gone.add(position);
+    }
+    return gone;
+  }
+
+  const audioKept = keepAudio ?? new Set(t.audio.filter((a) => !dropsFrom("drops_audio").has(a.position)).map((a) => a.position));
+  const subsKept = keepSubs ?? new Set(t.subtitles.filter((x) => !dropsFrom("drops_subtitles").has(x.position)).map((x) => x.position));
   const edited = keepAudio !== null || keepSubs !== null || first !== null;
   const dropped = t.audio.length - audioKept.size + (t.subtitles.length - subsKept.size);
 
@@ -1041,17 +1119,55 @@ function TidyPanel({
     (which === "audio" ? setKeepAudio : setKeepSubs)(next);
   }
 
+  /* The languages present, with how many tracks each has.
+   *
+   * The reason this exists: a film with ninety subtitle tracks is six in each
+   * of fifteen languages, and nobody goes down ninety checkboxes. The choice
+   * is made by language, so the control is by language, and the list
+   * underneath is there for the one case where two tracks of the same
+   * language are not the same thing.
+   */
+  function languagesIn(tracks: TidyTrack[]) {
+    const counted = new Map<string, number>();
+    for (const track of tracks) {
+      const key = (track.language ?? "??").toLowerCase();
+      counted.set(key, (counted.get(key) ?? 0) + 1);
+    }
+    return [...counted.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }
+
+  function setLanguage(which: "audio" | "subtitles", language: string, on: boolean) {
+    const tracks = which === "audio" ? t.audio : t.subtitles;
+    const from = which === "audio" ? audioKept : subsKept;
+    const next = new Set(from);
+    for (const track of tracks) {
+      if ((track.language ?? "??").toLowerCase() !== language) continue;
+      if (on) next.add(track.position);
+      else next.delete(track.position);
+    }
+    (which === "audio" ? setKeepAudio : setKeepSubs)(next);
+  }
+
   /* Asked, because the answer can be no: this rewrites the whole file, and
      dropping a track cannot be undone from here. */
   async function start() {
+    const goneAudio = t.audio.filter((a) => !audioKept.has(a.position));
+    const goneSubs = t.subtitles.filter((s) => !subsKept.has(s.position));
     if (
       !(await askConfirm({
-        title: `Tidy ${title}?`,
+        title: dropped > 0 ? `Tidy ${title}, dropping ${dropped} tracks?` : `Tidy ${title}?`,
         body: (
           <>
             {dropped > 0 ? (
-              <p className="warn-text">
-                {dropped} {dropped === 1 ? "track" : "tracks"} will be dropped.
+              <p>
+                Dropping{" "}
+                {[
+                  goneAudio.length ? `${goneAudio.length} audio` : null,
+                  goneSubs.length ? `${goneSubs.length} subtitle` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" and ")}{" "}
+                track{dropped === 1 ? "" : "s"}. They are not recoverable from here.
               </p>
             ) : null}
             <p>
@@ -1097,8 +1213,75 @@ function TidyPanel({
           </>
         )
       : null;
+  const off = Boolean(blocked);
 
-  const firstLanguage = (t.subtitles[0]?.language ?? "eng").toLowerCase();
+  function section(which: "audio" | "subtitles") {
+    const tracks = which === "audio" ? t.audio : t.subtitles;
+    if (tracks.length === 0) return null;
+    const keptHere = which === "audio" ? audioKept : subsKept;
+    const languages = languagesIn(tracks);
+    return (
+      <div className="track-group">
+        <div className="row-between track-group-head">
+          <h4>
+            {which === "audio" ? "Audio" : "Subtitles"}{" "}
+            <span className="muted small">
+              keeping {keptHere.size} of {tracks.length}
+            </span>
+          </h4>
+          <div className="segmented" role="group" aria-label={`Which ${which} to keep`}>
+            <button
+              className="seg"
+              disabled={off}
+              onClick={() => (which === "audio" ? setKeepAudio : setKeepSubs)(new Set(tracks.map((x) => x.position)))}
+            >
+              All
+            </button>
+            <button className="seg" disabled={off} onClick={() => (which === "audio" ? setKeepAudio : setKeepSubs)(new Set())}>
+              None
+            </button>
+          </div>
+        </div>
+        {languages.length > 1 && (
+          <div className="row wrap track-languages">
+            {languages.map(([language, count]) => {
+              const all = tracks
+                .filter((x) => (x.language ?? "??").toLowerCase() === language)
+                .every((x) => keptHere.has(x.position));
+              return (
+                <button
+                  key={language}
+                  className={all ? "chip on" : "chip"}
+                  disabled={off}
+                  title={all ? `Drop all ${count} ${language.toUpperCase()} tracks` : `Keep all ${count} ${language.toUpperCase()} tracks`}
+                  onClick={() => setLanguage(which, language, !all)}
+                >
+                  {language.toUpperCase()} {count}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="track-list">
+          {tracks.map((track) => (
+            <TrackRow
+              key={track.position}
+              track={track}
+              kept={keptHere.has(track.position)}
+              disabled={off}
+              onKeep={(on) => keep(which, track.position, on)}
+              {...(which === "audio"
+                ? { first: first === track.position, onFirst: () => setFirst(track.position) }
+                : {})}
+            />
+          ))}
+        </div>
+        {which === "audio" && audioKept.size === 0 && t.audio.length > 0 && (
+          <p className="muted small">Everything is kept: a file is never left with no sound.</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <section className="tidy">
@@ -1111,7 +1294,7 @@ function TidyPanel({
               <input
                 type="checkbox"
                 checked={picked.has(step.key)}
-                disabled={Boolean(blocked)}
+                disabled={off}
                 onChange={(e) => pick(step.key, e.target.checked)}
               />
               <span className="min0">
@@ -1123,87 +1306,12 @@ function TidyPanel({
         </div>
       )}
 
-      <div className="track-picks">
-        {t.audio.length > 0 && (
-          <div className="min0">
-            <div className="track-picks-head">
-              <h4>Audio</h4>
-              <span className="muted small">untick to drop, choose one to play first</span>
-            </div>
-            {t.audio.map((track) => (
-              <div key={track.position} className="track-row">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={audioKept.has(track.position)}
-                    disabled={Boolean(blocked)}
-                    onChange={(e) => keep("audio", track.position, e.target.checked)}
-                  />
-                  <span>{trackName(track)}</span>
-                </label>
-                <label className="check" title="Players take the first track unless somebody goes looking">
-                  <input
-                    type="radio"
-                    name={`first-${ratingKey}`}
-                    checked={first === track.position}
-                    disabled={Boolean(blocked) || !audioKept.has(track.position)}
-                    onChange={() => setFirst(track.position)}
-                  />
-                  <span className="muted small">first</span>
-                </label>
-              </div>
-            ))}
-            {t.audio.length > 1 && audioKept.size === 0 && (
-              <p className="muted small">Everything is kept: a file is never left with no sound.</p>
-            )}
-          </div>
-        )}
-        {t.subtitles.length > 0 && (
-          <div className="min0">
-            <div className="track-picks-head">
-              <h4>Subtitles</h4>
-              {/* Keeping only the language watched in is the commonest wish by
-                  far, and fifty six clicks otherwise. */}
-              <div className="segmented" role="group" aria-label="Which subtitles to keep">
-                <button className="seg" onClick={() => setKeepSubs(new Set(t.subtitles.map((x) => x.position)))}>
-                  All
-                </button>
-                <button
-                  className="seg"
-                  title="Keep only the tracks in the first track's language"
-                  onClick={() =>
-                    setKeepSubs(
-                      new Set(t.subtitles.filter((x) => (x.language ?? "").toLowerCase() === firstLanguage).map((x) => x.position)),
-                    )
-                  }
-                >
-                  {(t.subtitles[0]?.language ?? "eng").toUpperCase()} only
-                </button>
-                <button className="seg" onClick={() => setKeepSubs(new Set())}>
-                  None
-                </button>
-              </div>
-            </div>
-            {t.subtitles.map((track) => (
-              <div key={track.position} className="track-row">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={subsKept.has(track.position)}
-                    disabled={Boolean(blocked)}
-                    onChange={(e) => keep("subtitles", track.position, e.target.checked)}
-                  />
-                  <span>{trackName(track)}</span>
-                </label>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {section("audio")}
+      {section("subtitles")}
 
       {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
       <div className="file-actions">
-        <button className="btn primary" disabled={Boolean(blocked) || busy || (picked.size === 0 && !edited)} onClick={start}>
+        <button className="btn primary" disabled={off || busy || (picked.size === 0 && !edited)} onClick={start}>
           {busy ? "Queueing" : dropped > 0 ? `Tidy it, dropping ${dropped}` : "Tidy it"}
         </button>
         <button className="btn" onClick={onClose}>

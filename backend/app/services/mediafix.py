@@ -352,6 +352,9 @@ def plan(item: Any) -> dict[str, Any]:
     container = str(getattr(item, "file_container", "") or "").lower()
     steps: list[dict[str, str]] = []
 
+    at = {id(track): n for n, track in enumerate(subs)}
+    at_audio = {id(track): n for n, track in enumerate(audio)}
+
     styled = [s for s in subs if _codec(s) in STYLED_SUBTITLES]
     if styled:
         steps.append({
@@ -371,15 +374,24 @@ def plan(item: Any) -> dict[str, Any]:
                     f"that already {'have' if len(spare_images) != 1 else 'has'} a text version",
             "why": "Picture subtitles can only be burned in. Where the same language exists as text, the picture "
                    "one is a transcode waiting to happen. Any without a text version are left alone.",
+            "drops_subtitles": [at[id(s)] for s in spare_images],
         })
 
     groups = Counter((_codec(s), str(s.get("language") or ""), bool(s.get("forced"))) for s in subs)
     duplicates = sum(n - 1 for n in groups.values() if n > 1)
     if duplicates >= 2:
+        seen: set[tuple[str, str, bool]] = set()
+        repeated = []
+        for track in subs:
+            shape = (_codec(track), str(track.get("language") or ""), bool(track.get("forced")))
+            if shape in seen:
+                repeated.append(at[id(track)])
+            seen.add(shape)
         steps.append({
             "key": "subtitle_clutter",
             "what": f"Drop {duplicates} duplicate subtitle tracks, keeping the first of each kind",
             "why": "A list of twenty tracks that are the same handful repeated is a menu nobody can use.",
+            "drops_subtitles": repeated,
         })
 
     if audio and not {_codec(a) for a in audio} & PLAYABLE_AUDIO:
@@ -427,6 +439,7 @@ def plan(item: Any) -> dict[str, Any]:
             "what": f"Drop {len(droppable)} subtitle track{'s' if len(droppable) != 1 else ''} in other languages",
             "why": f"Keeping {', '.join(keep_subs)}. Every client reads the whole list before a stream starts, and "
                    "nobody scrolls past twenty languages to find theirs.",
+            "drops_subtitles": [at[id(s)] for s in droppable],
         })
 
     keep_audio = languages(settings.keep_audio_languages)
@@ -437,6 +450,7 @@ def plan(item: Any) -> dict[str, Any]:
             "what": f"Drop {len(extra_audio)} audio track{'s' if len(extra_audio) != 1 else ''} in other languages",
             "why": f"Keeping {', '.join(keep_audio)}. Spare dubs are often the largest thing in the file after the "
                    "picture. A file that would be left silent keeps everything.",
+            "drops_audio": [at_audio[id(a)] for a in extra_audio],
         })
 
     if container and container not in MODERN_CONTAINERS:
@@ -453,14 +467,23 @@ def plan(item: Any) -> dict[str, Any]:
         "file_path": getattr(item, "file_path", None),
         # Numbered within their own kind, which is how they are chosen and how
         # ffmpeg is told about them: the first audio track, the third subtitle.
+        # Everything known about a track, not the handful the picker used to
+        # get. Two rows reading "PGS eng" with nothing to tell them apart is a
+        # choice nobody can make, and since 0.90.0 the answer is stored: which
+        # one is for the hard of hearing, which is forced, which one a player
+        # takes by default, and what the track calls itself.
         "audio": [
             {"position": n, "codec": track.get("codec"), "channels": track.get("channels"),
-             "language": track.get("language"), "title": track.get("title")}
+             "language": track.get("language"), "title": track.get("title"),
+             "layout": track.get("layout"), "bitrate": track.get("bitrate"),
+             "default": bool(track.get("default")), "size": None}
             for n, track in enumerate(audio)
         ],
         "subtitles": [
             {"position": n, "codec": track.get("codec"), "language": track.get("language"),
-             "forced": bool(track.get("forced")), "title": track.get("title")}
+             "forced": bool(track.get("forced")), "title": track.get("title"),
+             "sdh": bool(track.get("sdh")), "default": bool(track.get("default")),
+             "dub": bool(track.get("dub"))}
             for n, track in enumerate(subs)
         ],
         "steps": steps,
@@ -530,6 +553,15 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
 
     # A choice made on the file wins over anything worked out from settings:
     # somebody is looking at the actual track list.
+    #
+    # Winning means the settings filters do not run at all on a kind that was
+    # chosen by hand, not merely that the choice is applied first. They used to
+    # run afterwards and undo it: ticking a French subtitle on a server set to
+    # keep English rewrote the file without it, which is somebody being told
+    # their choice was taken and then quietly losing the track.
+    said_audio = CHOSEN in wanted and chosen.get("audio") is not None
+    said_subs = CHOSEN in wanted and chosen.get("subtitles") is not None
+    said_first = CHOSEN in wanted and chosen.get("default_audio") is not None
     if CHOSEN in wanted:
         keep_audio_at = chosen.get("audio")
         keep_subs_at = chosen.get("subtitles")
@@ -557,7 +589,7 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
     settings = current()
     keep_audio_codes = languages(settings.keep_audio_languages)
     kept_audio = audio
-    if "keep_audio_languages" in wanted and keep_audio_codes:
+    if "keep_audio_languages" in wanted and keep_audio_codes and not said_audio:
         wanted_audio = [a for a in audio if _language(a) in keep_audio_codes]
         # Never leave a file with nothing to listen to, whatever the setting
         # says: a rule that silences a film is worse than a spare dub.
@@ -569,14 +601,14 @@ def build(streams: list[dict[str, Any]], steps: list[str], source: str, target: 
         kept_audio = [head] + [a for a in kept_audio if a is not head]
 
     first = (settings.preferred_audio_language or "").strip().lower()
-    if "default_audio" in wanted and first:
+    if "default_audio" in wanted and first and not said_first:
         preferred = [a for a in kept_audio if _language(a) == first]
         kept_audio = preferred + [a for a in kept_audio if a not in preferred]
 
     # Subtitles: the language filter runs after the other subtitle steps, so
     # dropping duplicates and dropping languages compose rather than fight.
     keep_sub_codes = languages(settings.keep_subtitle_languages)
-    if "keep_subtitle_languages" in wanted and keep_sub_codes:
+    if "keep_subtitle_languages" in wanted and keep_sub_codes and not said_subs:
         narrowed = [s for s in keep if _language(s) in keep_sub_codes]
         # All of them in one unwanted language is still a file people watch;
         # leaving no subtitles at all is the point of the setting, so this one

@@ -4,6 +4,27 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.101.0 - 2026-10-07
+
+### Fixed
+- A track ticked by hand is no longer thrown away by a Settings rule. Choosing to keep a French subtitle on a
+  server set to keep English rewrote the file without it: the choice was applied and then the language filter ran
+  afterwards and undid it. The same fault silently reordered the track chosen to play first. Winning now means
+  the filter does not run at all on a kind somebody has chosen by hand, and it is per kind, so picking subtitles
+  still leaves the audio rule alone.
+
+### Changed
+- The track picker is rebuilt around the thing a choice is actually made by. The language comes first and on its
+  own, then what the track is, then whether it is forced, for the hard of hearing, the default, or carries its own
+  name. Two rows reading "PGS eng" with nothing between them was a choice nobody could make, and all of that has
+  been stored since 0.90.0 without the picker ever being given it.
+- A language can be taken or dropped whole. A real file here has ninety subtitle tracks across thirty two
+  languages, which is ninety tick boxes otherwise.
+- Audio and subtitles are full width and stacked rather than two columns side by side. They are never the same
+  length, so one column sat empty while the other scrolled in a third of the page.
+- The steps now say which tracks they would drop, and the list shows those struck through. The panel used to read
+  "Drop 79 subtitle tracks" above a list reading "keeping 90 of 90", both true and impossible to hold at once.
+
 ## 0.100.1 - 2026-10-06
 
 ### Fixed
