@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.109.1 - 2026-10-07
+
+### Fixed
+- The setting for a disk's real size was on the Syncing page, which is not where anything about disks lives, so
+  there was no finding it. It sits under Library and files, beside the other settings about what is on disk, and
+  the warning about a disk filling sits under Alerts and monitoring with the other things that send a message.
+
 ## 0.109.0 - 2026-10-07
 
 ### Added
@@ -30,20 +37,13 @@ copy on GitHub to say what an update brings.
 
 ## 0.108.0 - 2026-10-07
 
-### Fixed
-- Every library read "no history yet this week" while the line underneath said four days were written down, which
-  is a page disagreeing with itself. It was also withholding a real answer: one library had gained 1.4 TB and 183
-  files over those days. It uses the oldest record it has and says how long the figure covers, so three days is
-  never shown as a week's.
-
 ### Added
-- A disk's real size can be written down where the share will not say. A user share that answers for the whole
-  array reports a total nothing can correct from the outside: a 20 TB NAS read as 61 TB free, and the host agreed,
-  because the share told it so. Stating the capacity replaces the total, and what is in use is then counted from
-  the files this app can see there.
+- A disk's real size can be written down where the share will not say, under Settings, Library and files. A user
+  share that answers for the whole array reports a total nothing can correct from the outside: a 20 TB NAS read as
+  61 TB free, and the host agreed, because the share told it so. Stating the capacity replaces the total, and what
+  is in use is then counted from the files this app can see there.
 - The Storage page says which kind of answer it is looking at, since a figure worked out from what is known is not
   a figure read off the disk, and presenting it as one would be the app being confidently wrong about an array.
-### Added
 - Seerr's issues can be brought in from Settings, beside where Seerr is set up, and as a task that runs once a
   day. It reads every report Seerr has, not the first page of them, and says what it did: how many it read, how
   many were new, how many were already here, and which it could not place, by name. A report already here is
@@ -70,6 +70,10 @@ copy on GitHub to say what an update brings.
   39 pixels, beside 32 pixel buttons in every filter bar.
 
 ### Fixed
+- Every library read "no history yet this week" while the line underneath said four days were written down, which
+  is a page disagreeing with itself. It was also withholding a real answer: one library had gained 1.4 TB and 183
+  files over those days. It uses the oldest record it has and says how long the figure covers, so three days is
+  never shown as a week's.
 - A stall recorded before its session knew what was playing showed as a bare number under "Stalled most on". It is
   named from the library now.
 - On the Map, the banner saying addresses could not be placed showed while places were on the map, sat over the

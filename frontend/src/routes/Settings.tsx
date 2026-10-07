@@ -114,6 +114,11 @@ const AREAS: Area[] = [
     blurb: "Optional. Where rules can send a warning, and what watches the sync.",
     sections: [
       {
+        title: "When a disk is getting full",
+        note: "A media server fills up. It gives plenty of warning and nothing was watching for it. One message when a disk crosses the line, one when it has room again, and nothing in between: a warning sent every hour is a warning nobody reads. Needs notifications set up. 0 turns it off.",
+        keys: ["disk_warn_percent", "disk_critical_percent"],
+      },
+      {
         title: "Notifications",
         note: "One Apprise URL per line, or comma separated. Discord, ntfy, Gotify, Pushover, Telegram, email and most others. Test checks them without sending anything.",
         test: "apprise",
@@ -175,16 +180,6 @@ const AREAS: Area[] = [
         keys: ["keep_streams_days", "keep_logs_days"],
       },
       {
-        title: "How big a disk really is",
-        note: "Only needed where a share will not say. A user share that answers for the whole array reports a total nothing can correct from the outside: a 20 TB NAS read as 61 TB free, and the host agreed, because the share told it so. One per line, like /mnt/user/media2 = 20 TB. Stating it replaces the total, and what is in use is then counted from the files this app can see there rather than read off the disk, which the Storage page says.",
-        keys: ["disk_sizes"],
-      },
-      {
-        title: "When a disk is getting full",
-        note: "A media server fills up. It gives plenty of warning and nothing was watching for it. One message when a disk crosses the line, one when it has room again, and nothing in between: a warning sent every hour is a warning nobody reads. Needs notifications set up. 0 turns it off.",
-        keys: ["disk_warn_percent", "disk_critical_percent"],
-      },
-      {
         title: "When a job stops working",
         note: "A broken background job does not announce itself, it just stops having the right answer. Three failures in a row sends one message, then nothing until it works again. Needs notifications set up.",
         keys: ["task_alerts"],
@@ -223,6 +218,11 @@ const AREAS: Area[] = [
     group: "Cartographarr",
     blurb: "What counts as a problem file, what tidying one should aim for, and where this container can read the media.",
     sections: [
+      {
+        title: "How big a disk really is",
+        note: "Only needed where a share will not say. A user share that answers for the whole array reports a total nothing can correct from the outside: a 20 TB NAS read as 61 TB free, and the host agreed, because the share told it so. One per line, like /mnt/user/media2 = 20 TB. Stating it replaces the total, and what is in use is then counted from the files this app can see there rather than read off the disk, which the Storage page says.",
+        keys: ["disk_sizes"],
+      },
       {
         title: "Problem files",
         note: "The average bitrate above which a remotely watched file is listed as a problem in Library. Set it near what one remote stream can comfortably use.",
