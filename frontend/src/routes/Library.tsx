@@ -2378,7 +2378,10 @@ type StoreTrend = {
 };
 
 function StorageSection({ days }: { days: number }) {
-  const data = useApi<{ stores: Store[]; days: number; depth: number }>(`/library/stores?days=${days}`, [days]);
+  const data = useApi<{ stores: Store[]; days: number; depth: number; warn_at?: number; critical_at?: number }>(
+    `/library/stores?days=${days}`,
+    [days],
+  );
   const [naming, setNaming] = useState<string | null>(null);
   const [asking, setAsking] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -2422,7 +2425,7 @@ function StorageSection({ days }: { days: number }) {
           viewers outside the house usually are not the disk.
         </p>
       )}
-      <Disks stores={stores} />
+      <Disks stores={stores} warnAt={data.data?.warn_at} criticalAt={data.data?.critical_at} />
       <table className="table">
         <thead>
           <tr>
@@ -2506,7 +2509,7 @@ function StorageSection({ days }: { days: number }) {
  * Above the table rather than a column in it, because free space belongs to
  * the disk and several stores can sit on one: as a column it would print the
  * same four terabytes on three rows and invite somebody to add them up. */
-function Disks({ stores }: { stores: Store[] }) {
+function Disks({ stores, warnAt = 10, criticalAt = 3 }: { stores: Store[]; warnAt?: number; criticalAt?: number }) {
   // One card per disk, whichever stores point at it.
   const byPath = new Map<string, { path: string; free: number; total: number; used: number; on: string[] }>();
   for (const s of stores) {
@@ -2530,16 +2533,22 @@ function Disks({ stores }: { stores: Store[] }) {
     <div className="mini-list space-disks">
       {disks.map((d) => {
         const full = d.total ? (d.used / d.total) * 100 : 0;
+        // The same thresholds the disk warning uses, read from the server
+        // rather than written here as well: two numbers meaning one thing is
+        // how a page ends up disagreeing with a notification.
+        const left = 100 - full;
+        const low = warnAt > 0 && left <= warnAt;
+        const dire = criticalAt > 0 && left <= criticalAt;
         return (
           <div key={d.path} className="mini space-disk">
             <div className="min0">
               <div className="row-between">
                 <strong>{d.path}</strong>
-                <span className={full >= 90 ? "pill warn" : "pill"}>{size(d.free)} free</span>
+                <span className={dire ? "pill bad" : low ? "pill warn" : "pill"}>{size(d.free)} free</span>
               </div>
               <span className="progress space-bar">
                 <span
-                  className={full >= 90 ? "progress-fill full" : "progress-fill"}
+                  className={low ? "progress-fill full" : "progress-fill"}
                   style={{ width: `${Math.min(100, full)}%` }}
                 />
               </span>

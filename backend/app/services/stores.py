@@ -144,7 +144,16 @@ def summary(days: int = 30) -> dict[str, Any]:
     for row in out:
         row.update(room.get(row["store"]) or {"path": None, "free": None, "total": None,
                                               "used": None, "shared_with": []})
-    return {"stores": out, "days": days, "depth": depth}
+    # The same thresholds the disk warning uses, so the page and the message
+    # cannot disagree about what counts as getting full.
+    settings = current()
+    return {
+        "stores": out,
+        "days": days,
+        "depth": depth,
+        "warn_at": settings.disk_warn_percent,
+        "critical_at": settings.disk_critical_percent,
+    }
 
 
 WEEKS = 12

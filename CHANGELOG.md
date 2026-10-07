@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.107.2 - 2026-10-07
+
+### Changed
+- The Storage page marks a disk as getting full using the same threshold the new warning does, read from the
+  setting rather than written into the page as well. It happened to agree at ten per cent; changing the setting
+  would have made them disagree silently, which is how a page ends up contradicting a notification.
+
 ## 0.107.1 - 2026-10-07
 
 ### Fixed
