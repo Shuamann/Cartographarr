@@ -46,7 +46,7 @@
           Type="Port" Display="always" Required="true" Mask="false">6277</Config>
 
   <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/cartographarr" Mode="rw"
-          Description="The database, the GeoIP files, uploaded branding and cached posters all live here."
+          Description="The database, the GeoIP files and uploaded branding live here, and the kept posters unless the poster cache below points somewhere else."
           Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/cartographarr</Config>
 
   <Config Name="Time zone" Target="TZ" Default="America/Chicago" Mode=""
@@ -56,6 +56,27 @@
   <Config Name="Data directory" Target="DATA_DIR" Default="/data" Mode=""
           Description="Where the app writes inside the container. Leave as it is unless you moved the appdata mount."
           Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
+
+  <!--
+    Posters, kept on disk after they are first shown, at a modest size: a few
+    kilobytes for a small one, tens for a backdrop. Worth putting on a fast
+    pool rather than the array, since a page of posters is a page of small
+    reads. The folder on the host can be anywhere; the container side is
+    /posters, and Poster folder tells the app to use it.
+
+    Leave the path empty and the variable is ignored: a folder that was never
+    mapped does not exist, and the app keeps posters in the appdata folder
+    instead rather than inside the container, where an update would lose them.
+    Switch keeping off, or clear what is kept, under Settings, Library and
+    files, Posters.
+  -->
+  <Config Name="Poster cache" Target="/posters" Default="/mnt/user/appdata/cartographarr/posters" Mode="rw"
+          Description="Where kept posters live on the host. A fast pool such as /mnt/cache/appdata/cartographarr/posters keeps pages of posters quick. Leave empty to keep them in the appdata folder."
+          Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/cartographarr/posters</Config>
+
+  <Config Name="Poster folder" Target="POSTER_CACHE_DIR" Default="/posters" Mode=""
+          Description="The poster cache path inside the container. Leave as it is unless you changed the container side of the mapping above."
+          Type="Variable" Display="advanced" Required="false" Mask="false">/posters</Config>
 
   <!--
     Media, for tidying a file's tracks.

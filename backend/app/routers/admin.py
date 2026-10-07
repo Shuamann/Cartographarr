@@ -450,6 +450,24 @@ async def run_task(key: str, admin: AdminUser) -> dict:
     return {"started": True}
 
 
+@router.get("/posters")
+def poster_cache(admin: AdminUser) -> dict:
+    """How many posters are kept, how much room they take, and where."""
+    from app.services import posters
+
+    return posters.stats()
+
+
+@router.delete("/posters")
+def poster_cache_clear(admin: AdminUser) -> dict:
+    """Forget every kept poster. Each is fetched again the next time it is shown."""
+    from app.services import posters
+
+    gone = posters.clear()
+    audit.record(admin, "posters.clear", f"Cleared {gone} kept posters")
+    return {"removed": gone, **posters.stats()}
+
+
 @router.post("/seerr/issues/import")
 async def seerr_issues_import(admin: AdminUser) -> dict:
     """Bring in every report Seerr holds, and answer with what came of it.

@@ -1,5 +1,6 @@
 import { askConfirm } from "../components/Ask";
 import SeerrImport from "../components/SeerrImport";
+import PosterCache from "../components/PosterCache";
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
 import { ACCENTS, SCHEMES, applyAccent, contrast, setScheme, type Parts, type Scheme } from "../theme/accent";
@@ -233,6 +234,11 @@ const AREAS: Area[] = [
         keys: ["preferred_audio_language", "keep_subtitle_languages", "keep_audio_languages", "tidy_when_quiet"],
       },
       {
+        title: "Posters",
+        note: "Posters and backdrops are kept on disk after they are first shown, each at one of three modest sizes, small enough to stay quick and large enough to stay sharp where they appear. On a container, map a host folder to a path inside it, such as /posters, and give that path here, or set POSTER_CACHE_DIR. Empty keeps them in the data directory.",
+        keys: ["poster_cache", "poster_cache_dir"],
+      },
+      {
         title: "Storage",
         note: "How much of a file's path names the disk it is on. One part (/movies, /tv) is usually right. Raise it where libraries share a mount (/mnt/user/movies, /mnt/user/tv), or Library, Storage counts them as one.",
         keys: ["library_store_depth"],
@@ -393,6 +399,8 @@ const SECRET_URLS = new Set(["apprise_urls", "webhook_url", "uptime_kuma_push_ur
 
 const LABELS: Record<string, string> = {
   library_store_depth: "Path parts that name the disk",
+  poster_cache: "Keep posters on disk",
+  poster_cache_dir: "Poster folder",
   automation_download_cap: "All rules together may queue",
   automation_daily_cap: "A rule may act at most",
   tautulli_url: "Tautulli URL",
@@ -880,6 +888,8 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
   const remoteBase = candidates.find((u) => !isDirect(u)) ?? null;
 
   const guesses = new Map<string, string>();
+  // The container side the Unraid template maps for the poster cache.
+  guesses.set("poster_cache_dir", "/posters");
   for (const area of AREAS) {
     for (const section of area.sections) {
       if (!section.guess) continue;
@@ -1167,6 +1177,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             {section.title === "Schedule" && <SyncNow />}
             {section.title === "Where the live data comes from" && <HistoryCheck />}
             {section.title === "Seerr" && <SeerrImport />}
+            {section.title === "Posters" && <PosterCache />}
             {section.title === "Backups" && <ServerTime />}
             {section.title === "Rules" && <ServerTime />}
             {section.title === "Tidying files" && (

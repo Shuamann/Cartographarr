@@ -112,3 +112,49 @@ def test_it_is_only_about_the_person_asked_for(client):
         play(db, 2, 2, 101, 40, 2, title="Theirs")
     assert [r["title"] for r in partway_for(1)] == ["Mine"]
     assert [r["title"] for r in partway_for(2)] == ["Theirs"]
+
+
+def test_a_row_carries_what_it_needs_to_be_drawn_like_any_other_title(client):
+    """The show, the episode's number and own name, and the show's year rather
+    than the year the episode aired: the row says which show before it is read."""
+    from app.db import session_scope
+    from app.models import History, MediaItem
+
+    claim(client)
+    started = int(time.time()) - 2 * DAY
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=500, title="Quiet Harbour", media_type="show", year=2019))
+        db.add(History(
+            row_id=1, user_id=1, rating_key=503, percent_complete=40, started=started, stopped=started + 600,
+            full_title="Quiet Harbour - The Lamp", title="The Lamp", grandparent_rating_key=500,
+            grandparent_title="Quiet Harbour", parent_media_index=2, media_index=3, year=2024,
+            media_type="episode",
+        ))
+        play(db, 2, 1, 600, 30, 1, title="A Film")
+    with session_scope() as db:
+        db.query(History).filter(History.row_id == 2).update({"year": 2011})
+    rows = {r["title"]: r for r in partway_for()}
+    episode = rows["Quiet Harbour"]
+    assert (episode["episode_title"], episode["season"], episode["episode"], episode["year"]) == ("The Lamp", 2, 3, 2019)
+    film = rows["A Film"]
+    assert (film["episode_title"], film["season"], film["year"]) == (None, None, 2011)
+
+
+def test_most_watched_carries_a_year_for_films_and_shows(client):
+    """A film's year from its plays; a show's from the library, never from an
+    episode, whose year is the year it aired."""
+    from app.db import session_scope
+    from app.models import History, MediaItem, User
+
+    claim(client)
+    started = int(time.time()) - DAY
+    with session_scope() as db:
+        db.add(User(user_id=1, username="alpha"))
+        db.add(MediaItem(rating_key=500, title="Quiet Harbour", media_type="show", year=2019))
+        db.add(History(row_id=1, user_id=1, rating_key=503, grandparent_rating_key=500, started=started,
+                       full_title="Quiet Harbour - The Lamp", media_type="episode", year=2024, percent_complete=100))
+        db.add(History(row_id=2, user_id=1, rating_key=600, started=started, full_title="A Film",
+                       media_type="movie", year=2011, percent_complete=100))
+    top = {m["title"]: m for m in client.get("/api/users/1").json()["top_media"]}
+    assert top["Quiet Harbour"]["year"] == 2019
+    assert top["A Film"]["year"] == 2011

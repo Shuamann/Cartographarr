@@ -358,6 +358,12 @@ async def lifespan(app: FastAPI):
         settings.geoip_update_interval_days,
     )
 
+    # Posters older builds kept at every size a page asked for. Nothing reads
+    # them now, and on a large library they are most of a gigabyte.
+    from app.services import posters
+
+    asyncio.get_running_loop().run_in_executor(None, posters.forget_older)
+
     if not settings.run_background_jobs:
         # No scheduler, no syncs, no probe. Everything still answers from what
         # is already in the database.

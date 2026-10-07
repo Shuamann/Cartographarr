@@ -113,6 +113,22 @@ A library kept somewhere else, a remote share included, is a second mount:
 -v /mnt/remotes/SERVER_SHARE/media:/media2
 ```
 
+Posters are kept on disk once they have been shown, at a modest size, in the
+appdata folder unless you point them elsewhere. A fast pool suits them better
+than the array, because a page of posters is a page of small reads. The
+template has a **Poster cache** path for it; on a container made from an older
+copy of the template, **Edit**, **Add another Path, Port, Variable**, and add a
+path with the container side `/posters` and a variable `POSTER_CACHE_DIR` set
+to `/posters`. Without the template:
+
+```bash
+-v /mnt/cache/appdata/cartographarr/posters:/posters -e POSTER_CACHE_DIR=/posters
+```
+
+**Settings, Library and files, Posters** shows how many are kept and where,
+switches keeping off, and clears them. A folder that was never mapped is
+passed over for the appdata folder, and that page says so.
+
 Then under **Settings, Library and files**, add `/media` to the mounted
 directories and press **Check again**. The table underneath lists every library
 Plex reports and says where it was found: a library Plex calls `/movies` is

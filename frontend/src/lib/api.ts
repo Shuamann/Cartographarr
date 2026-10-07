@@ -570,6 +570,7 @@ export type Profile = {
     rating_key: number;
     title: string | null;
     media_type: string | null;
+    year?: number | null;
     plays: number;
     seconds: number;
     last_play: number | null;
@@ -585,6 +586,10 @@ export type PartwayRow = {
   show_rating_key: number | null;
   title: string | null;
   what: string | null;
+  episode_title: string | null;
+  season: number | null;
+  episode: number | null;
+  year: number | null;
   media_type: string | null;
   percent: number;
   last_play: number | null;

@@ -18,6 +18,10 @@ services:
     volumes:
       - /mnt/user/appdata/cartographarr:/data
 
+      # Kept posters, somewhere quick. Without this they live under /data.
+      # Set POSTER_CACHE_DIR to the container side, below, alongside it.
+      # - /mnt/cache/appdata/cartographarr/posters:/posters
+
       # Only needed to tidy a file's tracks from the Library page. Mount the
       # directory your libraries live in, not one share per library, then add
       # it under Settings, Behaviour, Tidying files: each library is looked for
@@ -37,4 +41,5 @@ services:
       # Explicit, and last word: env_file carries DATA_DIR=./data for running
       # outside a container, which would be wrong in here.
       DATA_DIR: /data
+      # POSTER_CACHE_DIR: /posters
       TZ: ${TZ:-America/Chicago}

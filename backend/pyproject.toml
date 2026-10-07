@@ -1,6 +1,6 @@
 [project]
 name = "cartographarr"
-version = "0.108.0"
+version = "0.109.0"
 description = "Tautulli geo-intelligence and Plex access control"
 requires-python = ">=3.12"
 
@@ -19,6 +19,10 @@ dependencies = [
     "apprise>=1.9",
     "python-multipart>=0.0.12",
     "plexapi>=4.16",
+    # Re-encodes the posters that are kept, so each is a modest JPEG whatever
+    # Plex or Tautulli handed over. Tautulli's answer is often a PNG six times
+    # the size of the same picture as a JPEG.
+    "pillow>=11",
     # Not used directly. Apprise pulls it in through requests-oauthlib, and
     # 3.3.1 carries PYSEC-2026-4114, so the floor is set here rather than
     # waiting for apprise to raise its own.

@@ -4,6 +4,30 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.109.0 - 2026-10-07
+
+### Added
+- Posters are kept on disk at three sizes rather than at every size a page asks for: a small one for rows and
+  lists, a larger one for walls and panels, and a backdrop. Each is re-encoded as a modest JPEG, a few kilobytes
+  for a small poster, where Tautulli often answers with a PNG six times the size. One film's poster was up to five
+  files fetched five times; it is now two at most, fetched once, and the browser scales the rest. Files kept by
+  older builds at the old sizes are removed at startup.
+- Settings, Library and files, Posters: a switch for keeping them, the folder they are kept in, how many there are
+  and how much room they take, and a button that clears them. The folder can be mapped anywhere on the host, such
+  as a fast pool, through a new Poster cache path in the Unraid template or POSTER_CACHE_DIR. A folder that does
+  not exist is passed over for the data folder rather than created inside the container, and Settings says so.
+  Clearing removes the posters and nothing else in the folder.
+
+### Changed
+- Partway through sits above Most watched on a person's page, drawn like every other title with its poster, the
+  episode's number and name, and how far in. It says so when there is nothing, rather than leaving no trace, and a
+  row opens the title in place instead of sending a show to the Library as though it were a film.
+- Most watched carries each title's year: a film's own, and a show's from the library, never an episode's.
+- The names and years behind Most watched come from one query of three columns rather than whole library rows.
+
+### Fixed
+- A person's play count read "35 , 37 sessions", with a space before the comma.
+
 ## 0.108.0 - 2026-10-07
 
 ### Fixed

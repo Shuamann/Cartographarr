@@ -55,6 +55,10 @@ def for_user(db, user_id: int, days: int = WINDOW_DAYS, limit: int = 12) -> list
             func.max(History.grandparent_rating_key).label("show"),
             func.max(History.grandparent_title).label("show_title"),
             func.max(History.full_title).label("what"),
+            func.max(History.title).label("episode_title"),
+            func.max(History.parent_media_index).label("season"),
+            func.max(History.media_index).label("episode"),
+            func.max(History.year).label("year"),
             func.max(History.media_type).label("media_type"),
         )
         .where(
@@ -89,6 +93,7 @@ def for_user(db, user_id: int, days: int = WINDOW_DAYS, limit: int = 12) -> list
         if len(kept) >= limit:
             break
     rows = kept
+    years = show_years(db, [row.show for row in rows if row.show])
 
     return [
         {
@@ -98,9 +103,37 @@ def for_user(db, user_id: int, days: int = WINDOW_DAYS, limit: int = 12) -> list
             # say they are partway through.
             "title": row.show_title or row.what,
             "what": row.what,
+            # Enough to draw the row the way every other title is drawn: the
+            # show, the episode's number and its own name.
+            "episode_title": row.episode_title if row.show else None,
+            "season": row.season if row.show else None,
+            "episode": row.episode if row.show else None,
+            # The show's year for an episode rather than the episode's, which
+            # is the year it aired and says nothing about which show it is.
+            "year": years.get(row.show) if row.show else row.year,
             "media_type": row.media_type,
             "percent": int(row.done or 0),
             "last_play": row.last,
         }
         for row in rows
     ]
+
+
+def show_years(db, keys: list[int]) -> dict[int, int]:
+    """The year each show began, from the library, in one query.
+
+    Only the two columns: a library row is wide, and loading whole rows to
+    read one number from each is most of the cost of asking.
+    """
+    from app.models import MediaItem
+
+    if not keys:
+        return {}
+    return {
+        key: year
+        for key, year in db.execute(
+            select(MediaItem.rating_key, MediaItem.year).where(
+                MediaItem.rating_key.in_(set(keys)), MediaItem.year.is_not(None)
+            )
+        ).all()
+    }

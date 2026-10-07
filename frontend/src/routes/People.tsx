@@ -4,7 +4,7 @@ import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
 import TitleRow, { TitleRows, type TitleFact } from "../components/TitleRow";
 import type { FilterState } from "../lib/filters";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { duration, when } from "../components/DataTable";
 import { StreamEntry } from "../components/EnforcementLog";
 import StreamDetail from "../components/StreamDetail";
@@ -595,32 +595,59 @@ type Tab = "overview" | "users" | "history" | "places" | "devices" | "activity" 
 
 /* What somebody started and did not finish.
  *
- * Already answerable from history and never shown anywhere. An episode is
- * listed under its show, because the answer to "what am I partway through" is
- * the name of the show, not the name of an episode.
+ * An episode is listed under its show, because the answer to "what am I
+ * partway through" is the name of the show, not the name of an episode. Drawn
+ * as every other title is, and said even when there is nothing: a section
+ * that vanishes when it is empty reads as a feature that is not there.
  */
-function Partway({ rows, onOpen }: { rows: PartwayRow[]; onOpen?: (ratingKey: number) => void }) {
-  if (rows.length === 0) return null;
+function Partway({ rows }: { rows: PartwayRow[] }) {
+  const [open, setOpen] = useState<number | null>(null);
   return (
     <section className="profile-section">
       <h3>Partway through</h3>
-      <div className="mini-list">
-        {rows.map((r) => (
-          <button key={r.rating_key} className="mini mini-button" onClick={() => onOpen?.(r.rating_key)}>
-            <div className="min0">
-              <span className="clip">{r.title}</span>
-              {/* The episode only where it says something the show does not. */}
-              {r.what !== r.title && <p className="muted small clip">{r.what}</p>}
+      {rows.length === 0 ? (
+        <p className="muted">Nothing started and left unfinished in the last six months.</p>
+      ) : (
+        <TitleRows>
+          {rows.map((r) => (
+            <div key={r.rating_key}>
+              <TitleRow
+                ratingKey={r.rating_key}
+                item={{
+                  media_type: r.media_type,
+                  full_title: r.what,
+                  title: r.episode_title ?? r.title,
+                  grandparent_title: r.show_rating_key ? r.title : null,
+                  parent_media_index: r.season,
+                  media_index: r.episode,
+                  year: r.year,
+                }}
+                facts={[
+                  {
+                    label: "Progress",
+                    value: (
+                      <span className="row partway-at">
+                        <span className="progress" title={`${r.percent}% in`}>
+                          <span className="progress-fill" style={{ width: `${r.percent}%` }} />
+                        </span>
+                        <span>{r.percent}%</span>
+                      </span>
+                    ),
+                  },
+                  { label: "Last", value: ago(r.last_play) },
+                ]}
+                open={open === r.rating_key}
+                onToggle={() => setOpen(open === r.rating_key ? null : r.rating_key)}
+              />
+              {open === r.rating_key && (
+                <div className="top-media-detail">
+                  <MediaPanel ratingKey={r.rating_key} />
+                </div>
+              )}
             </div>
-            <span className="row partway-at">
-              <span className="progress" title={`${r.percent}% in`}>
-                <span className="progress-fill" style={{ width: `${r.percent}%` }} />
-              </span>
-              <span className="muted small">{r.percent}%</span>
-            </span>
-          </button>
-        ))}
-      </div>
+          ))}
+        </TitleRows>
+      )}
     </section>
   );
 }
@@ -730,8 +757,9 @@ function UserProfile({
             {streaming.map((s) => (
               <StreamDetail key={s.session_key} session={s} compact />
             ))}
-            <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} scope={{ user_id: [userId] }} />
-            <Partway rows={u.partway ?? []} onOpen={(key) => nav.openLibrary?.({ ratingKey: key, mediaType: "movie" })} />
+            <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} scope={{ user_id: [userId] }}>
+              <Partway rows={u.partway ?? []} />
+            </Overview>
             <PlaybackSection path={`/users/${userId}/playback`} who="this person" />
           </>
         )}
@@ -1140,11 +1168,14 @@ function Overview({
   profile: p,
   extra = [],
   scope,
+  children,
 }: {
   profile: Profile;
   extra?: [string, string][];
   /* The filters that mean "this user" or "this device", for links out. */
   scope: Partial<FilterState>;
+  /* Above the lists: what is happening now reads before what happened most. */
+  children?: ReactNode;
 }) {
   const vpn = p.addresses.filter((a) => a.is_hosting).length;
   return (
@@ -1162,6 +1193,8 @@ function Overview({
         First play {when(p.totals.first_play)}, last {when(p.totals.last_play)}.
         {vpn > 0 && <span className="pill vpn">{vpn} VPN or hosting address{vpn === 1 ? "" : "es"}</span>}
       </p>
+
+      {children}
 
       <div className="dash-cols">
         <section className="profile-section">
@@ -1373,7 +1406,7 @@ function TopMedia({ items, scope }: { items: Profile["top_media"]; scope?: Parti
         <div key={m.rating_key}>
           <TitleRow
             ratingKey={m.rating_key}
-            item={{ title: m.title, full_title: m.title, media_type: m.media_type }}
+            item={{ title: m.title, full_title: m.title, media_type: m.media_type, year: m.year }}
             facts={[
               { label: "Plays", value: m.plays.toLocaleString() },
               { label: "Watched", value: duration(m.seconds) },
@@ -1698,8 +1731,12 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
     <div className="spec-pair">
       <dt>{label}</dt>
       <dd>
-        {value}
-        {sub && <span className="muted">, {sub}</span>}
+        {/* One piece of text: the cell is a flex row, and its gap would
+            otherwise open a space before the comma. */}
+        <span>
+          {value}
+          {sub && <span className="muted">, {sub}</span>}
+        </span>
       </dd>
     </div>
   );

@@ -15,12 +15,11 @@ import time
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, desc, func, select, update
+from sqlalchemy import Select, case, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from app import audit
 from app.auth.deps import AdminUser, CurrentUser
-from app.config import get_settings
 from app.db import SessionLocal, session_scope
 from app.filters import Filters
 from app.models import Device, History, IpLocation, Library, MediaItem, User
@@ -338,14 +337,6 @@ a page of sixty of them is the difference between seven megabytes and one.
 PNG. It has to be `jpg`."""
 
 
-def _poster_file(rating_key: int, width: int, height: int, kind: str = "poster") -> pathlib.Path:
-    # The extension is part of the name, so the PNGs cached by older builds
-    # are simply not found and are replaced on the next request rather than
-    # being served under the wrong type for ever.
-    name = f"{rating_key}-{width}x{height}" + ("" if kind == "poster" else f"-{kind}")
-    return get_settings().data_dir / "posters" / f"{name}.{POSTER_FORMAT}"
-
-
 def _poster_art(rating_key: int, kind: str = "poster") -> str | None:
     """The artwork path for an item, from the database, in its own session.
 
@@ -471,10 +462,18 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
     rather than the road. The answer never changes for a given item, so it is
     written to the data directory and served from there afterwards: a library
     page full of posters should cost one fetch each, ever, not one a visit.
+
+    Kept at one of three sizes rather than at whatever size was asked for, so
+    one poster is two files at most rather than one per page that shows it;
+    see services/posters.py. Keeping them can be switched off in Settings.
     """
+    from app.services import posters
+
     kind = "art" if kind == "art" else "poster"
-    kept = _poster_file(rating_key, width, height, kind)
-    if kept.exists():
+    size, width, height = posters.bucket(width, height, kind)
+    keeping = posters.enabled()
+    kept = posters.path_for(rating_key, size)
+    if keeping and kept.exists():
         return FileResponse(kept, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
 
     tautulli = tautulli_configured()
@@ -563,10 +562,12 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
         if upstream is None:
             raise HTTPException(502, f"Could not fetch artwork: {redact(trouble)}") from trouble
 
-    await asyncio.to_thread(_keep_poster, kept, upstream.content)
+    content, kind_of = await asyncio.to_thread(posters.shrink, upstream.content, width, height)
+    if keeping and kind_of:
+        await asyncio.to_thread(_keep_poster, kept, content)
     return Response(
-        content=upstream.content,
-        media_type=upstream.headers.get("content-type", "image/jpeg"),
+        content=content,
+        media_type=kind_of or upstream.headers.get("content-type", "image/jpeg"),
         headers={"Cache-Control": "public, max-age=604800"},
     )
 
@@ -1028,18 +1029,25 @@ def _profile(db: Session, where: list) -> dict:
             plays(History).label("plays"),
             func.sum(History.play_duration).label("seconds"),
             func.max(History.started).label("last_play"),
+            # A film's own year. An episode's is the year it aired, which says
+            # nothing about the show, so a show's comes from the library below.
+            func.max(case((History.media_type == "movie", History.year))).label("year"),
         )
         .where(*where)
         .group_by(show_key)
         .order_by(desc(plays(History)))
         .limit(12)
     ).all()
-    names = {
-        m.rating_key: m.title
-        for m in db.execute(
-            select(MediaItem).where(MediaItem.rating_key.in_([t.key for t in top if t.key]))
-        ).scalars()
+    # Names and years in one query of three columns, not twelve whole rows.
+    library = {
+        key: (title, year)
+        for key, title, year in db.execute(
+            select(MediaItem.rating_key, MediaItem.title, MediaItem.year).where(
+                MediaItem.rating_key.in_([t.key for t in top if t.key])
+            )
+        ).all()
     }
+    names = {key: title for key, (title, _) in library.items()}
 
     def title_of(t) -> str | None:
         if t.key in names and names[t.key]:
@@ -1090,6 +1098,7 @@ def _profile(db: Session, where: list) -> dict:
                 "rating_key": t.key,
                 "title": title_of(t),
                 "media_type": "show" if t.media_type == "episode" else t.media_type,
+                "year": t.year or (library.get(t.key) or (None, None))[1],
                 "plays": t.plays,
                 "seconds": t.seconds or 0,
                 "last_play": t.last_play,

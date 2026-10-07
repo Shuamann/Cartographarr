@@ -217,6 +217,22 @@ class Settings(BaseSettings):
     per library, so one part (/movies, /tv) is right. Raise it where several
     libraries share a mount (/mnt/user/movies, /mnt/user/tv)."""
 
+    poster_cache: bool = True
+    """Keep the posters and backdrops the app shows on disk, at a modest size.
+
+    Each is fetched once at one of three sizes, small enough to stay quick
+    and large enough to stay sharp where it is shown, and served from disk
+    afterwards. Off, every picture is fetched from Plex or Tautulli each time
+    the browser does not already have it."""
+
+    poster_cache_dir: str = ""
+    """Where the kept posters live. Empty keeps them in the data directory,
+    under posters. In a container this is a path inside it, such as /posters,
+    mapped to wherever on the host suits: a fast cache pool, say, rather than
+    the array. A folder that does not exist is not created, because inside a
+    container that would be a folder lost on the next update; the data
+    directory is used instead, and Settings says so."""
+
     library_bitrate_threshold_mbps: float = 20
     """Library health lists files above this average bitrate that are watched
     remotely. Set it near what one remote stream can comfortably use."""
