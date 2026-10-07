@@ -4,6 +4,28 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.114.0 - 2026-10-07
+
+### Added
+- A word when the server stops answering. The one thing a media server does that everybody notices, and the one
+  thing nothing here watched for: activity is read every few seconds, so the app knew within a poll, and all it
+  did was write a line in a log nobody has reason to open. Plex falling over at two in the morning was something
+  you found out when somebody complained.
+- One message when it goes, one when it comes back with how long it was away, and nothing in between. It waits
+  five minutes of unbroken failure first, under Settings, Alerts and monitoring, because a server restarting is
+  unreachable for most of a minute and a message for every restart is a message that gets muted. In minutes
+  rather than in polls, so changing the poll interval does not change what the alert means.
+- A moment of success restarts the clock, so four minutes down, one poll up and four minutes down is not reported
+  as an eight minute outage.
+- The message says this app could not reach the server, not that the server is down. The container, the network
+  between them and the server itself are three different things and only the first has been ruled out, and the
+  stronger claim is the one that sends somebody to restart the wrong thing.
+
+### Fixed
+- Two settings were drawn under their own key, so the page read "server_alert_minutes" where everything beside it
+  read "Warn when free space is under". A setting with no name written for a person is now a failing test rather
+  than something to notice in a screenshot, which is how these two were found.
+
 ## 0.113.1 - 2026-10-07
 
 ### Added

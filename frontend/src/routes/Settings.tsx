@@ -114,6 +114,11 @@ const AREAS: Area[] = [
     blurb: "Optional. Where rules can send a warning, and what watches the sync.",
     sections: [
       {
+        title: "When the server stops answering",
+        note: "The one thing everybody notices, and the one thing nothing here watched for. Activity is read every few seconds, so it knows within a poll. One message when it goes, one when it comes back. It waits a few minutes first, because a server restarting is unreachable for most of a minute and a message for every restart is a message nobody reads. Needs notifications set up. 0 turns it off.",
+        keys: ["server_alerts", "server_alert_minutes"],
+      },
+      {
         title: "When a disk is getting full",
         note: "A media server fills up. It gives plenty of warning and nothing was watching for it. One message when a disk crosses the line, one when it has room again, and nothing in between: a warning sent every hour is a warning nobody reads. Needs notifications set up. 0 turns it off.",
         keys: ["disk_warn_percent", "disk_critical_percent"],
@@ -441,6 +446,8 @@ const LABELS: Record<string, string> = {
   upload_alert_percent: "Warn when upload passes",
   issue_alerts: "Tell me when something is reported",
   task_alerts: "Tell me when a job keeps failing",
+  server_alerts: "Tell me when the server stops answering",
+  server_alert_minutes: "Say so after it has been unreachable for",
   weekly_digest: "Send a weekly digest",
   digest_weekday: "On",
   digest_hour: "At",
@@ -498,6 +505,7 @@ type FieldShape = { unit?: string; min?: number; max?: number; step?: number; ki
 
 const SHAPES: Record<string, FieldShape> = {
   tautulli_timeout: { unit: "seconds", min: 1, max: 300, step: 1 },
+  server_alert_minutes: { unit: "minutes", min: 0, max: 1440, step: 1 },
   geoip_update_interval_days: { unit: "days", min: 1, max: 90, step: 1 },
   sync_interval_minutes: { unit: "minutes", min: 1, max: 1440, step: 1 },
   slow_sync_interval_minutes: { unit: "minutes", min: 1, max: 10080, step: 1 },

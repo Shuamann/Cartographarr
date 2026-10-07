@@ -25,7 +25,7 @@ from app.models import BannedAddress, BannedDevice, Device, EnforcementLog, IpLo
 from app.plays import plays as count_plays
 from app.plex import server as plex_server
 from app.plex import serverwork
-from app.services import conditions, tracker
+from app.services import conditions, reachable, tracker
 from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
 from app.redact import redact
@@ -715,6 +715,14 @@ async def run_once() -> dict[str, Any]:
     # Read activity first, whatever happens next: the tracker has to see every
     # poll to time buffering and record it, even with no rules or rules off.
     sessions, context, error = await live_context()
+    # Nothing else is watching for the server going away, and this is the poll
+    # that finds out first. It waits a few minutes of unbroken failure before
+    # saying anything, so a restart is not news.
+    if settings.server_alerts and settings.server_alert_minutes:
+        try:
+            await reachable.seen(error, settings.server_alert_minutes)
+        except Exception:  # noqa: BLE001 - the rules matter more than the warning
+            log.exception("could not judge whether the server is reachable")
     # What the server is doing of its own accord, on the same poll, because
     # there is nowhere else to read it from: Plex lists what is running now
     # and keeps no history, so a scan nobody was watching for is gone. Six

@@ -413,6 +413,26 @@ class Settings(BaseSettings):
     """And below which it is worth a stronger word. Still one message: the
     difference is what it says, not how often it says it."""
 
+    server_alerts: bool = True
+    """Send word through Apprise when the server stops answering.
+
+    The one thing a media server does that everybody notices, and the one
+    thing this app was not watching for: it reads activity every few seconds,
+    so it knows within a poll, and all it did was write a line in a log nobody
+    has reason to open. One message when it goes, one when it comes back.
+
+    What it can honestly say is that this app could not reach the server. The
+    container, the network between them and the server itself are three
+    different things and only the first has been ruled out."""
+
+    server_alert_minutes: int = 5
+    """How long it has to be unreachable before anybody is told.
+
+    In minutes rather than in polls, so changing the poll interval does not
+    change what the alert means. A server that is restarting is unreachable
+    for most of a minute, and a message for every restart is a message nobody
+    reads. 0 turns it off."""
+
     task_alerts: bool = True
     """Send word through Apprise when a background job keeps failing.
 

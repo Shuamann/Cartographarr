@@ -123,7 +123,14 @@ def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
         return sessions, {"s1": {"window_count": lambda *a: 5}}, None
 
     monkeypatch.setattr(enforcer, "is_configured", lambda: True)
-    monkeypatch.setattr(enforcer, "current", lambda: SimpleNamespace(enforce_enabled=True, enforce_cooldown_seconds=0))
+    # Spelled out rather than taken from the real settings, so this test says
+    # what the sweep is being told. The alert fields are off: this is about
+    # a rule logging once, and a stand in with a field missing crashes the
+    # sweep rather than failing the thing under test.
+    monkeypatch.setattr(enforcer, "current", lambda: SimpleNamespace(
+        enforce_enabled=True, enforce_cooldown_seconds=0,
+        server_alerts=False, server_alert_minutes=0,
+    ))
     monkeypatch.setattr(enforcer, "live_context", live)
     enforcer._done.clear()
     enforcer._recent.clear()
