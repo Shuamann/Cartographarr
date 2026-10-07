@@ -19,6 +19,40 @@ copy on GitHub to say what an update brings.
   the files this app can see there.
 - The Storage page says which kind of answer it is looking at, since a figure worked out from what is known is not
   a figure read off the disk, and presenting it as one would be the app being confidently wrong about an array.
+### Added
+- Seerr's issues can be brought in from Settings, beside where Seerr is set up, and as a task that runs once a
+  day. It reads every report Seerr has, not the first page of them, and says what it did: how many it read, how
+  many were new, how many were already here, and which it could not place, by name. A report already here is
+  recognised by Seerr's own id and not brought in twice, and its comments come across as comments, with who wrote
+  them and when.
+- A report is placed against a file by Plex's rating key first and, when Plex has renumbered the file since, by
+  its TMDB, TVDB or IMDb id, and for an episode through its show, by the show's ids or, when only one show here
+  has that name, by name. A report that cannot be placed is still kept, named after the title Seerr gives, rather
+  than dropped.
+
+### Changed
+- A report Seerr stops listing is no longer deleted here with its notes and resolution. It is kept and marked, and
+  the report says that Seerr no longer has it, so a change made to it here stays here rather than being sent
+  somewhere that will refuse it.
+- A person's most watched and recent plays, an address's titles and the titles played at a place on the Map are
+  rows in the house style: the artwork behind a scrim, a poster, the year above the title and the facts as label
+  and value. Narrow, as in the Map's drawer, the facts sit under the title beside the poster instead of a poster's
+  height below it. A report grouped by title carries the poster beside each one.
+- A person's and a device's figures are one line each, label and value, rather than tiles.
+- The Map's list of places is as wide as what is in it rather than stretched across the page, and a long place
+  name gives way before the numbers beside it do.
+- A rule in the list says whether it acts or only records once, on its switch, rather than on a pill as well.
+- Every text box and select stands at the control height. They took their height from padding and line height,
+  39 pixels, beside 32 pixel buttons in every filter bar.
+
+### Fixed
+- A stall recorded before its session knew what was playing showed as a bare number under "Stalled most on". It is
+  named from the library now.
+- On the Map, the banner saying addresses could not be placed showed while places were on the map, sat over the
+  list where it took the clicks meant for the rows, and on a phone ran off the side of the screen. It shows only
+  when nothing could be placed, sits above the list rather than over it, and wraps.
+- A rule's action picker on a phone ran out of its box when the action needed something not yet set up.
+- A long title in a report's bars was cut off without an ellipsis.
 
 ## 0.107.2 - 2026-10-07
 

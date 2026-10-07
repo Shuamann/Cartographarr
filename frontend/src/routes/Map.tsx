@@ -1,5 +1,5 @@
 import { askText } from "../components/Ask";
-import { displayTitle } from "../lib/titles";
+import TitleRow, { TitleRows, type TitleFact } from "../components/TitleRow";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -357,8 +357,11 @@ export default function MapRoute({
           />
         )}
 
-        {!geoipReady && (
-          <div className="map-banner">
+        {/* Only when nothing is placed. Places already on the map were
+            placed, and saying there is nothing to place over the top of them
+            is a wrong answer rather than a cautious one. */}
+        {!geoipReady && features.length === 0 && !points.loading && (
+          <div className={view === "list" ? "map-banner in-flow" : "map-banner"}>
             {nav.isAdmin
               ? (
                   <>
@@ -370,9 +373,11 @@ export default function MapRoute({
           </div>
         )}
         {geoipReady && features.length === 0 && !points.loading && (
-          <div className="map-banner">Nothing to show yet. The first sync may still be running.</div>
+          <div className={view === "list" ? "map-banner in-flow" : "map-banner"}>
+            Nothing to show yet. The first sync may still be running.
+          </div>
         )}
-        {points.error && <div className="map-banner bad">{points.error}</div>}
+        {points.error && <div className={view === "list" ? "map-banner bad in-flow" : "map-banner bad"}>{points.error}</div>}
 
         {summary.data && (
           <div className="summary">
@@ -1122,7 +1127,7 @@ function LocationList({
                 className={isSelected ? "loc-row selected" : "loc-row"}
                 onClick={() => onSelect(f)}
               >
-                <td>
+                <td className="loc-name" title={placeName(p)}>
                   {placeName(p)}
                   {p.is_hosting && <span className="pill vpn">VPN</span>}
                 </td>
@@ -1312,58 +1317,58 @@ function Drawer({
       {tab === "watched" && (
             <>
               {recent.data?.items?.length === 0 && <p className="muted small">Nothing recorded.</p>}
-              <div className="mini-list">
-                {recent.data?.items?.map((row) => (
-                  <div key={row.row_id}>
-                    <button
-                      className="mini as-row"
-                      onClick={() =>
-                        setOpenMedia(openMedia === row.rating_key ? null : row.rating_key)
-                      }
-                    >
-                      <span>
-                        {row.full_title ? displayTitle(row) : <span className="muted">Withheld, another viewer</span>}
-                        <span className="muted small block">
-                          {row.user_id != null && (nav.openUser || onOpenUser) ? (
-                            <span
-                              className="linkish"
-                              role="link"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                (onOpenUser ?? nav.openUser)?.(row.user_id as number);
-                              }}
-                            >
-                              {names.get(row.user_id) ?? row.user_id}
-                            </span>
-                          ) : null}
-                          {row.user_id != null && row.player ? " · " : ""}
-                          {row.machine_id && nav.openDevice ? (
-                            <span
-                              className="linkish"
-                              role="link"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                nav.openDevice?.(row.machine_id as string);
-                              }}
-                            >
-                              {row.player}
-                            </span>
-                          ) : (
-                            row.player
-                          )}
-                          {row.transcode_decision === "transcode" ? " · transcode" : ""}
-                        </span>
-                      </span>
-                      <span className="muted small">
-                        {row.started ? new Date(row.started * 1000).toLocaleDateString() : ""}
-                      </span>
-                    </button>
-                    {openMedia === row.rating_key && row.rating_key !== null && (
-                      <MediaPanel ratingKey={row.rating_key} onFilterToTitle={onFilterToTitle} />
-                    )}
-                  </div>
-                ))}
-              </div>
+              <TitleRows>
+                {recent.data?.items?.map((row) => {
+                  // A link inside a row goes where it names and does not
+                  // open the row as well.
+                  const stop = (e: React.MouseEvent) => e.stopPropagation();
+                  const facts: TitleFact[] = [];
+                  if (row.user_id != null)
+                    facts.push({
+                      label: "Who",
+                      value:
+                        nav.openUser || onOpenUser ? (
+                          <button className="linkish" onClick={(e) => { stop(e); (onOpenUser ?? nav.openUser)?.(row.user_id as number); }}>
+                            {names.get(row.user_id) ?? row.user_id}
+                          </button>
+                        ) : (
+                          names.get(row.user_id) ?? row.user_id
+                        ),
+                    });
+                  if (row.player)
+                    facts.push({
+                      label: "Device",
+                      value:
+                        row.machine_id && nav.openDevice ? (
+                          <button className="linkish" onClick={(e) => { stop(e); nav.openDevice?.(row.machine_id as string); }}>
+                            {row.player}
+                          </button>
+                        ) : (
+                          row.player
+                        ),
+                    });
+                  if (row.started) facts.push({ label: "When", value: new Date(row.started * 1000).toLocaleDateString() });
+                  if (row.transcode_decision) facts.push({ label: "Playback", value: row.transcode_decision });
+                  return (
+                    <div key={row.row_id}>
+                      {row.full_title ? (
+                        <TitleRow
+                          ratingKey={row.rating_key}
+                          item={row}
+                          facts={facts}
+                          open={openMedia === row.rating_key}
+                          onToggle={row.rating_key ? () => setOpenMedia(openMedia === row.rating_key ? null : row.rating_key) : undefined}
+                        />
+                      ) : (
+                        <p className="muted small">Withheld, another viewer</p>
+                      )}
+                      {openMedia === row.rating_key && row.rating_key !== null && (
+                        <MediaPanel ratingKey={row.rating_key} onFilterToTitle={onFilterToTitle} />
+                      )}
+                    </div>
+                  );
+                })}
+              </TitleRows>
         </>
       )}
     </aside>

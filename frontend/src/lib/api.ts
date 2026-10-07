@@ -672,6 +672,12 @@ export type HistoryRow = {
   player: string | null;
   transcode_decision: string | null;
   percent_complete: number | null;
+  // Sent as well, and what a title row needs to name an episode properly.
+  title?: string | null;
+  grandparent_title?: string | null;
+  parent_media_index?: number | null;
+  media_index?: number | null;
+  year?: number | null;
 };
 
 export type HistoryPage = {

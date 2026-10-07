@@ -41,6 +41,8 @@ type IssueRow = {
   comments: number;
   created_at: string | null;
   updated_at: string | null;
+  // From Seerr, and Seerr no longer lists it. Kept here regardless.
+  seerr_gone?: boolean;
   // The reporter's plays of the file against everybody else's. A viewer is
   // only ever sent their own, so the second half is missing for them.
   reporter_plays?: number;
@@ -516,7 +518,12 @@ function IssueCard({
             </button>
           )}
         </div>
-        {fromSeerr && admin && (
+        {fromSeerr && admin && d.seerr_gone && (
+          <p className="muted small issue-aside">
+            From Seerr, which no longer lists it. It is kept here, and notes and resolutions stay here too.
+          </p>
+        )}
+        {fromSeerr && admin && !d.seerr_gone && (
           <p className="muted small issue-aside">
             From Seerr: notes and resolutions go back there, signed with your name.
             {seerrUrl && (

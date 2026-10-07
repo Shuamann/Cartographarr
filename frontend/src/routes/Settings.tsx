@@ -1,4 +1,5 @@
 import { askConfirm } from "../components/Ask";
+import SeerrImport from "../components/SeerrImport";
 import About from "../components/About";
 import HomeLinks from "../components/HomeLinks";
 import { ACCENTS, SCHEMES, applyAccent, contrast, setScheme, type Parts, type Scheme } from "../theme/accent";
@@ -1165,6 +1166,7 @@ function SettingsForm({ jumpTo, onJumped }: { jumpTo?: string | null; onJumped?:
             <div className="grid2">{section.keys.map(field)}</div>
             {section.title === "Schedule" && <SyncNow />}
             {section.title === "Where the live data comes from" && <HistoryCheck />}
+            {section.title === "Seerr" && <SeerrImport />}
             {section.title === "Backups" && <ServerTime />}
             {section.title === "Rules" && <ServerTime />}
             {section.title === "Tidying files" && (

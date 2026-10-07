@@ -1104,6 +1104,15 @@ def playback_summary(db: Session, days: int, user_id: int | None = None, machine
         )
     ).all()
     stalls = sum(n for _, n, _ in stall_rows)
+    # A stall recorded without its title still has its key, and the library
+    # knows the name: "item 4103" is not something anybody can recognise.
+    unnamed = [k for k, t, _ in stalled_titles if not t]
+    named = dict(
+        db.execute(
+            select(MediaItem.rating_key, func.coalesce(MediaItem.full_title, MediaItem.title))
+            .where(MediaItem.rating_key.in_(unnamed))
+        ).all()
+    ) if unnamed else {}
     return {
         "days": days,
         "plays": int(plays or 0),
@@ -1119,5 +1128,5 @@ def playback_summary(db: Session, days: int, user_id: int | None = None, machine
             {"cause": c or "one_off", "label": STALL_CAUSES.get(c or "one_off", c), "stalls": n}
             for c, n, _ in sorted(stall_rows, key=lambda r: -r[1])
         ],
-        "stalled_titles": [{"rating_key": k, "title": t, "stalls": n} for k, t, n in stalled_titles],
+        "stalled_titles": [{"rating_key": k, "title": t or named.get(k), "stalls": n} for k, t, n in stalled_titles],
     }

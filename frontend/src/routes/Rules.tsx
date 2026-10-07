@@ -227,12 +227,10 @@ export default function RulesRoute({
               <div className="min0">
                 <div className="row">
                   <h2>{r.name}</h2>
+                  {/* Whether it acts is said once, by the switch on the right,
+                      which is also where it is changed. Said here as well it
+                      was the same pill twice on one line. */}
                   {!r.enabled && <span className="pill">off</span>}
-                  {r.enabled && (
-                    <span className={r.record_only_effective ? "pill" : "pill warn"}>
-                      {r.record_only_effective ? "records only" : "acts"}
-                    </span>
-                  )}
                   {r.unmet && r.unmet.length > 0 && (
                     <span className="pill warn" title={`Needs ${needs(r.unmet)}`}>
                       paused: needs {needs(r.unmet)}

@@ -352,9 +352,7 @@ matters, the sample is one number.
 
 ## Issues as the system of record, and the screen for it
 
-Issues raised here are already kept here. Two things are missing: the screen
-is not yet what it should be, and there is no way to bring in what Seerr
-holds.
+Issues raised here are kept here, and what Seerr holds is brought in.
 
 ### The screen
 
@@ -371,10 +369,17 @@ landed.
 
 ### Importing from Seerr
 
-Worth doing because a report is more useful here than there: this app can put
-it next to the file, the plays behind it, what went wrong during them and
-whether the file is still on the disk, which is the whole question behind most
-reports.
+Done in 0.108.0. The five minute sync already read Seerr's issues; what it
+lacked was a way to place a report whose rating key had gone stale, a reach
+past Seerr's first page, and a memory: a report Seerr stopped listing was
+deleted here with its notes. A report is now placed by rating key, then by the
+TMDB, TVDB or IMDb id, then for a show by name, and kept when Seerr drops it.
+Settings, beside Seerr, brings everything in on demand and says what it read,
+what was new, what was already here and what it could not place.
+
+Left for later: a report placed by name alone is a guess when two shows share
+one, and is left unplaced rather than guessed. If that turns out common, the
+first air date Seerr's title lookup returns is the next thing to match on.
 
 Requests are a separate thing and stay with Seerr for now. Replacing those
 means becoming the thing that talks to Radarr and Sonarr about wanting
@@ -442,9 +447,12 @@ scan that also read every track would be a scan nobody could run quickly.
 ## The house style, applied everywhere
 
 A row about a title now carries its artwork, a poster, the facts as label and
-value and one clear action. Issues uses it. The library lists and the stream
-cards have had a pass. Not yet done the same way: the Map's lists, the
-Dashboard's lower half, Endpoints, Reports, Rules and Settings.
+value and one clear action. Issues uses it, and components/TitleRow.tsx is the
+same row for everywhere else: a person's most watched and recent plays, an
+address's titles and a place's plays on the Map. Reports put the poster beside
+a title. Every text box and select now stands at the control height, which
+they did not before. Not yet done the same way: the Dashboard's lower half and
+Settings.
 
 ---
 
