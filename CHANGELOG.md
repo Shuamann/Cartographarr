@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.100.1 - 2026-10-06
+
+### Fixed
+- An error could come back as a red box with nothing in it, which is the one state worse than the app staying
+  quiet: it says something went wrong and refuses to say what. The client read the server's explanation only when
+  it was a single string, and a validation failure arrives as a list, so it fell through to the HTTP reason
+  phrase, which is empty on HTTP/2 and therefore on every install behind a reverse proxy. A failure now names the
+  fields it objected to, and when there is genuinely nothing to report it says so with the status rather than
+  showing an empty box.
+
 ## 0.100.0 - 2026-10-06
 
 ### Added

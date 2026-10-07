@@ -29,13 +29,39 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    // FastAPI puts the useful message in `detail`; fall back to the status.
-    let message = res.statusText;
+    /* Something has to be said, whatever came back.
+     *
+     * This used to fall back to res.statusText, which is empty on HTTP/2, so
+     * every install behind a reverse proxy showed a red box with nothing in
+     * it: the one state where the app knows something went wrong and says
+     * less than if it had stayed quiet. A validation failure made it worse,
+     * because FastAPI returns those as a list and the code only read a
+     * string, so the fallback was reached and the fallback was blank.
+     */
+    let message = "";
     try {
       const body = await res.json();
-      if (typeof body?.detail === "string") message = body.detail;
+      if (typeof body?.detail === "string") {
+        message = body.detail;
+      } else if (Array.isArray(body?.detail)) {
+        // A validation failure: a list of what each field objected to. Not
+        // pretty, but naming the field beats naming nothing.
+        message = body.detail
+          .map((d: { loc?: unknown[]; msg?: string }) =>
+            [Array.isArray(d?.loc) ? d.loc.filter((p) => p !== "body").join(".") : null, d?.msg]
+              .filter(Boolean)
+              .join(": "),
+          )
+          .filter(Boolean)
+          .join("; ");
+      } else if (typeof body?.message === "string") {
+        message = body.message;
+      }
     } catch {
       /* non-JSON error body */
+    }
+    if (!message.trim()) {
+      message = res.statusText.trim() || `The server answered ${res.status} and said nothing else.`;
     }
     throw new ApiError(message, res.status);
   }
