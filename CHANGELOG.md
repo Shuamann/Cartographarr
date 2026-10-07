@@ -4,6 +4,29 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.110.0 - 2026-10-07
+
+### Added
+- Library gains "Missing and doubled": the holes in a season, and the files the library is paying for twice.
+  Neither needed anything new to be recorded. The episode numbers and the count of files behind each item were
+  already in what the scan writes down and nobody had ever asked them a question.
+- Only a gap between two episodes that are here counts as missing. A season that has aired five of ten has not
+  lost five episodes, and an app that says so is noise in the first week of every season. Specials are left out,
+  because season zero is numbered however the person filing it felt.
+- A season that reads as every second episode gone is called out as double episodes rather than half empty. Plex
+  files "S01E01-E02" under index 1, so a complete season looks ruined. Measured on the library this was written
+  against: eleven seasons and 187 of the apparently missing episodes were exactly that, and a season that is
+  mostly that shape with a real gap in it says how many of its holes are which.
+- An item with more than one file behind it says how much room keeping the best copy would give back, and opens
+  to every file with its resolution, container and path, which is usually enough to see which one to lose. The
+  sizes of the files past the first are not kept, so they are asked of Plex for the few dozen items it matters
+  for rather than carried on every row of a table of thirty thousand. With Plex unreachable the list is still
+  right and says the room is not known rather than guessing.
+- Separate items in one library sharing an external id are listed as well, which is what a stray copy in the
+  wrong folder or a match made twice looks like. Matched on the id rather than the name, because two films can
+  share a name and two entries for one film cannot share an id by accident. The same film in a 4K library and an
+  HD one is not a duplicate and is left alone.
+
 ## 0.109.1 - 2026-10-07
 
 ### Fixed

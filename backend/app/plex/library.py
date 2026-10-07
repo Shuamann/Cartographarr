@@ -429,3 +429,53 @@ def details(keys: list[int]) -> list[dict[str, Any]]:
             out.append(row)
     out.extend({"rating_key": key} for key in keys if key not in answered)
     return out
+
+
+def versions_of(keys: list[int]) -> dict[int, list[dict[str, Any]]]:
+    """Every file behind each of these items, not just the first.
+
+    media_items keeps one file per item, because everything built on it asks
+    about one file. An item Plex says has three has two nobody here has ever
+    seen a size or a path for, which is exactly what "what is this costing me
+    twice" wants to know.
+
+    Asked for the few dozen items it matters for rather than carried on every
+    row of a table of thirty thousand, in the same batched form the details
+    come in. Blocking, because plexapi is.
+    """
+    from app.plex.server import server
+
+    plex = server()
+    out: dict[int, list[dict[str, Any]]] = {}
+    for start in range(0, len(keys), DETAIL_BATCH):
+        chunk = keys[start:start + DETAIL_BATCH]
+        if not chunk:
+            continue
+        path = "/library/metadata/" + ",".join(str(k) for k in chunk)
+        try:
+            found = plex.fetchItems(path)
+        except Exception as exc:  # noqa: BLE001 - one bad batch should not stop the rest
+            log.warning("could not read the files behind %d items: %s", len(chunk), exc)
+            continue
+        for item in found:
+            key = _int(getattr(item, "ratingKey", None))
+            if key is None:
+                continue
+            files = []
+            for media in getattr(item, "media", None) or []:
+                for part in getattr(media, "parts", None) or []:
+                    files.append({
+                        "path": getattr(part, "file", None) or None,
+                        "size": _int(getattr(part, "size", None)),
+                        "container": (
+                            getattr(part, "container", None) or getattr(media, "container", None) or None
+                        ),
+                        "bitrate": _int(getattr(media, "bitrate", None)),
+                        "resolution": _resolution(getattr(media, "videoResolution", None)),
+                        "video_codec": getattr(media, "videoCodec", None) or None,
+                        "audio_codec": getattr(media, "audioCodec", None) or None,
+                        "audio_channels": _int(getattr(media, "audioChannels", None)),
+                        "duration": _int(getattr(media, "duration", None)),
+                    })
+            out[key] = files
+    return out

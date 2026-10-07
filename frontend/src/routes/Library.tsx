@@ -1,4 +1,5 @@
 import BrandIcon from "../components/BrandIcon";
+import GapsSection from "../components/Gaps";
 import { LINKS } from "../components/StreamDetail";
 import { askConfirm, askText, tell } from "../components/Ask";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -154,6 +155,7 @@ const SECTIONS = [
   { id: "attention", title: "Files worth attention" },
   { id: "transcodes", title: "Why streams transcode" },
   { id: "four-k", title: "4K copies" },
+  { id: "gaps", title: "Missing and doubled" },
   { id: "storage", title: "Storage" },
   { id: "requests", title: "Requested, never watched" },
   { id: "queue", title: "Remediation queue" },
@@ -281,7 +283,7 @@ export default function Library({
       <div className="settings-page">
         <header className="settings-page-head row-between">
           <h2>{current.title}</h2>
-          {section !== "overview" && section !== "requests" && section !== "queue" && (
+          {section !== "overview" && section !== "requests" && section !== "queue" && section !== "gaps" && (
             <label className="inline-select">
               <span className="muted small">Looking back</span>
               <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
@@ -299,6 +301,7 @@ export default function Library({
         {section === "attention" && <Attention days={days} inFlight={inFlight} />}
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
+        {section === "gaps" && <GapsSection />}
         {section === "storage" && <StorageSection days={days} />}
         {section === "requests" && <Requests />}
         {section === "queue" && <RemediationQueue />}

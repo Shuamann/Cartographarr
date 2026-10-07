@@ -456,6 +456,44 @@ Settings.
 
 ---
 
+## Holes in a season, and files kept twice
+
+Both shipped, and both were sitting in what the scan already writes down. The
+useful part is what had to be left out rather than what went in.
+
+**A season still going out.** The first version compared against anything
+other than the last episode present, which reports five missing episodes every
+week of every running season. Only a hole between two episodes that are here
+counts. That also means a show whose first episode was never filed reads as
+complete, which is the right trade: a false "nothing missing" is quiet and a
+false "five missing" is noise on every row.
+
+**Double episodes.** Plex files "S01E01-E02" under index 1, so a complete
+season reads as every second file gone. A season whose holes all sit alone
+between two episodes, and which has about as many holes as episodes, is
+counted separately and said to be, because a judgement nobody is told about is
+indistinguishable from a bug. Measured: eleven seasons and 187 of 1,572
+apparent holes. A season mostly that shape with a real gap in it still appears,
+and carries the count of which holes are which.
+
+**A show numbered absolutely.** The noisiest rows are long running shows where
+a season spans episodes 17 to 88 and seven are here. That is true of what is on
+disk and the row says what it covers, but the ordering puts them first. If that
+turns out to annoy, the thing to try is Plex's own season leaf count rather
+than a better inference from the numbers.
+
+**What the sizes cost.** media_items keeps one file per item, because every
+other thing built on it asks about one. Rather than widen the table and
+migrate, the few dozen items with several files are asked of Plex when the page
+opens, in the same batched form the details use. Fewer than two known sizes is
+reported as not known rather than as zero, because zero reads as "nothing to
+gain here".
+
+**Not built: an action.** The list shows both paths and leaves the deleting to
+a person. Wiring it to the tidy queue would mean deleting a file nobody asked
+about on the strength of an inference, which is a different kind of feature and
+wants more thought than a night.
+
 ## Smaller things noticed and not done
 
 - **A weekly digest exists and is off by default.** Worth revisiting whether

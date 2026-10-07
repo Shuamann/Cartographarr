@@ -232,6 +232,41 @@ async def attention(_: AdminUser, kind: str = Query("trouble", pattern="^(troubl
     return await asyncio.to_thread(cleanup.attention, kind, days, threshold)
 
 
+@router.get("/gaps")
+def gaps(_: AdminUser, db: Db, section_id: int | None = None) -> dict:
+    """Seasons with an episode missing out of the middle of them.
+
+    Only the middle. A season that has aired five of ten has no hole in it,
+    and an app that calls that five missing episodes is wrong every week of
+    every season.
+    """
+    from app.services import gaps as service
+
+    return service.holes(db, section_id)
+
+
+@router.get("/copies")
+async def copies(_: AdminUser, section_id: int | None = None, sizes: bool = True) -> dict:
+    """What the library is holding twice.
+
+    Two different things under one question, because the answer to both is the
+    same: an item Plex has several files for, and two separate items that
+    claim to be the same title.
+
+    Sizes come from Plex because they are not kept: a worker thread, since the
+    page waits on it and plexapi blocks.
+    """
+    import asyncio
+
+    from app.services import gaps as service
+
+    def read() -> dict:
+        with session_scope() as db:
+            return service.copies(db, section_id, sizes=sizes)
+
+    return await asyncio.to_thread(read)
+
+
 @router.get("/cleanup")
 async def cleanup(_: AdminUser, days: int = Days) -> dict:
     """Big files nobody watches, and why each one stands out."""
