@@ -20,6 +20,7 @@ import {
   type PersonEvent,
   type PlexUser,
   type Profile,
+  type PartwayRow,
   type UserDetail,
 } from "../lib/api";
 import { useNav } from "../lib/nav";
@@ -592,6 +593,38 @@ export default function PeopleRoute({
 
 type Tab = "overview" | "users" | "history" | "places" | "devices" | "activity" | "access";
 
+/* What somebody started and did not finish.
+ *
+ * Already answerable from history and never shown anywhere. An episode is
+ * listed under its show, because the answer to "what am I partway through" is
+ * the name of the show, not the name of an episode.
+ */
+function Partway({ rows, onOpen }: { rows: PartwayRow[]; onOpen?: (ratingKey: number) => void }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="profile-section">
+      <h3>Partway through</h3>
+      <div className="mini-list">
+        {rows.map((r) => (
+          <button key={r.rating_key} className="mini mini-button" onClick={() => onOpen?.(r.rating_key)}>
+            <div className="min0">
+              <span className="clip">{r.title}</span>
+              {/* The episode only where it says something the show does not. */}
+              {r.what !== r.title && <p className="muted small clip">{r.what}</p>}
+            </div>
+            <span className="row partway-at">
+              <span className="progress" title={`${r.percent}% in`}>
+                <span className="progress-fill" style={{ width: `${r.percent}%` }} />
+              </span>
+              <span className="muted small">{r.percent}%</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function UserProfile({
   userId,
   live,
@@ -698,6 +731,7 @@ function UserProfile({
               <StreamDetail key={s.session_key} session={s} compact />
             ))}
             <Overview profile={u} extra={[["Devices", String(u.devices.length)]]} scope={{ user_id: [userId] }} />
+            <Partway rows={u.partway ?? []} onOpen={(key) => nav.openLibrary?.({ ratingKey: key, mediaType: "movie" })} />
             <PlaybackSection path={`/users/${userId}/playback`} who="this person" />
           </>
         )}

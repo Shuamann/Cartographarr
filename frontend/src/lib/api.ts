@@ -576,7 +576,19 @@ export type Profile = {
   }[];
 };
 
-export type UserDetail = PlexUser & Profile & { devices: Device[] };
+export type UserDetail = PlexUser & Profile & { devices: Device[]; partway?: PartwayRow[] };
+
+/* Something started and not finished, from history. An episode is named by
+   its show, because that is what somebody would say they are partway through. */
+export type PartwayRow = {
+  rating_key: number;
+  show_rating_key: number | null;
+  title: string | null;
+  what: string | null;
+  media_type: string | null;
+  percent: number;
+  last_play: number | null;
+};
 
 export type DeviceDetail = Profile & {
   machine_id: string;

@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.106.0 - 2026-10-07
+
+### Added
+- A person's page says what they are partway through. The history has always carried how far into a thing each
+  play got and nothing has ever shown it. A show is one row however many of its episodes are part watched, naming
+  the episode they are actually on, because somebody four episodes into a season is partway through one programme.
+- Starting points for the new groupings, since a grouping nobody knows exists is a grouping nobody uses: what
+  people watch, where the room goes, who watches what, and which genres transcode.
+
+### Changed
+- Going back to the start of something does not unwatch it. The furthest somebody ever got counts, not their most
+  recent attempt.
+
 ## 0.105.0 - 2026-10-07
 
 ### Added

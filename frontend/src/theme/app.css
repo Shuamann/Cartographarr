@@ -4954,6 +4954,17 @@ label.locked .pill {
   padding-left: var(--space-5);
 }
 
+/* How far into something somebody got, beside the thing. Narrow on purpose:
+   the name is what is being read and the bar is a glance. */
+.partway-at {
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+.partway-at .progress {
+  width: 90px;
+}
+
 /* The tick that vouches for a device. Grey until it is given, then the colour
    the rest of the app uses for a thing that is as it should be. */
 .btn.trust span {

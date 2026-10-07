@@ -628,6 +628,17 @@ PRESETS: list[dict[str, Any]] = [
      "group": "device", "then": "transcode_decision", "range": "30"},
     {"id": "top-shows", "name": "Most watched", "source": "plays", "measure": "hours",
      "group": "show", "then": None, "range": "30"},
+    # What a title is, rather than what its file is. These are new enough to be
+    # worth a starting point: a grouping nobody knows exists is a grouping
+    # nobody uses.
+    {"id": "genre-watched", "name": "What people watch", "source": "plays", "measure": "hours",
+     "group": "genre", "then": None, "range": "90"},
+    {"id": "genre-room", "name": "Where the room goes", "source": "library", "measure": "size",
+     "group": "genre", "then": None, "range": "3650"},
+    {"id": "genre-person", "name": "Who watches what", "source": "plays", "measure": "plays",
+     "group": "user", "then": "genre", "range": "90"},
+    {"id": "genre-transcode", "name": "Genres that transcode", "source": "plays", "measure": "plays",
+     "group": "genre", "then": "transcode_decision", "range": "90"},
     {"id": "vpn-users", "name": "Plays from VPNs, by user", "source": "plays", "measure": "plays",
      "group": "user", "then": "network", "range": "90", "filters": "is_hosting=true"},
     {"id": "matches-rule", "name": "Rule matches by rule", "source": "matches", "measure": "matches",

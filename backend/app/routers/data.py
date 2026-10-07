@@ -1110,12 +1110,17 @@ def user_detail(user_id: int, db: Db, scope: ViewerScope) -> dict:
         select(Device).where(Device.user_id == user_id).order_by(desc(Device.last_seen))
     ).scalars().all()
 
+    from app.services import partway
+
     return {
         **{c.name: getattr(user, c.name) for c in User.__table__.columns},
         **_profile(db, [History.user_id == user_id]),
         "devices": [
             {c.name: getattr(d, c.name) for c in Device.__table__.columns} for d in devices
         ],
+        # What they started and did not finish. Already answerable from
+        # history and never shown anywhere.
+        "partway": partway.for_user(db, user_id),
     }
 
 
