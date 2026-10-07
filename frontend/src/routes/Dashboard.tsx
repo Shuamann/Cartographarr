@@ -2,6 +2,7 @@ import Loading from "../components/Loading";
 import { displayTitle, episodeCode } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
+import { runningPercent, useRunningOffset } from "../lib/playing";
 import TravelFlags from "../components/TravelFlags";
 import StreamDetail from "../components/StreamDetail";
 import EnforcementLog from "../components/EnforcementLog";
@@ -380,14 +381,21 @@ function StreamCard({
   onClick: () => void;
 }) {
   const nav = useNav();
-  const progress = Math.min(Math.max(Number(session.progress_percent ?? 0), 0), 100);
   const who = session.friendly_name || session.username || "Unknown";
   const paused = (session.state || "").toLowerCase() === "paused";
   const transcoding = session.transcode_decision === "transcode";
   const quality = session.stream_video_full_resolution || session.video_full_resolution;
   const rate = Number(session.stream_bitrate || session.bandwidth || 0);
-  const offset = Number(session.view_offset ?? 0);
   const total = Number(session.duration ?? 0);
+  // Runs on between polls. Stops dead when the stream is not playing, which
+  // is the half that keeps it honest: a paused stream whose timer climbed
+  // would be a lie told smoothly.
+  const offset = useRunningOffset(
+    Number(session.view_offset ?? 0),
+    (session.state || "").toLowerCase() === "playing",
+    total,
+  );
+  const progress = runningPercent(offset, total) || Math.min(Math.max(Number(session.progress_percent ?? 0), 0), 100);
   // Where they were when this stream started, recorded at the time. A stream
   // first seen at the beginning says so; anything else says where they resumed.
   const from = session.started_percent;

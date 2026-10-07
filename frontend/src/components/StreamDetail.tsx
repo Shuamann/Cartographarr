@@ -2,6 +2,7 @@ import { episodeCode } from "../lib/titles";
 import { useState } from "react";
 import BrandIcon from "./BrandIcon";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
+import { runningPercent, useRunningOffset } from "../lib/playing";
 import { useNav } from "../lib/nav";
 import { coveredBy, useAddressBans, useBans } from "../lib/bans";
 import { useIsAvailable } from "./Gated";
@@ -135,9 +136,16 @@ export default function StreamDetail({
   const where = session.geo
     ? [session.geo.city, session.geo.region, session.geo.country].filter(Boolean).join(", ")
     : null;
-  const progress = Math.min(Number(session.progress_percent ?? 0), 100);
-  const offset = Number(session.view_offset ?? 0);
   const duration = Number(session.duration ?? 0);
+  // Runs on between polls rather than sitting still and then jumping. The
+  // percentage is worked out from the same number as the clock, so the bar
+  // and the time cannot disagree.
+  const offset = useRunningOffset(
+    Number(session.view_offset ?? 0),
+    (session.state || "").toLowerCase() === "playing",
+    duration,
+  );
+  const progress = Math.round(runningPercent(offset, duration) || Math.min(Number(session.progress_percent ?? 0), 100));
 
   // An episode reads as the show on top and the episode beneath, which is how
   // everyone looks for it, rather than one long "Show - Episode" string.

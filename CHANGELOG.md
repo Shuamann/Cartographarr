@@ -4,6 +4,14 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.101.1 - 2026-10-07
+
+### Changed
+- A playing stream's position runs on between readings instead of sitting still and then jumping. It stops dead
+  the moment the stream is not playing, and every reading from the server replaces the guess outright, so a seek
+  or a pause lands on the next poll and the number is never more than one interval from the truth. The bar and
+  the clock are worked out from the same number, so they cannot disagree.
+
 ## 0.101.0 - 2026-10-07
 
 ### Fixed
