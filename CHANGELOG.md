@@ -4,6 +4,29 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.111.0 - 2026-10-07
+
+### Fixed
+- Tidying a file never told Plex, so the server went on reporting the tracks, the size and the duration from
+  before the rewrite while this app's own page showed the new ones. The job now asks Plex to read the file again,
+  and says on the job whether it managed to.
+- Worse where a step repackaged the container: the old file is deleted and a new one written beside it with a
+  different ending, and Plex went on listing a file that was not there until its own nightly scan, so pressing
+  play got an error about a file this app removed on purpose. Where the name changed, Plex is asked to walk that
+  one folder, which is the same call its own Scan Library Files makes with a directory named, 18 milliseconds
+  against a walk of the whole library.
+- A replacement fetched through Radarr or Sonarr lands under a new name and deletes the old file, and had the
+  same hole. Radarr can be wired to Plex itself, but assuming somebody did that is assuming the thing that
+  breaks.
+- A tidied file kept the path ffmpeg wrote to rather than the one Plex reports. Where the two are mounted
+  differently that attributed the file to the wrong store on the Storage page.
+
+### Changed
+- Nothing re-matches the item against the metadata agent. Nothing about the match changed, and a re-match can
+  quietly decide a file is a different film.
+- A server that will not answer never fails a tidy that worked. The nightly scan is still the floor, so the worst
+  case is the state everything was in before this existed.
+
 ## 0.110.1 - 2026-10-07
 
 ### Fixed

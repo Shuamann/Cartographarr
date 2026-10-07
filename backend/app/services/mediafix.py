@@ -860,6 +860,17 @@ async def _run(job_id: int) -> None:
         job = db.get(MediaJob, job_id)
         source, asked = job.path, json.loads(job.steps or "[]")
         rating_key = job.rating_key
+    # Plex's own path for this file, which is not necessarily this container's:
+    # the two are mounted however somebody mounted them. Kept because Plex has
+    # to be told where to look afterwards, and because the row should go on
+    # holding the path Plex uses rather than the one ffmpeg wrote to.
+    plex_path = None
+    if rating_key is not None:
+        from app.models import MediaItem
+
+        with session_scope() as db:
+            item = db.get(MediaItem, rating_key)
+            plex_path = item.file_path if item else None
     # Older jobs stored a bare list of steps; newer ones carry the choice too.
     steps = asked.get("steps", []) if isinstance(asked, dict) else asked
     chosen = asked.get("chosen", {}) if isinstance(asked, dict) else {}
@@ -930,10 +941,34 @@ async def _run(job_id: int) -> None:
     os.replace(target, final)
     if final != source:
         os.unlink(source)
-    await asyncio.to_thread(_rewritten, rating_key, final, after)
+    # The same change of ending, applied to the path Plex knows. Writing the
+    # container's path into the row instead would attribute the file to the
+    # wrong store on the Storage page, and hand Plex a folder it cannot find.
+    plex_final = (os.path.splitext(plex_path)[0] + suffix) if plex_path else final
+    await asyncio.to_thread(_rewritten, rating_key, plex_final, after)
+    # Plex has no reason to look at a file again when its path has not
+    # changed, so without this it goes on reporting the tracks, the size and
+    # the duration from before the rewrite, and the page disagrees with the
+    # server about a file this app has just changed. When the ending changed,
+    # the old file is gone and Plex is still listing it, so anybody pressing
+    # play gets an error about a file deleted on purpose.
+    told = await asyncio.to_thread(_told_plex, rating_key, plex_path, final != source)
     changes = len(steps)
     word = "changes" if changes != 1 else "change"
-    await asyncio.to_thread(_finish, job_id, "done", f"Tidied, {changes} {word} made", before - after)
+    # Said on the job, because "Plex was not told" is the difference between a
+    # file that is fixed and a file that is fixed everywhere but the one place
+    # anybody presses play.
+    said = "Plex told" if told.get("analysed") else "Plex could not be told, so it will catch up on its own scan"
+    await asyncio.to_thread(
+        _finish, job_id, "done", f"Tidied, {changes} {word} made, {said}", before - after
+    )
+
+
+def _told_plex(rating_key: int | None, plex_path: str | None, renamed: bool) -> dict:
+    """Tell Plex the file changed, and never let that fail the job."""
+    from app.plex import maintenance
+
+    return maintenance.file_changed(rating_key, plex_path, renamed)
 
 
 def _rewritten(rating_key: int | None, path: str, size: int) -> None:

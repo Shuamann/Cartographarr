@@ -388,8 +388,20 @@ async def _imported(r: Any, service: Any, file: dict[str, Any] | None = None) ->
         file = await service.current_file(r.arr_id, r.episode_id)
     with session_scope() as db:
         item = db.get(MediaItem, r.rating_key)
+        where = item.file_path if item is not None else None
         if item is not None:
             item.file_checked_at = None  # read the new file's details on the next sync
+    # Radarr and Sonarr import under a new name and delete the old file, so
+    # Plex is left listing one that is gone until its own nightly scan and
+    # anybody pressing play gets an error. A scan of that one folder is what
+    # finds the new file and loses the old. Radarr can be wired to Plex itself,
+    # but assuming somebody did that is assuming the thing that breaks.
+    if where:
+        import asyncio
+
+        from app.plex import maintenance
+
+        await asyncio.to_thread(maintenance.file_changed, r.rating_key, where, True)
     # What anyone reported about this file was about the old one. Closing it
     # here, with what replaced it, is the end of the loop the report started.
     try:
