@@ -13,8 +13,18 @@ import re
 
 FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
 
-# The helpers that draw one cell of a .spec grid, by file.
-CELLS = {"routes/Issues.tsx": "Pair", "components/StreamDetail.tsx": "Spec", "routes/People.tsx": "Stat"}
+# The helpers that draw one cell of a .spec grid, by file. Three of these are
+# now one shared component under a local name, so the check is that the name is
+# bound in the file at all rather than that the file declares a function: three
+# copies of the same five lines could not be fixed in one place, which is how
+# the layout drifted apart in the first place.
+CELLS = {
+    "routes/Issues.tsx": "Pair",
+    "components/StreamDetail.tsx": "Spec",
+    "routes/People.tsx": "Stat",
+    "routes/Library.tsx": "Fact",
+    "components/Fact.tsx": "Fact",
+}
 
 # Files whose rows about titles carry facts written as { label, value }, the
 # same label column in a row's own grid.
@@ -25,15 +35,21 @@ def test_a_spec_label_is_one_word():
     if not FRONTEND.exists():  # backend-only checkouts
         return
     offenders = []
+    seen = 0
     for rel, name in CELLS.items():
         source = (FRONTEND / rel).read_text(encoding="utf-8")
-        assert f"function {name}(" in source, f"{rel} no longer draws its cells with {name}"
+        assert f"function {name}(" in source or f"const {name} = " in source or f"import {name} " in source, (
+            f"{rel} no longer draws its cells with {name}"
+        )
         # The label, written either as a string or as an expression choosing
         # between strings, such as one for an admin and one for a viewer.
         for label in re.findall(rf"<{name}\b[^>]*?\blabel=(\"[^\"]*\"|\{{[^}}]*\}})", source):
+            seen += 1
             for word in re.findall(r"\"([^\"]*)\"", label):
                 if " " in word.strip():
                     offenders.append(f"{rel}: {word}")
+    # A pattern that finds nothing passes whatever the labels say.
+    assert seen >= 35, f"found only {seen} spec labels; the pattern has drifted from the code"
     assert not offenders, "Reword these to one word, or they break over two lines:\n" + "\n".join(offenders)
 
 

@@ -1,4 +1,5 @@
 import BrandIcon from "../components/BrandIcon";
+import Fact from "../components/Fact";
 import GapsSection from "../components/Gaps";
 import { LINKS } from "../components/StreamDetail";
 import { askConfirm, askText, tell } from "../components/Ask";
@@ -953,15 +954,6 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
   );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="spec-pair">
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
-
 /* Hand a file back to Radarr or Sonarr. Search asks it to look for a better
  * release, which it only grabs if the quality profile rates it higher; Tag
  * marks it to pick a release by hand. Neither deletes the current file. */
@@ -1237,7 +1229,11 @@ function TidyPanel({
     const languages = languagesIn(tracks);
     return (
       <div className="track-group">
-        <div className="row-between track-group-head">
+        {/* Packed left rather than spread. "All" and "None" belong to the
+            heading beside them, and space-between put them a thousand pixels
+            away at the far edge of the card, where they read as belonging to
+            whatever happened to be on that side. */}
+        <div className="row wrap track-group-head">
           <h4>
             {which === "audio" ? "Audio" : "Subtitles"}{" "}
             <span className="muted small">

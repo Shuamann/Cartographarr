@@ -192,3 +192,39 @@ def test_a_text_box_stands_as_tall_as_the_buttons_beside_it():
     assert re.search(r"padding-top:\s*0", body) and re.search(r"padding-bottom:\s*0", body), (
         "vertical padding on a fixed height box only squeezes the text"
     )
+
+
+def test_the_facts_grid_cannot_push_a_card_sideways():
+    """The same trap the popup card was fixed for, in the same shape.
+
+    A media query asks how wide the window is. These facts sit in a card about
+    four fifths of it, so three columns each sized to their longest value came
+    to 1,336 pixels inside a 1,190 pixel page and put a sideways scrollbar
+    across the whole application. Measured in a real browser at 1500 wide:
+    1622 of document against 1500 of viewport, before and 1500 after.
+
+    A bare `max-content` track cannot shrink. With a floor of zero it sizes to
+    its contents where there is room and gives way where there is not, and
+    what will not fit is cut rather than carried outside the card.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    for columns in re.finditer(r"\.spec \{[^}]*?grid-template-columns:([^;]+);", css, re.DOTALL):
+        track = columns.group(1).strip()
+        assert "repeat(" not in track or "minmax(0," in track.replace(" ", ""), (
+            "a repeated track needs a floor of zero or it cannot give way: " + track
+        )
+    # The rule that holds a fact to one line, wherever it is written. There
+    # are three `.spec-pair dd` rules: the base one, the compact popup's,
+    # which deliberately wraps instead, and this one.
+    held = [
+        body
+        for body in re.findall(r"\.spec-pair dd \{([^}]*)\}", css)
+        if "white-space: nowrap" in body
+    ]
+    assert held, "the rule holding a fact to one line is gone"
+    for body in held:
+        assert "text-overflow: ellipsis" in body and "overflow: hidden" in body, (
+            "a value held to one line has to be cut when it will not fit, not carried outside the card"
+        )

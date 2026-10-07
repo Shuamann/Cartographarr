@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Loading from "../components/Loading";
+import Fact from "../components/Fact";
 import { api, useApi } from "../lib/api";
 import { type FileDetail, fileFormat, mbps, size } from "./Library";
 import { useNav } from "../lib/nav";
@@ -407,14 +408,7 @@ export default function Issues() {
   );
 }
 
-function Pair({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="spec-pair">
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
+const Pair = Fact;
 
 function IssueCard({
   id,

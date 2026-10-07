@@ -1,6 +1,7 @@
 import { episodeCode } from "../lib/titles";
 import { useState } from "react";
 import BrandIcon from "./BrandIcon";
+import Fact from "./Fact";
 import { api, useApi, type LiveSession, type MediaDetail } from "../lib/api";
 import { runningPercent, useRunningOffset } from "../lib/playing";
 import { useNav } from "../lib/nav";
@@ -444,14 +445,7 @@ function Jump({
  * block went ragged. Wrapping the pair lets the cells flow instead: a long one
  * takes the room it needs and nothing breaks in the middle. A div between dl
  * and its dt is allowed, and screen readers still read the pairs. */
-function Spec({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="spec-pair">
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
+const Spec = Fact;
 
 function decision(value: string | null | undefined): string {
   if (!value) return "Unknown";

@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.110.1 - 2026-10-07
+
+### Fixed
+- An open file put a sideways scrollbar across the whole application. The facts beside a file are laid out in two
+  or three columns depending on how wide the window is, and they sit in a card about four fifths of it, so three
+  columns each as wide as their longest value came to 1,336 pixels inside a 1,190 pixel page. Measured at a
+  window of 1,500: 1,622 of document before, 1,500 after. The same trap the popup card was fixed for, and there
+  is now a test for the shape of it.
+- A value too long for its column is cut with an ellipsis and kept whole in its tooltip, rather than carried out
+  past the edge of the card.
+- "All" and "None" sit beside the heading they belong to in the tidy panel, instead of a thousand pixels away at
+  the far edge of the card where they read as belonging to whatever happened to be on that side. The button that
+  says which audio track plays first sits beside its track for the same reason.
+
+### Changed
+- Three copies of the same five line component, one per screen, are one shared one. That is how a layout drifts:
+  the same thing in four files cannot be fixed in one place.
+
 ## 0.110.0 - 2026-10-07
 
 ### Added

@@ -1068,6 +1068,9 @@ code {
 .track-group-head h4 {
   margin: 0;
 }
+.track-group-head h4 {
+  margin: 0;
+}
 
 /* The language is how the choice is actually made. Ninety tracks is fifteen
    languages six times over, and nobody goes down ninety tick boxes, so each
@@ -1087,10 +1090,16 @@ code {
 .track-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* Packed left, not spread. The button says what this one track should do
+     and space-between sent it to the far edge of a card a thousand pixels
+     wide, level with a different row's text. */
+  justify-content: flex-start;
   gap: var(--space-3);
   padding: 2px 0;
   border-bottom: 1px solid var(--border);
+}
+.track-row .btn {
+  flex: 0 0 auto;
 }
 /* A track on its way out still reads, but reads as going. */
 .track-row.dropping .track-lang,
@@ -1101,7 +1110,10 @@ code {
 }
 .track-row .check {
   gap: var(--space-3);
-  flex: 1;
+  /* As wide as what is in it, and no wider. Growing to fill the row sent the
+     button that says what to do about this one track to the far edge of a
+     card a thousand pixels across, level with a different row's text. */
+  flex: 0 1 auto;
 }
 /* First and on its own, because it is what the eye is looking for. */
 .track-lang {
@@ -2611,18 +2623,29 @@ label.locked .pill {
   font-size: var(--text);
 }
 @media (min-width: 700px) {
+  /* minmax rather than bare max-content, which is the same trap the popup
+     card was fixed for and in the same shape: a media query asks how wide the
+     window is, and these facts sit in a card about four fifths of it. Three
+     columns each as wide as their longest value came to 1,336 pixels inside a
+     1,190 pixel page and put a sideways scrollbar across the whole app. With
+     a floor of zero the tracks still size to their contents where there is
+     room and give way where there is not. */
   .spec {
-    grid-template-columns: repeat(2, max-content);
+    grid-template-columns: repeat(2, minmax(0, max-content));
   }
   /* A fact belongs on one line. Only once there is room for it: on a phone it
-     would be a sideways scroll. */
+     would be a sideways scroll. What will not fit is cut with an ellipsis and
+     kept whole in the title, so a long file path costs a hover rather than
+     the layout. */
   .spec-pair dd {
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 @media (min-width: 1500px) {
   .spec {
-    grid-template-columns: repeat(3, max-content);
+    grid-template-columns: repeat(3, minmax(0, max-content));
   }
 }
 .spec-pair {
