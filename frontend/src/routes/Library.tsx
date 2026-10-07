@@ -1,6 +1,6 @@
 import BrandIcon from "../components/BrandIcon";
 import { LINKS } from "../components/StreamDetail";
-import { askConfirm, askText } from "../components/Ask";
+import { askConfirm, askText, tell } from "../components/Ask";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { when } from "../components/DataTable";
 import Loading from "../components/Loading";
@@ -3361,6 +3361,7 @@ const LENSES: { id: Lens; label: string; blurb: string }[] = [
 ];
 
 function Attention({ days, inFlight }: { days: number; inFlight: Map<number, string> }) {
+  const nav = useNav();
   const [lens, setLens] = useState<Lens>(() => (localStorage.getItem("library.lens") as Lens) || "trouble");
   const [error, setError] = useState<string | null>(null);
   const [showKept, setShowKept] = useState(false);
@@ -3397,6 +3398,61 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
 
   const here = LENSES.find((l) => l.id === lens)!;
 
+  /* Tidying the whole list.
+   *
+   * The feature has only ever worked one file at a time, opened by hand, and
+   * this list runs to two hundred. Asked for first as a dry run, so the
+   * question is answered with what would actually happen to which files
+   * rather than with a number, and each file is queued as its own job so the
+   * queue says which one it is on and any of them can be stopped.
+   */
+  async function tidyAll() {
+    const shown = data.data?.items.length ?? 0;
+    if (!shown) return;
+    setError(null);
+    try {
+      const preview = await api.post<{ queued: number; skipped: number; not_done: { why: string }[] }>(
+        "/library/tidy/many",
+        { kind: lens, days, limit: shown, dry_run: true },
+      );
+      if (!preview.queued) {
+        void tell("Nothing to do", "None of these files has anything worth changing.");
+        return;
+      }
+      if (
+        !(await askConfirm({
+          title: `Tidy ${preview.queued} ${preview.queued === 1 ? "file" : "files"}?`,
+          body: (
+            <>
+              <p>
+                Each one is read and written once, with the steps worked out from that file rather than the same
+                thing done to all of them. The picture is never re-encoded, and the original is replaced only
+                after the result is checked.
+              </p>
+              <p>
+                They run one at a time and the Remediation queue shows which. Any of them can be stopped before it
+                starts.
+                {preview.skipped > 0 && ` ${preview.skipped} will be left alone, with nothing worth changing.`}
+              </p>
+            </>
+          ),
+          confirm: `Tidy ${preview.queued}`,
+          danger: true,
+        }))
+      )
+        return;
+      const done = await api.post<{ queued: number; skipped: number }>("/library/tidy/many", {
+        kind: lens,
+        days,
+        limit: shown,
+      });
+      queueChanged();
+      void tell("Queued", `${done.queued} queued. The Remediation queue shows how far along it is.`);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   return (
     <>
       <div className="segmented">
@@ -3406,7 +3462,14 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
           </button>
         ))}
       </div>
-      <p className="muted">{here.blurb}</p>
+      <div className="row-between">
+        <p className="muted min0">{here.blurb}</p>
+        {lens === "messy" && nav.isAdmin && (data.data?.items.length ?? 0) > 1 && (
+          <button className="btn" onClick={tidyAll}>
+            Tidy all {data.data?.items.length}
+          </button>
+        )}
+      </div>
       {error && <p className="note bad-note" role="alert">{error}</p>}
 
       {data.error && <p className="note bad-note" role="alert">{data.error}</p>}

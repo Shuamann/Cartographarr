@@ -583,6 +583,82 @@ async def tidy_file(
     return {"job": job_id}
 
 
+@router.post("/tidy/many")
+async def tidy_many(
+    admin: AdminUser,
+    kind: str = Body("messy", embed=True),
+    days: int = Body(365, embed=True),
+    limit: int = Body(50, embed=True),
+    dry_run: bool = Body(False, embed=True),
+) -> dict:
+    """Queue every file in one of the attention lists.
+
+    Each file gets its own job with its own steps, worked out from that file
+    rather than from a rule applied to all of them: a file with styled
+    subtitles and a file with twenty duplicates do not want the same thing
+    done to them.
+
+    Capped, because this rewrites whole films and a mistake at four hundred
+    files is a different kind of mistake from one at ten. Ask again for the
+    next lot.
+    """
+    import asyncio
+
+    from app import audit
+    from app.services import cleanup as cleanup_service
+    from app.services import mediafix
+
+    if kind not in ("messy", "trouble"):
+        raise HTTPException(400, "That list cannot be tidied")
+    limit = max(1, min(limit, 200))
+
+    found = await asyncio.to_thread(
+        cleanup_service.attention, kind, days, current().library_bitrate_threshold_mbps * 1000, limit
+    )
+    rows = found.get("items", [])
+
+    def plan_for(rating_key: int) -> list[str]:
+        with session_scope() as db:
+            item = db.get(MediaItem, rating_key)
+            if item is None:
+                return []
+            return [step["key"] for step in mediafix.plan(item)["steps"]]
+
+    queued, skipped = [], []
+    for row in rows:
+        key = row.get("rating_key")
+        if key is None:
+            continue
+        steps = await asyncio.to_thread(plan_for, key)
+        if not steps:
+            skipped.append({"rating_key": key, "title": row.get("title"), "why": "nothing to do to it"})
+            continue
+        if dry_run:
+            queued.append({"rating_key": key, "title": row.get("title"), "steps": steps})
+            continue
+        try:
+            job = await asyncio.to_thread(mediafix.queue, key, steps, admin.username, None)
+        except (LookupError, ValueError) as exc:
+            skipped.append({"rating_key": key, "title": row.get("title"), "why": str(exc)})
+            continue
+        queued.append({"rating_key": key, "title": row.get("title"), "steps": steps, "job": job})
+
+    if queued and not dry_run:
+        mediafix.start_worker()
+        audit.record(
+            admin, "library.tidy.many",
+            f"Queued tidying for {len(queued)} files from {kind}",
+            detail={"queued": len(queued), "skipped": len(skipped), "kind": kind},
+        )
+    return {
+        "queued": len(queued),
+        "skipped": len(skipped),
+        "files": queued[:200],
+        "not_done": skipped[:50],
+        "dry_run": dry_run,
+    }
+
+
 @router.get("/tidy/jobs")
 def tidy_jobs(_: AdminUser, db: Db, limit: int = Query(20, ge=1, le=200)) -> list[dict]:
     import json as json_module

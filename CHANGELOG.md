@@ -4,6 +4,19 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.105.0 - 2026-10-07
+
+### Added
+- A whole list of files can be tidied at once, from the list. Tidying only ever worked one file at a time, opened
+  by hand, and the list of awkward files on this library runs to two hundred, which is why it has never been used
+  on more than a handful.
+- Each file is queued as its own job with its own steps, worked out from that file: one with styled subtitles and
+  one with twenty duplicates do not want the same thing done to them. Its own job also means the queue says which
+  file it is on, any of them can be stopped, and a failure on the fourth does not take the rest with it.
+- The question is asked after a dry run, so it says how many files and how many have nothing worth changing
+  rather than asking you to trust a number. Capped at two hundred, because a mistake at four hundred files is a
+  different kind of mistake from one at ten.
+
 ## 0.104.0 - 2026-10-07
 
 ### Fixed
