@@ -34,6 +34,7 @@ from app.models import (
     IpLocation,
     Library,
     MediaItem,
+    MediaTag,
     StreamEvent,
     StreamSession,
     User,
@@ -61,6 +62,8 @@ class Measure:
 
 @dataclass(frozen=True)
 class Dimension:
+    # Set on the ones that live in media_tags rather than in a column: a title
+    # has several genres and several directors, so they cannot be columns.
     key: str
     label: str
     group: str
@@ -70,6 +73,7 @@ class Dimension:
     identifying: bool = False
     requires: tuple[str, ...] = ()
     hint: str | None = None
+    tag: str | None = None
 
 
 @dataclass
@@ -90,6 +94,9 @@ class Source:
     # For the location and file joins: this source's address and title columns.
     ip_column: Callable[[], ColumnElement] | None = None
     rating_column: Callable[[], ColumnElement] | None = None
+    # What a tag hangs off, where that is not the title itself. An episode's
+    # genre is its show's, so an episode looks through to its show.
+    tag_column: Callable[[], ColumnElement] | None = None
     # Rows this source is about, when its table holds more than that. The
     # metadata cache keeps whatever has ever been looked up; the library is
     # only the films and episodes with a file behind them.
@@ -126,6 +133,16 @@ DIMENSIONS: list[Dimension] = [
     Dimension("file_bitrate_band", "File bitrate", "File"),
     Dimension("container", "File container", "File"),
     Dimension("year", "Release year", "What"),
+    # What a title is, rather than what its file is. All of it arrives in the
+    # same request the tracks come from.
+    Dimension("genre", "Genre", "What", tag="genre",
+              hint="A title in three genres counts in all three, which is right for counting plays and worth "
+                   "remembering when counting bytes."),
+    Dimension("director", "Director", "What", tag="director", identifying=True),
+    Dimension("writer", "Writer", "What", tag="writer", identifying=True),
+    Dimension("collection", "Collection", "What", tag="collection"),
+    Dimension("made_in", "Country made in", "What", tag="country"),
+    Dimension("studio", "Studio", "What"),
     Dimension("played", "Played or never", "What",
               hint="Whether anything has ever been played from the file."),
     Dimension("video_resolution", "Resolution", "Quality"),
@@ -222,7 +239,14 @@ SOURCES: dict[str, Source] = {
             "location": lambda: History.location,
             "title": lambda: History.rating_key,
             "show": lambda: func.coalesce(History.grandparent_rating_key, History.rating_key),
-            "media_type": lambda: History.media_type,
+            # What a title is. The join is per kind, so one of these at a time.
+        "genre": lambda: MediaTag.value,
+        "director": lambda: MediaTag.value,
+        "writer": lambda: MediaTag.value,
+        "collection": lambda: MediaTag.value,
+        "made_in": lambda: MediaTag.value,
+        "studio": lambda: MediaItem.studio,
+        "media_type": lambda: History.media_type,
             "library": lambda: History.section_id,
             "transcode_decision": lambda: History.transcode_decision,
             "file_resolution": lambda: MediaItem.video_resolution,
@@ -233,6 +257,8 @@ SOURCES: dict[str, Source] = {
         },
         ip_column=lambda: History.ip_address,
         rating_column=lambda: History.rating_key,
+        # Through the show for an episode, since an episode has no genre.
+        tag_column=lambda: func.coalesce(History.grandparent_rating_key, History.rating_key),
     ),
     "buffering": Source(
         key="buffering",
@@ -370,6 +396,7 @@ SOURCES["streams"] = Source(
     time_column=lambda: StreamSession.started_at,
     ip_column=lambda: StreamSession.ip_address,
     rating_column=lambda: StreamSession.rating_key,
+    tag_column=lambda: func.coalesce(StreamSession.grandparent_rating_key, StreamSession.rating_key),
     measures=[
         Measure("streams", "Streams", "count", _count),
         Measure("transcoded", "Transcoded", "count",
@@ -399,6 +426,13 @@ SOURCES["streams"] = Source(
         "location": lambda: StreamSession.location,
         "title": lambda: StreamSession.rating_key,
         "show": lambda: func.coalesce(StreamSession.grandparent_rating_key, StreamSession.rating_key),
+        # What a title is. The join is per kind, so one of these at a time.
+        "genre": lambda: MediaTag.value,
+        "director": lambda: MediaTag.value,
+        "writer": lambda: MediaTag.value,
+        "collection": lambda: MediaTag.value,
+        "made_in": lambda: MediaTag.value,
+        "studio": lambda: MediaItem.studio,
         "media_type": lambda: StreamSession.media_type,
         "transcode_decision": lambda: StreamSession.transcode_decision,
         "transcode_cause": lambda: StreamSession.primary_cause,
@@ -529,6 +563,7 @@ SOURCES["library"] = Source(
     # Films and episodes with a file. The rest of this table is metadata
     # looked up for other reasons, with no size, no bitrate and no disk.
     base=lambda: MediaItem.media_type.in_(("movie", "episode")),
+    tag_column=lambda: func.coalesce(MediaItem.grandparent_rating_key, MediaItem.rating_key),
     measures=[
         Measure("items", "Files", "count", _count),
         Measure("size", "Space used", "bytes", lambda: func.coalesce(func.sum(MediaItem.file_size), 0)),
@@ -556,6 +591,12 @@ SOURCES["library"] = Source(
         "file_audio_codec": lambda: MediaItem.audio_codec,
         "file_bitrate_band": _bitrate_band,
         "container": lambda: MediaItem.file_container,
+        "studio": lambda: MediaItem.studio,
+        "genre": lambda: MediaTag.value,
+        "director": lambda: MediaTag.value,
+        "writer": lambda: MediaTag.value,
+        "collection": lambda: MediaTag.value,
+        "made_in": lambda: MediaTag.value,
     },
     filter_columns={
         "section_id": lambda: MediaItem.section_id,
@@ -726,7 +767,8 @@ def _where(s: Source, filters: Filters) -> tuple[list[ColumnElement[bool]], list
     return where, ignored, needs_location
 
 
-def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: bool, needs_media: bool = False):
+def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: bool, needs_media: bool = False,
+          needs_tag: str | None = None):
     stmt = select(*columns).select_from(s.table)
     if s.base is not None:
         stmt = stmt.where(s.base())
@@ -734,6 +776,19 @@ def _base(s: Source, columns: list[ColumnElement], where: list, needs_location: 
         stmt = stmt.outerjoin(IpLocation, IpLocation.ip == s.ip_column())
     if needs_media and s.rating_column is not None:
         stmt = stmt.outerjoin(MediaItem, MediaItem.rating_key == s.rating_column())
+    if needs_tag is not None:
+        # One join for the one kind being grouped by. A title with three
+        # genres becomes three rows, which is what grouping by genre means.
+        #
+        # Through the show for an episode, because an episode has no genre of
+        # its own: checked against a real server, it carries its director, its
+        # writer and its cast, and the genre and the country sit on the show.
+        key = s.tag_column() if s.tag_column is not None else (
+            s.rating_column() if s.rating_column is not None else MediaItem.rating_key
+        )
+        stmt = stmt.outerjoin(
+            MediaTag, (MediaTag.rating_key == key) & (MediaTag.kind == needs_tag)
+        )
     if where:
         stmt = stmt.where(*where)
     return stmt
@@ -762,6 +817,22 @@ def run(
     needs_media = s.table not in (StreamSession, MediaItem) and any(
         d in FILE_DIMENSIONS for d in (group, then) if d
     )
+    # Only one tag kind can be joined at a time, which is also the only thing
+    # that makes sense: genre against director is two joins to the same table
+    # and a cross product nobody asked for.
+    tags = [DIMENSION[d].tag for d in (group, then) if d and DIMENSION.get(d) and DIMENSION[d].tag]
+    needs_tag = tags[0] if tags else None
+    if len(tags) > 1:
+        ignored.append("one of the two tag groupings")
+    # The join hangs off the title, so a source that cannot name one cannot
+    # group by a tag.
+    if needs_tag and s.table is not MediaItem and s.rating_column is None and s.tag_column is None:
+        needs_tag = None
+        ignored.append(group if DIMENSION[group].tag else str(then))
+    # Studio is a column on the title rather than a tag, so a source that is
+    # not the library has to join the title to reach it.
+    if "studio" in (group, then) and s.table is not MediaItem:
+        needs_media = True
 
     is_time = group in TIME_FORMATS
     g = _dimension_expr(s, group).label("grp")
@@ -769,28 +840,28 @@ def run(
 
     # Row totals come from their own grouping, not by adding up the split, since
     # averages and "different" counts do not add up.
-    stmt = _base(s, [g, value], where, needs_location, needs_media).group_by(g)
+    stmt = _base(s, [g, value], where, needs_location, needs_media, needs_tag).group_by(g)
     stmt = stmt.order_by(g) if is_time else stmt.order_by(value.desc(), g)
     rows = db.execute(stmt).all()
     truncated = False
     if not is_time and len(rows) > limit:
         rows, truncated = rows[:limit], True
 
-    grand = db.execute(_base(s, [m.expr().label("val")], where, needs_location, needs_media)).scalar()
+    grand = db.execute(_base(s, [m.expr().label("val")], where, needs_location, needs_media, needs_tag)).scalar()
 
     result_rows = [{"key": r.grp, "value": _num(r.val)} for r in rows]
     columns: list[dict[str, Any]] = []
     if then:
         t = _dimension_expr(s, then).label("split")
         t_is_time = then in TIME_FORMATS
-        col_stmt = _base(s, [t, m.expr().label("val")], where, needs_location, needs_media).group_by(t)
+        col_stmt = _base(s, [t, m.expr().label("val")], where, needs_location, needs_media, needs_tag).group_by(t)
         col_stmt = col_stmt.order_by(t) if t_is_time else col_stmt.order_by(m.expr().desc(), t)
         col_rows = db.execute(col_stmt).all()
         kept = [r.split for r in (col_rows if t_is_time else col_rows[:columns_limit])]
         has_other = not t_is_time and len(col_rows) > columns_limit
         columns = [{"key": k} for k in kept] + ([{"key": OTHER}] if has_other else [])
 
-        cell_stmt = _base(s, [g, t, m.expr().label("val")], where, needs_location, needs_media).group_by(g, t)
+        cell_stmt = _base(s, [g, t, m.expr().label("val")], where, needs_location, needs_media, needs_tag).group_by(g, t)
         cells: dict[Any, dict[Any, float]] = {}
         additive = _additive(m)
         kept_set = set(kept)

@@ -108,12 +108,36 @@ async def scan(client) -> dict[str, Any]:
         from app.plex import library as plex_library
 
         rows = await asyncio.to_thread(plex_library.read)
+        # A show's genres, while the listing is in hand. An episode has none
+        # of its own, so anything asking an episode what genre it is looks
+        # through to the show it belongs to.
+        await asyncio.to_thread(_store_show_tags)
     else:
         rows = await _tautulli_rows(client)
     counts = await asyncio.to_thread(_store, rows, started)
     await asyncio.to_thread(_record_sizes, started)
     return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
             "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
+
+
+def _store_show_tags() -> int:
+    """Replace what each show is said to be. Shows only: a film's own tags are
+    read with its file details."""
+    from sqlalchemy import delete
+
+    from app.plex import library as plex_library
+
+    tags = plex_library.read_show_tags()
+    if not tags:
+        return 0
+    MediaTag = models.MediaTag
+    keys = sorted({tag["rating_key"] for tag in tags})
+    with session_scope() as db:
+        for start in range(0, len(keys), 500):
+            db.execute(MediaTag.__table__.delete().where(MediaTag.rating_key.in_(keys[start:start + 500])))
+        db.add_all([MediaTag(**tag) for tag in tags])
+    log.info("show tags: %d across %d shows", len(tags), len(keys))
+    return len(tags)
 
 
 async def _tautulli_rows(client) -> list[dict[str, Any]]:
@@ -272,6 +296,9 @@ async def read_details(client, chunk: int = DETAILS_CHUNK) -> dict[str, int]:
         results = await _tautulli_details(client, keys)
 
     def save() -> int:
+        from sqlalchemy import delete
+
+        MediaTag = models.MediaTag
         now = datetime.now(UTC)
         with session_scope() as db:
             for row in results:
@@ -280,9 +307,17 @@ async def read_details(client, chunk: int = DETAILS_CHUNK) -> dict[str, int]:
                     # Gone from Plex, or unreadable: do not ask again until the file changes.
                     db.execute(update(MediaItem).where(MediaItem.rating_key == key).values(file_checked_at=now))
                     continue
+                # Genres and the rest are their own table, so they come out of
+                # the row before it is written. Replaced rather than merged: a
+                # film re-matched to something else should not keep the old
+                # one's genres alongside the new ones.
+                tags = row.pop("_tags", None)
                 values = {k: v for k, v in row.items() if k != "rating_key" and v is not None}
                 values.setdefault("file_checked_at", now)
                 db.execute(update(MediaItem).where(MediaItem.rating_key == key).values(**values))
+                if tags is not None:
+                    db.execute(delete(MediaTag).where(MediaTag.rating_key == key))
+                    db.add_all([MediaTag(rating_key=key, **tag) for tag in tags])
         with session_scope() as db:
             return db.execute(select(func.count()).select_from(MediaItem).where(*unread)).scalar() or 0
 

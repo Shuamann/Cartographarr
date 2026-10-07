@@ -4,6 +4,24 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.103.0 - 2026-10-07
+
+### Added
+- Reports can be grouped by genre, director, writer, collection, country made in, and studio, on the library, on
+  plays and on streams. All of it arrives in the same request the audio and subtitle tracks already come from, so
+  it costs nothing to keep and it turns the reports engine loose on questions it could not ask at all before.
+  On a real library: Animation leads on plays and Comedy on hours watched, while Drama quietly takes the most
+  disk of any genre.
+- An episode borrows its show's genre, because an episode has none. Checked against a real server rather than
+  assumed: an episode carries its director, its writer and its cast, and the genre and the country sit on the
+  show.
+
+### Changed
+- A title in three genres counts in all three, which is right for counting plays and worth remembering when
+  counting bytes, so the grouping says so rather than leaving somebody to find out.
+- Two tag groupings at once are refused rather than crossed, since genre against director is two joins to the
+  same table and a cross product nobody asked for.
+
 ## 0.101.2 - 2026-10-07
 
 ### Changed

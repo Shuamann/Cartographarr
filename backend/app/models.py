@@ -132,6 +132,25 @@ class Library(Base):
     type: Mapped[str | None] = mapped_column(String(32))
 
 
+class MediaTag(Base):
+    """A genre, a director, a collection or a country, against a title.
+
+    Its own table because a film has several of each, and a column holding
+    "Animation, Anime, Fantasy" answers nothing: the whole point is grouping by
+    one of them. Three genres means three rows, which means a film counts in
+    each of its genres, which is right for counting plays and worth saying out
+    loud for counting bytes.
+    """
+
+    __tablename__ = "media_tags"
+    __table_args__ = (Index("ix_media_tags_kind_value", "kind", "value"),)
+
+    rating_key: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    """genre, director, writer, collection or country."""
+    value: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+
 class MediaItem(Base):
     """Metadata cache, one fetch per rating_key ever.
 
@@ -214,6 +233,15 @@ class MediaItem(Base):
     audio_tracks: Mapped[str | None] = mapped_column(Text)
     subtitle_tracks: Mapped[str | None] = mapped_column(Text)
     file_checked_at: Mapped[datetime | None] = mapped_column()
+    # What the title is, rather than what the file is. All of it arrives in the
+    # same request the tracks come from, so it costs nothing to keep and turns
+    # the reports engine loose on questions it could not ask before.
+    studio: Mapped[str | None] = mapped_column(String(255))
+    audience_rating: Mapped[float | None] = mapped_column(Float)
+    added_at: Mapped[int | None] = mapped_column(Integer)
+    """When Plex first saw the file, which is not when anybody watched it and
+    not when the scan here noticed it."""
+
     library_seen_at: Mapped[datetime | None] = mapped_column()
     """When the library scan last found this in Plex. Older than the last scan
     means it has gone."""

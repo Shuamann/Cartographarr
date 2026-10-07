@@ -33,6 +33,23 @@ def _first(items):
     return items[0] if items else None
 
 
+def _float(value: Any) -> float | None:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _epoch(value: Any) -> int | None:
+    """Plex gives a datetime here, and the column holds seconds."""
+    if value is None:
+        return None
+    try:
+        return int(value.timestamp())
+    except (AttributeError, OSError, OverflowError, ValueError):
+        return _int(value)
+
+
 def _still(item: Any) -> Any:
     """Stop plexapi fetching the whole item again to fill a blank.
 
@@ -112,9 +129,14 @@ def row(item: Any, section_id: int, show: Any = None) -> dict[str, Any] | None:
     }
 
 
-def section_rows(section: Any) -> list[dict[str, Any]]:
+def section_rows(section: Any, tags: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Every film or episode in one library. Music and photos give nothing,
-    as they do in the Tautulli scan."""
+    as they do in the Tautulli scan.
+
+    A show's own tags are collected on the way past, because an episode has
+    none: checked against a real server, an episode carries its director, its
+    writer and its cast, and the genre and the country live on the show.
+    """
     section_id = _int(getattr(section, "key", None))
     kind = getattr(section, "type", None)
     if section_id is None:
@@ -128,6 +150,11 @@ def section_rows(section: Any) -> list[dict[str, Any]]:
     elif kind == "show":
         for show in section.all(container_size=PAGE):
             _still(show)
+            if tags is not None:
+                key = _int(getattr(show, "ratingKey", None))
+                if key is not None:
+                    for tag in _tags(show):
+                        tags.append({"rating_key": key, **tag})
             for item in show.episodes(container_size=PAGE):
                 found = row(item, section_id, show)
                 if found:
@@ -147,6 +174,29 @@ def read() -> list[dict[str, Any]]:
     for section in plex.library.sections():
         rows.extend(section_rows(section))
     return rows
+
+
+def read_show_tags() -> list[dict[str, Any]]:
+    """What each show is: its genres, its country, its cast.
+
+    Walked with the library rather than on its own, since the scan is already
+    listing every show. Blocking, because plexapi is.
+    """
+    from app.plex.server import server
+
+    plex = server()
+    tags: list[dict[str, Any]] = []
+    for section in plex.library.sections():
+        if getattr(section, "type", None) != "show":
+            continue
+        for show in section.all(container_size=PAGE):
+            _still(show)
+            key = _int(getattr(show, "ratingKey", None))
+            if key is None:
+                continue
+            for tag in _tags(show):
+                tags.append({"rating_key": key, **tag})
+    return tags
 
 # ---- the tracks in a file ----------------------------------------------------
 
@@ -266,6 +316,30 @@ def _tracks(part: Any) -> tuple[list[dict], list[dict], Any]:
     return audio, subtitles, video
 
 
+TAGS = (("genres", "genre"), ("directors", "director"), ("writers", "writer"),
+        ("collections", "collection"), ("countries", "country"))
+"""What a title is, beside what its file is.
+
+All of it comes in the same answer the tracks do, so it costs nothing to read.
+Each is a list, which is why they are rows in their own table rather than
+columns: the question is always "group by genre", never "show me the string
+Animation, Anime, Fantasy".
+"""
+
+
+def _tags(item: Any) -> list[dict[str, str]]:
+    found: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for attribute, kind in TAGS:
+        for entry in getattr(item, attribute, None) or []:
+            value = (getattr(entry, "tag", None) or "").strip()
+            if not value or (kind, value) in seen:
+                continue
+            seen.add((kind, value))
+            found.append({"kind": kind, "value": value[:255]})
+    return found
+
+
 def detail_row(item: Any) -> dict[str, Any]:
     """One media_items row with the file's tracks, in metadata_row's shape."""
     _still(item)
@@ -313,6 +387,12 @@ def detail_row(item: Any) -> dict[str, Any]:
         "audio_channels": _int(getattr(first, "audioChannels", None)) if first is not None else None,
         "audio_tracks": json.dumps(audio) if media else None,
         "subtitle_tracks": json.dumps(subtitles) if media else None,
+        "studio": getattr(item, "studio", None) or None,
+        "audience_rating": _float(getattr(item, "audienceRating", None)),
+        "added_at": _epoch(getattr(item, "addedAt", None)),
+        # Lifted out before the row is written, since these are their own
+        # table. A list in a column would answer nothing.
+        "_tags": _tags(item),
         **_ids(item),
     }
 
