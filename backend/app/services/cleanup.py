@@ -38,6 +38,45 @@ def _kept() -> dict[int, str | None]:
         return {row.rating_key: row.reason for row in db.execute(select(KeepDecision)).scalars()}
 
 
+WATCHING_DAYS = 60
+"""How recently a show has to have been watched to count as being worked
+through.
+
+Long enough to cover somebody who watches an episode a week and takes a month
+off, short enough that a show abandoned last year is not protected for ever.
+"""
+
+
+def _shows_being_watched(db, keys: list[int]) -> dict[int, tuple[str | None, int]]:
+    """Shows anybody has played lately, and who last did.
+
+    An episode nobody has played, in a show somebody is partway through, is
+    not an abandoned file. It is the next episode. On this library 1,751 of
+    the 8,911 big never played episodes are in a show watched in the last
+    sixty days, so a fifth of the suggestions were asking somebody to delete
+    what they were about to watch.
+    """
+    from sqlalchemy import func, select
+
+    from app.models import History, User
+
+    since = int(datetime.now(UTC).timestamp()) - WATCHING_DAYS * 86400
+    rows = db.execute(
+        select(
+            History.grandparent_rating_key,
+            func.max(History.started),
+            func.coalesce(User.friendly_name, User.username),
+        )
+        .join(User, User.user_id == History.user_id, isouter=True)
+        .where(
+            History.grandparent_rating_key.is_not(None),
+            History.started >= since,
+        )
+        .group_by(History.grandparent_rating_key)
+    ).all()
+    return {int(show): (who, int(when or 0)) for show, when, who in rows if show is not None}
+
+
 def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
     """Files worth a second look, biggest saving first."""
     from app.models import History, MediaItem, StreamSession
@@ -62,6 +101,7 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             return {"items": [], "found": 0, "reclaimable": 0, "kept": len(kept), "days": days}
 
         keys = [item.rating_key for item in items]
+        watching = _shows_being_watched(db, keys)
         played: dict[int, tuple[int, int | None]] = {
             key: (int(count or 0), last)
             for key, count, last in db.execute(
@@ -82,6 +122,7 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             scaled[key] = (seen + int(count or 0), down + (0 if is_4k else int(count or 0)))
 
         out = []
+        spared = 0
         for item in items:
             if item.rating_key in kept:
                 continue
@@ -89,6 +130,14 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             age_days = int((now - last) / 86400) if last else None
             reason = _reason(item, plays, age_days, scaled.get(item.rating_key))
             if reason is None:
+                continue
+            # Somebody is working through this show, so this is their next
+            # episode rather than a file nobody wants. Counted rather than
+            # silently dropped: a list that quietly shrinks is a list nobody
+            # can reason about.
+            show = item.grandparent_rating_key
+            if show is not None and int(show) in watching and reason[0] in ("never_played", "not_played_in_years"):
+                spared += 1
                 continue
             out.append({
                 **describe_file(item),
@@ -110,6 +159,8 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
         "found": len(out),
         "reclaimable": reclaimable,
         "kept": len(kept),
+        "watching": spared,
+        "watching_days": WATCHING_DAYS,
         "days": days,
     }
 
@@ -214,7 +265,12 @@ def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> di
         elif kind == "room":
             found = candidates(days=days, limit=wanted)
             rows = [_row(f, "room", f.get("why"), threshold_kbps, named) for f in found["items"]]
-            extra = {"reclaimable": found["reclaimable"], "found": found["found"]}
+            extra = {
+                "reclaimable": found["reclaimable"],
+                "found": found["found"],
+                "watching": found.get("watching", 0),
+                "watching_days": found.get("watching_days"),
+            }
         else:
             found = library.problem_files(db, threshold_kbps, days, limit=wanted)
             rows = [_row(f, "trouble", _trouble_why(f), threshold_kbps, named) for f in found]

@@ -382,6 +382,74 @@ something that does not exist yet, which is a larger job than reading a list.
 
 ---
 
+## Worth building, and what each is worth
+
+Written after a night of asking the real server what it has and timing the
+answers. Ordered by what they are worth rather than by how hard they are, and
+each says the number it rests on so the ordering can be argued with.
+
+### What somebody is partway through
+
+Not a Plex question at all, which was worth finding out before building
+anything: history already carries how far into a thing each play got, and
+twenty nine people on this server have something between five and eighty five
+per cent finished in the last ninety days. The data is here and there is no
+screen for it.
+
+Two things it is worth for. The obvious one is a list of what each person has
+not finished, which is what every other media app leads with and this one
+cannot show.
+
+The useful one for a tool about managing a server is the other way round: do
+not suggest deleting a file somebody is halfway through. The cleanup lists
+work from whether a thing has been played and when, and a part finished
+episode looks exactly like an abandoned one.
+
+### What a stream is actually doing to the server
+
+Plex reports whether hardware was asked for and whether it was granted, which
+this app already keeps per stream. What it does not keep is the server's own
+load at the time. Plex's /statistics/resources came back empty on this server,
+so there is nothing to read; the minute samples this app takes are the only
+source and they do not include CPU. Worth a look only if that endpoint starts
+answering.
+
+### Intro and credit markers
+
+Measured: present on 14 of 16 episodes checked, with both an intro and a
+credits marker. Nothing uses them.
+
+The honest use is not skipping, which is the player's job. It is counting: a
+person who watched the last ninety seconds of an episode watched the credits,
+and a season "finished" at 94% may be a season finished. Several figures in
+this app treat percent complete as a proxy for watched, and markers would turn
+that proxy into a fact.
+
+### Collections, as a thing you can act on
+
+624 of them on this server, now readable as a report grouping. The step beyond
+reporting is acting: a rule or a tidy that applies to a collection rather than
+to a file, which is how somebody thinks about their library.
+
+### The library's own hubs
+
+Recently added, on deck and continue watching are all answerable in one
+request each. Worth it only alongside the watch state above, since on deck
+without per person state is the server's deck rather than anybody's.
+
+### Reducing what is read twice
+
+The library scan and the file details both walk the whole library. The scan
+lists every item and the details then ask about each one again in batches of a
+hundred. Measured: the scan is 43 seconds for 31,250 items, the details about
+ten milliseconds a file. Nothing is wrong, but the second pass is asking Plex
+for things the first pass already had, and a single pass would halve the work.
+
+Left alone because the two run on different timers for good reasons, and a
+scan that also read every track would be a scan nobody could run quickly.
+
+---
+
 ## The house style, applied everywhere
 
 A row about a title now carries its artwork, a poster, the facts as label and

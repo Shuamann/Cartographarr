@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.104.0 - 2026-10-07
+
+### Fixed
+- The cleanup list no longer suggests deleting the next episode of something somebody is watching. An episode
+  nobody has played, in a show somebody is partway through, is not an abandoned file. On this library 1,751 of
+  the 8,911 big never played episodes belong to a show watched in the last sixty days, and 38 of the files the
+  list actually suggested were exactly that.
+- They are counted and said rather than silently dropped, because a list that quietly shrinks is a list nobody
+  can reason about. A film is never spared by this: it has no show to be partway through.
+
 ## 0.103.0 - 2026-10-07
 
 ### Added

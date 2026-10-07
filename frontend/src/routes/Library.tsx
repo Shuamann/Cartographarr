@@ -3371,6 +3371,11 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
     reclaimable?: number;
     found?: number;
     checked?: number;
+    /* Episodes left out because somebody is partway through their show.
+       Said rather than silently dropped: a list that quietly shrinks is a
+       list nobody can reason about. */
+    watching?: number;
+    watching_days?: number;
   }>(`/library/attention?kind=${lens}&days=${days}`, [lens, days]);
   const keptList = useApi<Kept[]>("/library/cleanup/kept");
 
@@ -3416,6 +3421,13 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
           {lens === "room" && data.data.reclaimable
             ? `${size(data.data.reclaimable)} across ${(data.data.found ?? data.data.total).toLocaleString()} files nobody is watching.`
             : `${data.data.total.toLocaleString()} ${data.data.total === 1 ? "file" : "files"}, worst first.`}
+          {Boolean(data.data.watching) && (
+            <>
+              {" "}
+              {data.data.watching} more left out: somebody has watched something in the same show in the last{" "}
+              {data.data.watching_days} days, so those are next episodes rather than files nobody wants.
+            </>
+          )}
         </p>
       )}
 
