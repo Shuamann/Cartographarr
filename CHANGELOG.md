@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.101.2 - 2026-10-07
+
+### Changed
+- Artwork comes from Plex where there is a Plex to ask. Tautulli's image proxy calls Plex's own resizer to do the
+  work, so going through it was a hop for nothing, and a hop that cost: asked for the same 300 by 450 poster,
+  Plex answers with a 300 by 450 JPEG of 37 kB and Tautulli answers with a PNG of 215 kB, having ignored the
+  format it was asked for. Measured on a real page of thirty six posters: half a megabyte against nearly eight.
+- Tautulli stays as the thing to try when Plex will not answer, so a server asleep or moved costs a slower poster
+  rather than a broken page.
+
 ## 0.101.1 - 2026-10-07
 
 ### Changed

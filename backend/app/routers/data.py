@@ -454,15 +454,23 @@ picked up without a restart.
 
 @router.get("/media/{rating_key}/image")
 async def media_image(request: Request, rating_key: int, width: int = 300, height: int = 450, kind: str = "poster"):
-    """Poster art, proxied through Tautulli or Plex and kept on disk.
+    """Poster art, from Plex where it can be, and kept on disk.
 
     Plex image URLs need a token, so the browser cannot fetch them directly and
-    handing the token to the browser would be worse. Tautulli already has one,
-    and pms_image_proxy resizes on the way through. Without Tautulli, Plex's
-    own resizer is asked with the token this app holds. The answer never changes
-    for a given item, so it is written to the data directory and served from
-    there afterwards: a library page full of posters should cost one fetch
-    each, ever, not one fetch a visit.
+    handing the token to the browser would be worse. Both Plex and Tautulli
+    will resize one on the way through, and Tautulli's proxy calls Plex's own
+    resizer to do it, so going through Tautulli is a hop for nothing.
+
+    It is also a hop that costs. Asked for the same 300 by 450 poster, measured
+    against a real server: Plex answers with a 300 by 450 JPEG of 37 kB, and
+    Tautulli answers with a PNG of 215 kB, having ignored the format it was
+    asked for. Nearly six times the bytes for a picture nobody can tell apart,
+    on every poster the first time it is seen.
+
+    So Plex is asked when there is a Plex to ask, and Tautulli is the fallback
+    rather than the road. The answer never changes for a given item, so it is
+    written to the data directory and served from there afterwards: a library
+    page full of posters should cost one fetch each, ever, not one a visit.
     """
     kind = "art" if kind == "art" else "poster"
     kept = _poster_file(rating_key, width, height, kind)
@@ -470,7 +478,8 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
         return FileResponse(kept, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=604800"})
 
     tautulli = tautulli_configured()
-    if not (tautulli or plex_configured()):
+    direct = plex_configured()
+    if not (tautulli or direct):
         raise HTTPException(409, "Neither Plex nor Tautulli is connected")
 
     asked = _ARTLESS.get((rating_key, kind))
@@ -488,7 +497,7 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
         art = await asyncio.to_thread(_poster_art, rating_key, kind)
     if not art and tautulli:
         art = await _backfill_poster_for(rating_key)
-    if not art and not tautulli:
+    if not art and direct:
         # Plex answers for an item's current artwork by its key alone, which
         # covers anything playing before the library scan has seen it.
         art = f"/library/metadata/{rating_key}/{'art' if kind == 'art' else 'thumb'}"
@@ -497,25 +506,38 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
         raise HTTPException(404, "No artwork for that item")
 
     settings = current()
-    headers: dict[str, str] = {}
-    if tautulli:
-        url = f"{(settings.tautulli_url or '').rstrip('/')}/api/v2"
-        params: dict[str, Any] = {
-            "apikey": settings.tautulli_api_key,
-            "cmd": "pms_image_proxy",
-            "img": art,
-            "width": width,
-            "height": height,
-            "fallback": "poster",
-            "img_format": POSTER_FORMAT,
-        }
-    else:
+
+    def from_plex() -> tuple[str, dict[str, Any], dict[str, str]]:
         # Plex's own resizer, which is what Tautulli's proxy calls in turn.
-        # The token goes in a header rather than the address, so an error
-        # that quotes the address does not carry it.
-        url = f"{settings.plex_url.rstrip('/')}/photo/:/transcode"
-        params = {"url": art, "width": width, "height": height, "minSize": 1, "upscale": 1}
-        headers = {"X-Plex-Token": settings.plex_token, "Accept": "image/jpeg"}
+        # The token goes in a header rather than the address, so an error that
+        # quotes the address does not carry it.
+        return (
+            f"{(settings.plex_url or '').rstrip('/')}/photo/:/transcode",
+            {"url": art, "width": width, "height": height, "minSize": 1, "upscale": 1},
+            {"X-Plex-Token": settings.plex_token or "", "Accept": "image/jpeg"},
+        )
+
+    def from_tautulli() -> tuple[str, dict[str, Any], dict[str, str]]:
+        return (
+            f"{(settings.tautulli_url or '').rstrip('/')}/api/v2",
+            {
+                "apikey": settings.tautulli_api_key,
+                "cmd": "pms_image_proxy",
+                "img": art,
+                "width": width,
+                "height": height,
+                "fallback": "poster",
+                "img_format": POSTER_FORMAT,
+            },
+            {},
+        )
+
+    # Plex first where there is one, and Tautulli kept as the thing to try when
+    # Plex will not answer: a server that is asleep or has moved should cost a
+    # slower poster, not a broken page.
+    ways = [from_plex] if direct else []
+    if tautulli:
+        ways.append(from_tautulli)
 
     # Leaving a page removes its images, and the browser drops the requests.
     # Without this the handler keeps its place in the queue and fetches a
@@ -528,11 +550,18 @@ async def media_image(request: Request, rating_key: int, width: int = 300, heigh
         if await request.is_disconnected():
             raise HTTPException(499, "Gone before the artwork arrived")
         client = _image_client(settings)
-        try:
-            upstream = await client.get(url, params=params, headers=headers)
-            upstream.raise_for_status()
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(502, f"Could not fetch artwork: {redact(exc)}") from exc
+        upstream = None
+        trouble: Exception | None = None
+        for way in ways:
+            url, params, headers = way()
+            try:
+                upstream = await client.get(url, params=params, headers=headers)
+                upstream.raise_for_status()
+                break
+            except Exception as exc:  # noqa: BLE001
+                trouble, upstream = exc, None
+        if upstream is None:
+            raise HTTPException(502, f"Could not fetch artwork: {redact(trouble)}") from trouble
 
     await asyncio.to_thread(_keep_poster, kept, upstream.content)
     return Response(
