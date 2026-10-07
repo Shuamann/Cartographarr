@@ -174,3 +174,21 @@ def test_every_control_uses_the_one_control_height():
     for name in (".legend-tab {", ".view-body .maplibregl-ctrl-group button {"):
         at = css.index(name)
         assert "var(--control-h)" in css[at : css.index("\n}", at)], name + " needs the control height token"
+
+
+def test_a_text_box_stands_as_tall_as_the_buttons_beside_it():
+    """A plain input or select took its height from its padding and line
+    height, 39px, beside 32px buttons in every filter bar. One rule sets the
+    height for all of them. Its selector is specific enough that a component
+    rule's padding cannot quietly undo it, so the guard is that it is there and
+    says what it should."""
+    if not CSS.exists():  # backend-only checkouts
+        return
+    css = COMMENTS.sub("", CSS.read_text(encoding="utf-8"))
+    rule = re.search(r"(^|\n)(input:not\(\[type=\"checkbox\"\]\)[^{]*,\s*select:not\(\[multiple\]\))\s*\{([^}]*)\}", css)
+    assert rule, "the rule giving every text box the control height is gone"
+    body = rule.group(3)
+    assert re.search(r"(^|;|\s)height:\s*var\(--control-h\)", body), "a text box needs height: var(--control-h)"
+    assert re.search(r"padding-top:\s*0", body) and re.search(r"padding-bottom:\s*0", body), (
+        "vertical padding on a fixed height box only squeezes the text"
+    )

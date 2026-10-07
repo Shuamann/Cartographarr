@@ -925,6 +925,10 @@ class Issue(Base):
     created_at: Mapped[datetime | None] = mapped_column()
     updated_at: Mapped[datetime | None] = mapped_column()
     synced_at: Mapped[datetime | None] = mapped_column()
+    seerr_gone_at: Mapped[datetime | None] = mapped_column()
+    """When Seerr stopped listing a report that came from it. The report is
+    kept: this app is where reports live, and one deleted or lost in Seerr is
+    still somebody having said something was wrong."""
 
 
 class BlockedCountry(Base):

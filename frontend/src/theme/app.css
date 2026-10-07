@@ -153,19 +153,32 @@ main {
   height: var(--control-h);
 }
 
+/* Centred by both edges and an automatic margin rather than by left: 50%,
+   which leaves an absolutely placed box only half the page to grow into: on
+   a phone its words could not wrap and pushed the page sideways. */
 .map-banner {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 12px;
+  right: 12px;
   z-index: 2;
-  max-width: min(520px, calc(100% - 24px));
+  width: fit-content;
+  max-width: 520px;
+  margin: 0 auto;
+  /* An error can carry an address with no spaces in it, wider than a phone. */
+  overflow-wrap: anywhere;
   padding: 8px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink-2);
   box-shadow: var(--shadow);
+}
+/* Over the list it would sit on the first rows, so there it takes its place
+   in the page instead. */
+.map-banner.in-flow {
+  position: static;
+  margin: var(--space-3) var(--space-4);
 }
 .map-banner.bad {
   border-color: var(--danger);
@@ -295,6 +308,16 @@ input {
   background: var(--bg);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
+}
+/* One height, set rather than a minimum. With a minimum, the padding and the
+   line height decided: 14px text at a line and a half, eight pixels above and
+   below, and a border, is 39 pixels, so every plain input stood taller than
+   the buttons beside it. Boxes that are not a line of text keep their own. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+select:not([multiple]) {
+  height: var(--control-h);
+  padding-top: 0;
+  padding-bottom: 0;
 }
 input:focus-visible {
   outline: 2px solid var(--accent);
@@ -1410,9 +1433,25 @@ code {
   padding: 0 0 72px;
 }
 
+/* Packed left, each column as wide as what is in it: seven short facts spread
+   across an ultrawide were further apart than the eye could follow. A phone
+   scrolls the list sideways inside its own box rather than the page. */
 .table.locations {
+  width: auto;
   font-size: 13px;
 }
+.table.locations td,
+.table.locations th {
+  white-space: nowrap;
+}
+/* A long place gives up its end, never its start: the city is what says
+   which place it is. */
+.table.locations .loc-name {
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .table.locations thead th {
   position: sticky;
   top: 0;
@@ -1683,6 +1722,40 @@ code {
 /* The one thing to do about it. */
 .media-row-do {
   flex: 0 0 auto;
+}
+
+/* Rows about titles outside Issues: the same row, laid out by the width it
+   is given rather than the window's, since it sits as happily in a drawer a
+   third of a phone wide as across a page. Narrow, the facts go under the
+   title instead of squeezing beside it, and the poster stays beside both
+   rather than leaving a poster's height of nothing above the facts. */
+.title-rows {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.title-rows .media-row.still {
+  cursor: default;
+}
+.title-rows .media-row-facts {
+  margin: 0;
+}
+@container (max-width: 620px) {
+  .title-rows .media-row {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-2) var(--space-3);
+  }
+  .title-rows .media-row-poster {
+    grid-row: span 2;
+  }
+  .title-rows .media-row-what,
+  .title-rows .media-row-facts,
+  .title-rows .media-row-do {
+    grid-column: 2;
+  }
 }
 
 @media (max-width: 900px) {
@@ -2799,6 +2872,8 @@ label.locked .pill {
 }
 .action-row select {
   width: auto;
+  min-width: 0;
+  max-width: 100%;
   font-weight: 600;
 }
 .action-row p {
@@ -2845,6 +2920,18 @@ label.locked .pill {
 }
 .people-tools select {
   width: auto;
+}
+/* Each filter at its own width, packed from the left. Left to grow, each
+   took half the row with its button at the start of it, which read as two
+   controls that had drifted apart. */
+.endpoint-filters .ms {
+  flex: 0 0 auto;
+}
+/* The three lists and the sort wrap under each other on a phone rather than
+   pushing the sort off the edge. */
+.people-tools .row-between {
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 .people-rows {
   flex: 1;
@@ -3545,6 +3632,9 @@ label.locked .pill {
   border: 1px solid var(--vpn);
   background: var(--vpn-soft);
   color: var(--vpn);
+  /* It always follows the name or the address it describes, and a flex
+     item eats the space typed before it, so the gap is drawn. */
+  margin-left: var(--space-2);
 }
 .pill.banned {
   border: 1px solid var(--banned);
@@ -3791,6 +3881,14 @@ label.locked .pill {
   font-size: 13px;
 }
 .report-bar-label {
+  display: flex;
+  min-width: 0;
+}
+/* The label is a button when it leads somewhere, and a button clips its own
+   text: the ellipsis has to be on it, not on the cell around it. */
+.report-bar-label > * {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -3826,9 +3924,19 @@ label.locked .pill {
 .report-table-wrap {
   overflow-x: auto;
 }
+.report-poster {
+  width: 23px;
+  height: 34px;
+  margin-right: var(--space-3);
+  vertical-align: middle;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
 .report-table td,
 .report-table th {
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 @media (max-width: 600px) {

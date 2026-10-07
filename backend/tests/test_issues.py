@@ -134,10 +134,11 @@ def test_resolved_and_deleted_issues_and_filters(client, monkeypatch):
     assert [i["issue_type"] for i in client.get("/api/issues?status=all").json()["items"]] == ["subtitles", "audio"]  # newest first
     assert len(client.get("/api/issues?status=all&issue_type=subtitles").json()["items"]) == 1
 
-    # Deleted in Seerr: gone here on the next sync.
+    # Deleted in Seerr: kept here, and marked, because this app is where
+    # reports live. Seerr forgetting one is not somebody taking it back.
     fake_seerr(monkeypatch, [issue(11)])
-    asyncio.run(service.sync())
-    assert len(client.get("/api/issues?status=all").json()["items"]) == 1
+    assert asyncio.run(service.sync())["no_longer_in_seerr"] == 1
+    assert len(client.get("/api/issues?status=all").json()["items"]) == 2
 
 
 def test_a_movie_report_and_one_with_no_match(client, monkeypatch):

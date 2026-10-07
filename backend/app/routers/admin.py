@@ -450,6 +450,28 @@ async def run_task(key: str, admin: AdminUser) -> dict:
     return {"started": True}
 
 
+@router.post("/seerr/issues/import")
+async def seerr_issues_import(admin: AdminUser) -> dict:
+    """Bring in every report Seerr holds, and answer with what came of it.
+
+    Answered where it was asked, like the history check: reading a few hundred
+    reports takes seconds, and the breakdown is the point of pressing it.
+    """
+    from app.integrations.seerr import seerr
+    from app.services import issues as issue_service
+
+    if not seerr.configured():
+        return {"asked": False, "reason": "Seerr is not set up, so there is nothing to bring in"}
+    try:
+        result = await issue_service.import_all()
+    except Exception as exc:  # noqa: BLE001 - the failure is the answer here
+        from app.integrations.base import describe_failure
+
+        raise HTTPException(502, f"Seerr: {describe_failure(exc)}") from exc
+    audit.record(admin, "issues.import", f"Brought in {result['new']} reports from Seerr, {result['already_here']} already here")
+    return {"asked": True, **result}
+
+
 @router.get("/handover/check")
 async def history_check(_: AdminUser) -> dict:
     """Day by day, what Tautulli recorded against what is here.

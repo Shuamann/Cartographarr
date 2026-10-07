@@ -2,8 +2,8 @@ import MultiSelect from "../components/MultiSelect";
 import { askConfirm, tell } from "../components/Ask";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
+import TitleRow, { TitleRows, type TitleFact } from "../components/TitleRow";
 import type { FilterState } from "../lib/filters";
-import { displayTitle } from "../lib/titles";
 import { useEffect, useMemo, useState } from "react";
 import { duration, when } from "../components/DataTable";
 import { StreamEntry } from "../components/EnforcementLog";
@@ -905,7 +905,7 @@ function DeviceProfile({
                 ))}
               </div>
             </section>
-            <Overview profile={d} extra={[["First seen", when(d.first_seen)]]} scope={{ machine_id: [machineId], machineLabel: label }} />
+            <Overview profile={d} extra={[["First", when(d.first_seen)]]} scope={{ machine_id: [machineId], machineLabel: label }} />
             <PlaybackSection path={`/devices/${encodeURIComponent(machineId)}/playback`} who="this device" />
           </>
         )}
@@ -1071,7 +1071,7 @@ function AddressProfile({
       <div className="profile-body">
         {tab === "overview" && (
           <>
-            <dl className="stats">
+            <dl className="spec profile-facts">
               <Stat label="Plays" value={a.totals.plays.toLocaleString()} sub={sessionsSub(a.totals)} />
               <Stat label="Watched" value={duration(a.totals.seconds)} />
               <Stat label="Accounts" value={String(a.accounts.length)} />
@@ -1117,14 +1117,7 @@ function AddressProfile({
             </div>
             <section className="profile-section">
               <h3>Most watched from here</h3>
-              <div className="mini-list">
-                {a.top_media.map((m) => (
-                  <div key={m.rating_key} className="mini">
-                    <span className="clip">{m.title ?? "Unknown"}</span>
-                    <span className="muted">{m.plays.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
+              <TopMedia items={a.top_media} scope={{ ip_address: [ip] }} />
             </section>
           </>
         )}
@@ -1156,7 +1149,7 @@ function Overview({
   const vpn = p.addresses.filter((a) => a.is_hosting).length;
   return (
     <>
-      <dl className="stats">
+      <dl className="spec profile-facts">
         <Stat label="Plays" value={p.totals.plays.toLocaleString()} sub={sessionsSub(p.totals)} />
         <Stat label="Watched" value={duration(p.totals.seconds)} />
         <Stat label="Addresses" value={String(p.totals.ips)} />
@@ -1305,8 +1298,8 @@ function PlaybackSection({ path, who }: { path: string; who: string }) {
     <section className="profile-section playback">
       <h3>How it plays, last {p.days} days</h3>
       <p className="small">{verdict}</p>
-      <dl className="stats">
-        <Stat label="Plays transcoded" value={`${share}% (${p.transcoded} of ${p.plays})`} />
+      <dl className="spec profile-facts">
+        <Stat label="Transcoded" value={`${share}% of plays, ${p.transcoded} of ${p.plays}`} />
         <Stat label="Stalls" value={p.stalls ? `${p.stalls}, ${p.stall_minutes} min` : "None"} />
       </dl>
       <div className="dash-cols">
@@ -1370,27 +1363,25 @@ function PlaybackSection({ path, who }: { path: string; who: string }) {
 
 /* Titles, each opening in place to the title's own card: poster, summary,
  * links out, and a jump to these plays in History. */
-function TopMedia({ items, scope }: { items: Profile["top_media"]; scope: Partial<FilterState> }) {
+function TopMedia({ items, scope }: { items: Profile["top_media"]; scope?: Partial<FilterState> }) {
   const nav = useNav();
   const [open, setOpen] = useState<number | null>(null);
   if (items.length === 0) return <p className="muted">Nothing yet.</p>;
   return (
-    <div className="mini-list">
+    <TitleRows>
       {items.map((m) => (
         <div key={m.rating_key}>
-          <button
-            className={open === m.rating_key ? "mini mini-button on" : "mini mini-button"}
-            aria-expanded={open === m.rating_key}
-            onClick={() => setOpen(open === m.rating_key ? null : m.rating_key)}
-          >
-            <div className="min0">
-              <span className="clip">{m.title ?? "Unknown"}</span>
-              <p className="muted small">
-                {m.media_type} · {duration(m.seconds)} · last {ago(m.last_play)}
-              </p>
-            </div>
-            <span className="muted">{m.plays.toLocaleString()}</span>
-          </button>
+          <TitleRow
+            ratingKey={m.rating_key}
+            item={{ title: m.title, full_title: m.title, media_type: m.media_type }}
+            facts={[
+              { label: "Plays", value: m.plays.toLocaleString() },
+              { label: "Watched", value: duration(m.seconds) },
+              { label: "Last", value: ago(m.last_play) },
+            ]}
+            open={open === m.rating_key}
+            onToggle={() => setOpen(open === m.rating_key ? null : m.rating_key)}
+          />
           {open === m.rating_key && (
             <div className="top-media-detail">
               <MediaPanel
@@ -1398,7 +1389,7 @@ function TopMedia({ items, scope }: { items: Profile["top_media"]; scope: Partia
                 filterLabel="These plays in History"
                 onFilterToTitle={
                   nav.filterTo
-                    ? (ratingKey, title) => nav.filterTo?.("History", { ...scope, rating_key: ratingKey, ratingKeyLabel: title })
+                    ? (ratingKey, title) => nav.filterTo?.("History", { ...(scope ?? {}), rating_key: ratingKey, ratingKeyLabel: title })
                     : undefined
                 }
               />
@@ -1406,7 +1397,7 @@ function TopMedia({ items, scope }: { items: Profile["top_media"]; scope: Partia
           )}
         </div>
       ))}
-    </div>
+    </TitleRows>
   );
 }
 
@@ -1425,9 +1416,13 @@ function RecentPlays({
   const page = useApi<HistoryPage>(`/history?${query}&size=40`);
   const users = useApi<PlexUser[]>(showUser ? "/users" : null);
   const names = new Map((users.data ?? []).map((u) => [u.user_id, u.friendly_name || u.username]));
+  const [open, setOpen] = useState<number | null>(null);
 
   if (page.error) return <p className="note bad-note" role="alert">{page.error}</p>;
   if (!page.data) return <Loading compact />;
+
+  // A link inside a row goes where it names and does not open the row too.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   return (
     <>
@@ -1437,44 +1432,52 @@ function RecentPlays({
           Open in History
         </button>
       </div>
-      <div className="mini-list">
-        {page.data.items.map((h) => (
-          <div key={h.row_id} className="mini">
-            <div className="min0">
-              <span className="clip">{displayTitle(h)}</span>
-              <p className="muted small">
-                {when(h.started)}
-                {showUser && h.user_id != null && (
-                  <>
-                    {" · "}
-                    {nav.openUser ? (
-                      <button className="linkish" onClick={() => nav.openUser?.(h.user_id as number)}>
-                        {names.get(h.user_id) ?? h.user_id}
-                      </button>
-                    ) : (
-                      names.get(h.user_id) ?? h.user_id
-                    )}
-                  </>
-                )}
-                {showDevice && h.player && (
-                  <>
-                    {" · "}
-                    {nav.openDevice && h.machine_id ? (
-                      <button className="linkish" onClick={() => nav.openDevice?.(h.machine_id as string)}>
-                        {h.player}
-                      </button>
-                    ) : (
-                      h.player
-                    )}
-                  </>
-                )}
-                {h.transcode_decision ? ` · ${h.transcode_decision}` : ""}
-              </p>
+      <TitleRows>
+        {page.data.items.map((h) => {
+          const facts: TitleFact[] = [{ label: "When", value: when(h.started) }];
+          if (showUser && h.user_id != null)
+            facts.push({
+              label: "Who",
+              value: nav.openUser ? (
+                <button className="linkish" onClick={(e) => { stop(e); nav.openUser?.(h.user_id as number); }}>
+                  {names.get(h.user_id) ?? h.user_id}
+                </button>
+              ) : (
+                names.get(h.user_id) ?? h.user_id
+              ),
+            });
+          if (showDevice && h.player)
+            facts.push({
+              label: "Device",
+              value:
+                nav.openDevice && h.machine_id ? (
+                  <button className="linkish" onClick={(e) => { stop(e); nav.openDevice?.(h.machine_id as string); }}>
+                    {h.player}
+                  </button>
+                ) : (
+                  h.player
+                ),
+            });
+          if (h.transcode_decision) facts.push({ label: "Playback", value: h.transcode_decision });
+          if (h.percent_complete != null) facts.push({ label: "Watched", value: `${h.percent_complete}%` });
+          return (
+            <div key={h.row_id}>
+              <TitleRow
+                ratingKey={h.rating_key}
+                item={h}
+                facts={facts}
+                open={open === h.row_id}
+                onToggle={h.rating_key ? () => setOpen(open === h.row_id ? null : h.row_id) : undefined}
+              />
+              {open === h.row_id && h.rating_key && (
+                <div className="top-media-detail">
+                  <MediaPanel ratingKey={h.rating_key} />
+                </div>
+              )}
             </div>
-            <span className="muted small">{h.percent_complete != null ? `${h.percent_complete}%` : ""}</span>
-          </div>
-        ))}
-      </div>
+          );
+        })}
+      </TitleRows>
     </>
   );
 }
@@ -1687,12 +1690,17 @@ function sessionsSub(t: { plays: number; sessions: number }): string | undefined
   return t.sessions && t.sessions !== t.plays ? `${t.sessions.toLocaleString()} sessions` : undefined;
 }
 
+/* A fact, as label and value on one line. These were boxes, five of them
+   across the top of a person with one number in each, which made the
+   summary the largest thing on the page and the slowest to read. */
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="stat">
+    <div className="spec-pair">
       <dt>{label}</dt>
-      <dd>{value}</dd>
-      {sub && <div className="muted small">{sub}</div>}
+      <dd>
+        {value}
+        {sub && <span className="muted">, {sub}</span>}
+      </dd>
     </div>
   );
 }

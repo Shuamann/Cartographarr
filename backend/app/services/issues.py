@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import session_scope
 from app.integrations.base import get_json
@@ -114,24 +116,83 @@ def episode_key(db, show_rating_key: int | None, season: int | None, episode: in
     ).scalar()
 
 
+def _match(db, media: dict[str, Any], season: int | None, episode: int | None,
+           name: str | None) -> tuple[int | None, int | None, str | None]:
+    """The file an issue is about: (rating key, show key, how it was found).
+
+    Seerr's rating key first, since it is Plex's own and the same one this app
+    uses. Plex renumbers things, though, and a report outlives the key it was
+    made against, so the ids come next: every title in the library now carries
+    them. An episode's ids are the episode's own, not the show's, so a show is
+    found through a show row where one exists and otherwise by the name Seerr
+    gives it, and only when that name means one show here: a guess at a file
+    is worse than no file.
+
+    How is None when nothing here matched; the reported key is kept anyway, so
+    the report still says what it was about.
+    """
+    from app.models import MediaItem
+
+    key = _int(media.get("ratingKey")) or _int(media.get("ratingKey4k"))
+    if media.get("mediaType") == "tv":
+        shows: list[tuple[int, str]] = [(key, "rating_key")] if key else []
+        for column, value, how in ((MediaItem.tvdb_id, media.get("tvdbId"), "tvdb"),
+                                   (MediaItem.tmdb_id, media.get("tmdbId"), "tmdb")):
+            if value:
+                shows += [(k, how) for k in db.execute(
+                    select(MediaItem.rating_key).where(MediaItem.media_type == "show", column == str(value))
+                ).scalars()]
+        if name:
+            named = db.execute(
+                select(MediaItem.grandparent_rating_key).where(
+                    MediaItem.media_type == "episode", func.lower(MediaItem.grandparent_title) == name.strip().lower(),
+                ).distinct().limit(2)
+            ).scalars().all()
+            if len(named) == 1 and named[0] is not None:
+                shows.append((named[0], "title"))
+        for show, how in shows:
+            found = episode_key(db, show, season, episode)
+            if found:
+                return found, show, how
+            if episode is None and db.execute(
+                select(MediaItem.rating_key).where(MediaItem.grandparent_rating_key == show).limit(1)
+            ).first():
+                return show, show, how
+        return key, key, None
+
+    if key:
+        item = db.get(MediaItem, key)
+        if item is not None and item.title is not None:
+            return key, None, "rating_key"
+    for column, value, how in ((MediaItem.tmdb_id, media.get("tmdbId"), "tmdb"),
+                               (MediaItem.imdb_id, media.get("imdbId"), "imdb")):
+        if value:
+            found = db.execute(
+                select(MediaItem.rating_key).where(MediaItem.media_type == "movie", column == str(value)).limit(1)
+            ).scalar()
+            if found:
+                return found, None, how
+    return key, None, None
+
+
 def row_from_issue(db, raw: dict[str, Any], people: dict[int, tuple[str | None, int | None]] | None = None) -> dict[str, Any] | None:
-    """One issues row from Seerr's issue, or None if it names no media."""
+    """One issues row from Seerr's issue, or None if it names no media.
+
+    The row carries how its file was found under "_how", for counting; the
+    caller takes it off before storing.
+    """
     from app.models import MediaItem
 
     seerr_id = _int(raw.get("id"))
     if seerr_id is None:
         return None
     media = raw.get("media") or {}
-    # Seerr stores Plex's own rating key, which is the same one this app uses.
-    key = _int(media.get("ratingKey")) or _int(media.get("ratingKey4k"))
     season, episode = _int(raw.get("problemSeason")), _int(raw.get("problemEpisode"))
     # Seerr sends 0 and 0 for a film, which would otherwise read as season
     # nought, a special, and there is no episode nought of anything.
     if media.get("mediaType") != "tv" or not episode:
         season = episode = None
-    show_key = key if (media.get("mediaType") == "tv") else None
-    if show_key:
-        key = episode_key(db, show_key, season, episode) or show_key
+    key, show_key, how = _match(db, media, season, episode, raw.get("_name"))
     name, reporter_id = _author(db, raw.get("createdBy"), people or {})
     item = db.get(MediaItem, key) if key else None
     comments = []
@@ -156,71 +217,153 @@ def row_from_issue(db, raw: dict[str, Any], people: dict[int, tuple[str | None, 
         "show_rating_key": show_key,
         "season": season,
         "episode": episode,
-        "title": (item.full_title or item.title) if item else None,
+        # A report on something not here keeps the name Seerr knows it by, so
+        # it still says what it was about.
+        "title": ((item.full_title or item.title) if item is not None and item.title else None) or raw.get("_name"),
         "reporter_name": name,
         "reporter_user_id": reporter_id,
         "comments": json.dumps(comments),
         "created_at": _when(raw.get("createdAt")),
         "updated_at": _when(raw.get("updatedAt")),
         "synced_at": datetime.now(UTC).replace(tzinfo=None),
+        "_how": how,
     }
 
 
-async def fetch(limit: int = 500) -> list[dict[str, Any]]:
-    """Every issue Seerr has, newest first, a page at a time."""
+# ---- reading Seerr -----------------------------------------------------------
+
+_CLIENT: ContextVar[Any] = ContextVar("seerr_client", default=None)
+
+
+@asynccontextmanager
+async def _connection():
+    """One connection for a whole read: a page of issues, every new one's
+    comments and the names of whatever did not match are dozens of requests,
+    and a client each would be a handshake each."""
+    if _CLIENT.get() is not None:
+        yield
+        return
+    import httpx
+
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        token = _CLIENT.set(client)
+        try:
+            yield
+        finally:
+            _CLIENT.reset(token)
+
+
+async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+    url = f"{seerr.base_url}/api/v1{path}"
+    client = _CLIENT.get()
+    if client is None:
+        return await get_json(url, headers=seerr.headers, params=params)
+    response = await client.get(url, headers=seerr.headers, params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+async def media_name(media: dict[str, Any]) -> str | None:
+    """What Seerr calls a film or show, for a report this app cannot place."""
+    kind, tmdb = media.get("mediaType"), _int(media.get("tmdbId"))
+    if kind not in ("movie", "tv") or not tmdb:
+        return None
+    data = await _get(f"/{kind}/{tmdb}") or {}
+    return data.get("title") or data.get("name") or None
+
+
+def _unplaced(raws: list[dict[str, Any]]) -> list[int]:
+    """The issues whose rating key finds nothing here, by Seerr id: the ones
+    worth asking Seerr the name of."""
+    with session_scope() as db:
+        out = []
+        for raw in raws:
+            media = raw.get("media") or {}
+            season, episode = _int(raw.get("problemSeason")), _int(raw.get("problemEpisode"))
+            if media.get("mediaType") != "tv" or not episode:
+                season = episode = None
+            if _match(db, media, season, episode, None)[2] is None:
+                out.append(_int(raw.get("id")))
+        return out
+
+
+async def _name_the_unplaced(raws: list[dict[str, Any]]) -> None:
+    import asyncio
+
+    wanted = set(await asyncio.to_thread(_unplaced, raws))
+    for raw in raws:
+        if _int(raw.get("id")) in wanted:
+            try:
+                raw["_name"] = await media_name(raw.get("media") or {})
+            except Exception as exc:  # noqa: BLE001 - a report without a name is still a report
+                log.debug("no name for issue %s: %s", raw.get("id"), exc)
+
+
+async def fetch(limit: int | None = None) -> list[dict[str, Any]]:
+    """Every issue Seerr has, newest first, a page at a time.
+
+    All of them by default. A cap here once meant the oldest reports were
+    never read at all, and a report not read is a report that, as far as this
+    app is concerned, nobody made.
+    """
     out: list[dict[str, Any]] = []
-    while len(out) < limit:
-        data = await get_json(
-            f"{seerr.base_url}/api/v1/issue",
-            headers=seerr.headers,
-            params={"take": PAGE, "skip": len(out), "filter": "all", "sort": "added"},
-        )
+    while limit is None or len(out) < limit:
+        data = await _get("/issue", {"take": PAGE, "skip": len(out), "filter": "all", "sort": "added"})
         results = (data or {}).get("results") or []
         out.extend(results)
         total = ((data or {}).get("pageInfo") or {}).get("results")
         if len(results) < PAGE or (total is not None and len(out) >= int(total)):
             break
-    return out[:limit]
+    return out if limit is None else out[:limit]
 
 
 async def detail(seerr_id: int) -> dict[str, Any]:
     """One issue with its comments, which the list leaves out."""
-    return await get_json(f"{seerr.base_url}/api/v1/issue/{seerr_id}", headers=seerr.headers)
+    return await _get(f"/issue/{seerr_id}")
 
 
-async def sync(limit: int = 500) -> dict[str, int]:
-    """Pull issues from Seerr. Comments are read for issues that changed."""
+def _known() -> dict[int, str | None]:
+    from app.models import Issue
+
+    with session_scope() as db:
+        return {
+            # A report whose comments have no author is read again in full,
+            # since a copy from the list may have been what lost them.
+            i.seerr_id: (i.updated_at.isoformat() if i.updated_at else None) if _named(i.comments) else "unnamed"
+            for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()
+        }
+
+
+async def _read(only_new: bool) -> tuple[list[dict[str, Any]], int]:
+    """Every issue, each in full where it is new (or changed, unless only new
+    ones are wanted), with names for those this app cannot place."""
     import asyncio
 
-    listed = await fetch(limit)
-    if not listed:
-        await asyncio.to_thread(_store, [])
-        return {"issues": 0}
-
-    def known() -> dict[int, str | None]:
-        from app.models import Issue
-
-        with session_scope() as db:
-            return {
-                # A report whose comments have no author is read again in full,
-                # since a copy from the list may have been what lost them.
-                i.seerr_id: (i.updated_at.isoformat() if i.updated_at else None) if _named(i.comments) else "unnamed"
-                for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()
-            }
-
-    seen = await asyncio.to_thread(known)
-    changed = [
+    listed = await fetch()
+    seen = await asyncio.to_thread(_known)
+    wanted = [
         r for r in listed
-        if _int(r.get("id")) not in seen or (_when(r.get("updatedAt")) or datetime.min).isoformat() != seen.get(_int(r.get("id")))
+        if _int(r.get("id")) not in seen
+        or (not only_new and (_when(r.get("updatedAt")) or datetime.min).isoformat() != seen.get(_int(r.get("id"))))
     ]
     full = {}
-    for raw in changed:
+    for raw in wanted:
         seerr_id = _int(raw.get("id"))
         try:
             full[seerr_id] = await detail(seerr_id)
-        except Exception as exc:  # noqa: BLE001 - one unreadable issue must not stop the sync
+        except Exception as exc:  # noqa: BLE001 - one unreadable issue must not stop the read
             log.debug("issue %s unreadable: %s", seerr_id, exc)
     rows = [full.get(_int(r.get("id")), r) for r in listed]
+    await _name_the_unplaced(rows)
+    return rows, len(full)
+
+
+async def sync(limit: int | None = None) -> dict[str, int]:
+    """Pull issues from Seerr. Comments are read for issues that changed."""
+    import asyncio
+
+    async with _connection():
+        rows, read = await _read(only_new=False)
     before = await asyncio.to_thread(_open_ids)
     stored = await asyncio.to_thread(_store, rows)
     # Word goes out for reports this app had not seen before, not for every
@@ -229,7 +372,34 @@ async def sync(limit: int = 500) -> dict[str, int]:
     if before is not None:
         for issue_id in sorted(set(await asyncio.to_thread(_open_ids)) - set(before)):
             told += 1 if await announce(issue_id) else 0
-    return {"issues": stored, "read": len(full), "told": told}
+    return {"issues": stored["stored"], "read": read, "told": told, "new": stored["new"],
+            "no_longer_in_seerr": stored["gone"]}
+
+
+async def import_all() -> dict[str, Any]:
+    """Bring in everything Seerr holds, and say what came of it.
+
+    The same reading and the same storing as the sync, which already keeps
+    reports current, so a report already here is recognised by Seerr's own id
+    and not brought in twice. What this adds is the answer: how many were
+    read, how many were new, how many were already here, and which could not
+    be put against a file and were kept anyway. Nobody is told about these,
+    since they are history rather than news.
+    """
+    import asyncio
+
+    async with _connection():
+        rows, _ = await _read(only_new=True)
+    stored = await asyncio.to_thread(_store, rows)
+    return {
+        "read": len(rows),
+        "new": stored["new"],
+        "already_here": stored["stored"] - stored["new"],
+        "unmatched": len(stored["unmatched"]),
+        "unmatched_titles": stored["unmatched"][:20],
+        "matched_by": stored["matched_by"],
+        "no_longer_in_seerr": stored["gone"],
+    }
 
 
 def _open_ids() -> list[int] | None:
@@ -271,11 +441,20 @@ def _keep_authors(old: str | None, new: str | None) -> str | None:
     return json.dumps(after)
 
 
-def _store(raws: list[dict[str, Any]]) -> int:
+def _store(raws: list[dict[str, Any]]) -> dict[str, Any]:
+    """Write what Seerr said, and count it.
+
+    Nothing is deleted on Seerr's say-so. A report Seerr no longer lists,
+    whether somebody deleted it there, Seerr was reinstalled, or it answered
+    with an empty list one evening, is marked and kept: this app is where
+    reports live, and losing them because another service forgot them is the
+    one outcome a system of record exists to prevent.
+    """
     from app.models import Issue
 
-    kept = 0
+    counts: dict[str, Any] = {"stored": 0, "new": 0, "gone": 0, "unmatched": [], "matched_by": {}}
     people = _directory(raws)
+    now = datetime.now(UTC).replace(tzinfo=None)
     with session_scope() as db:
         existing = {i.seerr_id: i for i in db.execute(select(Issue).where(Issue.seerr_id.is_not(None))).scalars()}
         seen: set[int] = set()
@@ -283,10 +462,17 @@ def _store(raws: list[dict[str, Any]]) -> int:
             row = row_from_issue(db, raw, people)
             if row is None:
                 continue
+            how = row.pop("_how")
+            if how is None:
+                counts["unmatched"].append(row["title"] or f"Seerr issue {row['seerr_id']}")
+            else:
+                counts["matched_by"][how] = counts["matched_by"].get(how, 0) + 1
             seen.add(row["seerr_id"])
+            row["seerr_gone_at"] = None
             issue = existing.get(row["seerr_id"])
             if issue is None:
                 db.add(Issue(**row))
+                counts["new"] += 1
             else:
                 row["comments"] = _keep_authors(issue.comments, row["comments"])
                 if row["message"] is None:
@@ -298,12 +484,12 @@ def _store(raws: list[dict[str, Any]]) -> int:
                     if value is None and key in ("title", "rating_key", "show_rating_key") and getattr(issue, key) is not None:
                         continue
                     setattr(issue, key, value)
-            kept += 1
-        # Deleted in Seerr, gone from here too, but local reports stay.
+            counts["stored"] += 1
         for seerr_id, issue in existing.items():
-            if seerr_id not in seen:
-                db.delete(issue)
-    return kept
+            if seerr_id not in seen and issue.seerr_gone_at is None:
+                issue.seerr_gone_at = now
+                counts["gone"] += 1
+    return counts
 
 
 # ---- writing back ----------------------------------------------------------
@@ -347,8 +533,11 @@ async def _mirror(issue_id: int, send) -> str | None:
     with session_scope() as db:
         issue = db.get(Issue, issue_id)
         seerr_id = issue.seerr_id if issue else None
+        gone = bool(issue and issue.seerr_gone_at)
     if not (seerr_id and seerr.configured()):
         return None
+    if gone:
+        return "Seerr no longer has this report, so the change is kept here only."
     try:
         await send(seerr_id)
     except Exception as exc:  # noqa: BLE001 - Seerr being down is not a reason to lose the note

@@ -590,6 +590,17 @@ function ReportTable({ result }: { result: Result }) {
           {rows.map((row) => (
             <tr key={String(row.key)}>
               <td>
+                {/* A title's row carries its poster, as every list of titles
+                    does: it says what the row is about before it is read. */}
+                {group.kind === "media" && row.key !== null && row.key !== undefined && row.key !== "" && (
+                  <img
+                    className="report-poster"
+                    src={`/api/media/${row.key}/image?width=46&height=69`}
+                    alt=""
+                    loading="lazy"
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")}
+                  />
+                )}
                 <RowLabel row={row} kind={group.kind} />
               </td>
               {then &&

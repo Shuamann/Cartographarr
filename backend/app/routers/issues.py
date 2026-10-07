@@ -114,6 +114,9 @@ def _brief(issue: Issue, names: dict[int, str], items: dict[int, Any] | None = N
         "comments": len(_comments(issue)),
         "created_at": issue.created_at.isoformat() if issue.created_at else None,
         "updated_at": issue.updated_at.isoformat() if issue.updated_at else None,
+        # Kept here after Seerr stopped listing it, which is worth saying
+        # beside the link that would no longer go anywhere.
+        "seerr_gone": bool(issue.seerr_gone_at),
     }
 
 

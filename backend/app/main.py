@@ -226,6 +226,25 @@ tasks.register(tasks.Task(
     "issues", "Read reported issues", "Problems people reported in Seerr, kept beside what this app knows about the file.",
     _issue_sync, lambda: 300,
 ))
+
+
+async def _issue_import() -> dict | str:
+    from app.integrations.seerr import seerr
+    from app.services import issues as issue_service
+
+    if not seerr.configured():
+        raise tasks.Skipped("Seerr is not set up")
+    result = await issue_service.import_all()
+    # The breakdown, not one number: what was new, what was already here,
+    # and what could not be put against a file and was kept anyway.
+    return {k: result[k] for k in ("read", "new", "already_here", "unmatched", "no_longer_in_seerr")}
+
+
+tasks.register(tasks.Task(
+    "issues_import", "Bring in Seerr's issues",
+    "Every report Seerr holds, matched to the file by its rating key or its ids, and kept even where no file matches.",
+    _issue_import, lambda: 24 * 3600,
+))
 async def _history_check() -> dict | str:
     """Ask Tautulli whether anything it recorded is missing here.
 

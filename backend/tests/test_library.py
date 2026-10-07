@@ -250,6 +250,16 @@ def test_playback_summary_for_a_user_and_a_device(client):
     assert device["streams_recorded"] == 1 and device["hardware"] == 1
 
 
+def test_a_stall_recorded_without_its_title_is_named_from_the_library(client):
+    """The seed's stall on key 3 was recorded with no title, the way a stall
+    caught before the session knew what it was playing is. The library knows
+    the file, so the profile says which film it was rather than a number."""
+    claim(client)
+    seed()
+    stalled = client.get("/api/users/2/playback").json()["stalled_titles"]
+    assert stalled == [{"rating_key": 3, "title": "Stalls", "stalls": 1}]
+
+
 def test_health_summary(client):
     from app.db import session_scope
     from app.models import BandwidthSample, StreamEvent, StreamSession, User
