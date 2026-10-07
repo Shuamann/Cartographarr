@@ -9,6 +9,7 @@ Ships in dry run. Turning that off is a deliberate act after reading the log.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import logging
@@ -22,6 +23,8 @@ from app.actions import registry
 from app.db import session_scope
 from app.models import BannedAddress, BannedDevice, Device, EnforcementLog, IpLocation, Rule, TravelFlag
 from app.plays import plays as count_plays
+from app.plex import server as plex_server
+from app.plex import serverwork
 from app.services import conditions, tracker
 from app.settings_store import current, is_configured, locked_keys
 from app.tautulli.client import TautulliClient
@@ -712,6 +715,14 @@ async def run_once() -> dict[str, Any]:
     # Read activity first, whatever happens next: the tracker has to see every
     # poll to time buffering and record it, even with no rules or rules off.
     sessions, context, error = await live_context()
+    # What the server is doing of its own accord, on the same poll, because
+    # there is nowhere else to read it from: Plex lists what is running now
+    # and keeps no history, so a scan nobody was watching for is gone. Six
+    # milliseconds, usually to be told nothing is running, and it rides here
+    # rather than on a timer of its own so a job that lasts twenty seconds is
+    # not missed.
+    if plex_server.configured():
+        await asyncio.to_thread(serverwork.sample)
     if error:
         log.warning("enforcer could not read activity: %s", error)
         return {"checked": 0, "matched": 0, "acted": 0, "error": error}

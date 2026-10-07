@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.112.0 - 2026-10-07
+
+### Added
+- What the Plex server is doing for itself. Scanning a library, analysing media or generating thumbnails reads
+  every file it touches off the same disks a stream is being read from, and nothing here could ever say so: Plex
+  lists what is running this second and keeps no history of it, so a scan at three in the morning left no trace
+  anywhere.
+- The Dashboard says so while it is happening, which is the answer to "why is it slow right now" that this app
+  has never had. Only while something is running: a line that says the server is idle every ten seconds is a line
+  nobody reads.
+- Storage lists what has run lately, with how long each took and what it was on when last seen. One row per job
+  rather than one per poll, keyed on Plex's own id, so a scan seen on forty polls is one thing that lasted six
+  minutes and not forty things a few seconds apart.
+- It is read on the same poll that watches streams, since reading it costs about six milliseconds and the answer
+  is usually that nothing is running. A Plex that will not answer costs that poll nothing.
+
 ## 0.111.0 - 2026-10-07
 
 ### Fixed

@@ -101,6 +101,34 @@ def list_actions(_: AdminUser) -> list[dict]:
     ]
 
 
+@router.get("/server-work")
+async def server_work(_: AdminUser, hours: int = Query(48, ge=1, le=720)) -> dict:
+    """What the Plex server is doing for itself, now and lately.
+
+    A scan or a media analysis reads every file it touches off the same disks
+    a stream is being read from, and nothing here could say so: Plex lists
+    what is running this second and keeps no history of it. Now comes from
+    Plex, so it is this second rather than one poll old; lately comes from
+    what the stream poll has written down.
+    """
+    from app.plex import server as plex_server
+    from app.plex import serverwork
+
+    if not plex_server.configured():
+        return {"now": [], "recent": [], "reason": "Plex is not set up"}
+
+    def read() -> dict:
+        with session_scope() as db:
+            return {"recent": serverwork.recent(db, hours)}
+
+    running: list[dict] = []
+    try:
+        running = await asyncio.to_thread(serverwork.now)
+    except Exception as exc:  # noqa: BLE001 - what it did lately is still worth having
+        log.warning("could not read what Plex is doing: %s", exc)
+    return {"now": running, **await asyncio.to_thread(read)}
+
+
 # ---- live activity ---------------------------------------------------------
 
 @router.get("/activity")

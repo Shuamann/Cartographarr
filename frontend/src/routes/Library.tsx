@@ -1,6 +1,7 @@
 import BrandIcon from "../components/BrandIcon";
 import Fact from "../components/Fact";
 import GapsSection from "../components/Gaps";
+import { ServerWorkLately } from "../components/ServerWork";
 import { LINKS } from "../components/StreamDetail";
 import { askConfirm, askText, tell } from "../components/Ask";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -2514,6 +2515,16 @@ function StorageSection({ days }: { days: number }) {
         </tbody>
       </table>
       <StoreTrends />
+      {/* Here rather than anywhere else: a scan or a media analysis reads
+          every file it touches off these same disks, which is the one answer
+          this page could never give about a store that went slow. */}
+      <h3>What the server has been doing for itself</h3>
+      <p className="muted small">
+        Plex scanning, analysing or generating for itself reads off these disks, so a stream being read from the
+        same one has to wait. Plex says what is running this second and keeps no history, so this is only what has
+        been seen since the app was watching.
+      </p>
+      <ServerWorkLately hours={48} />
     </>
   );
 }

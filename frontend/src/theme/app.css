@@ -5888,3 +5888,15 @@ label.locked .pill {
 .settings-nav-group:empty {
   display: none;
 }
+
+/* What the server is doing for itself, on the Dashboard. A note rather than a
+   warning: nothing is wrong, something is simply using the disks. */
+.server-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+.server-work-job {
+  min-width: 0;
+}

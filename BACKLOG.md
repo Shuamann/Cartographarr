@@ -494,6 +494,39 @@ a person. Wiring it to the tidy queue would mean deleting a file nobody asked
 about on the strength of an inference, which is a different kind of feature and
 wants more thought than a night.
 
+## What the server is doing for itself
+
+Shipped as a record and as two places that show it, and deliberately not as a
+verdict.
+
+Plex lists what is running at `/activities` and keeps no history: a scan at
+three in the morning left no trace anywhere. What is kept is a spell, one row
+per job keyed on Plex's own uuid, with a first and a last sighting, so "was the
+server busy while this stalled" is a range rather than a trawl through a sample
+a minute. It rides on the stream poll because reading it costs about six
+milliseconds and the answer is usually that nothing is running.
+
+The shape was measured by asking for a scan and watching: type
+`library.update.section`, a title like "Scanning Movies", a subtitle naming
+the item it is on, a progress percentage, and a Context child carrying the
+library's number.
+
+**What was not built, and the number to check before building it.** The obvious
+next step is a stall cause: a stall while the server was scanning is a stall
+with an explanation, and the cause list currently has to call that one "server
+side, others stalled too" or "one-off so far". It was left alone because
+nobody knows yet how often this server is busy at all. If it turns out that
+something of Plex's own is running most of the time, a cause keyed on it would
+relabel nearly every stall and say nothing. The figure to look at after a week
+is what share of stalls fall inside a spell against what share of all time the
+spells cover. Only a clear gap between those two is worth a cause.
+
+**What the live line cannot do.** A scan of a small library finished in six
+seconds on the server this was written against, which is shorter than any sane
+poll of a page, so the Dashboard line misses the short ones. That is the right
+trade, and the ones it misses are not what made anything buffer. Everything
+that ran at all is written down on the stream poll and listed under Storage.
+
 ## Smaller things noticed and not done
 
 - **A weekly digest exists and is off by default.** Worth revisiting whether

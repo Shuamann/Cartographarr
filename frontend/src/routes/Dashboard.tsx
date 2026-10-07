@@ -1,4 +1,5 @@
 import Loading from "../components/Loading";
+import ServerWork from "../components/ServerWork";
 import { displayTitle, episodeCode } from "../lib/titles";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi, type Activity, type Dashboard, type LiveSession } from "../lib/api";
@@ -69,6 +70,10 @@ export default function DashboardRoute({
       </div>
 
       {live.error && <p className="note bad-note" role="alert">{live.error}</p>}
+      {/* Why things might be slow this minute, which nothing could say
+          before: a scan reads off the same disks a stream comes from. Shown
+          only while something is running. */}
+      {isAdmin && <ServerWork />}
       {/* The strip below redraws itself every few seconds and announced
           nothing. One polite line, so a stream starting or stopping is heard
           without reading the whole strip again. */}

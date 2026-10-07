@@ -503,6 +503,52 @@ class StreamSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column()
 
 
+class ServerJob(Base):
+    """A spell of the Plex server doing something of its own.
+
+    Scanning a library, analysing media, generating chapter thumbnails: work
+    nobody asked for at that moment, which reads every file it touches and can
+    saturate the same disks a stream is being read from. The app has recorded
+    stalls since it existed and has never had anything to blame them on except
+    the stream itself.
+
+    A spell rather than a sample. Plex reports what is running now, with a
+    uuid that lasts as long as the job does, so one row per job with a first
+    and last sighting answers "was the server busy while this stalled" with a
+    range rather than a scan of a sample a minute.
+
+    The shape was measured rather than assumed, by asking for a scan and
+    watching: type `library.update.section`, a title like "Scanning Movies", a
+    subtitle naming the item it is on, a progress percentage, and a Context
+    child carrying the library's number.
+    """
+
+    __tablename__ = "server_jobs"
+    __table_args__ = (
+        Index("ix_server_jobs_seen", "started_at", "last_seen"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(64), index=True)
+    """Plex's own id for this spell. Unique while it runs and reused by
+    nothing, so it is what tells a scan that is still going from a second scan
+    of the same library an hour later."""
+
+    kind: Mapped[str | None] = mapped_column(String(64))
+    title: Mapped[str | None] = mapped_column(Text)
+    subtitle: Mapped[str | None] = mapped_column(Text)
+    """What it was on when last seen. Not kept per sample: the useful question
+    is which job was running, not which file it was reading at second forty."""
+
+    section_id: Mapped[int | None] = mapped_column(Integer)
+    progress: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime | None] = mapped_column()
+    last_seen: Mapped[datetime | None] = mapped_column()
+    """When it was last reported running. The end of the spell, give or take
+    one poll. There is no "finished" event to wait for: a job that has ended
+    simply stops being listed."""
+
+
 class PlexBandwidth(Base):
     """What Plex measured each device using, a day at a time.
 
