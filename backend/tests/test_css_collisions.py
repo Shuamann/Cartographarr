@@ -228,3 +228,27 @@ def test_the_facts_grid_cannot_push_a_card_sideways():
         assert "text-overflow: ellipsis" in body and "overflow: hidden" in body, (
             "a value held to one line has to be cut when it will not fit, not carried outside the card"
         )
+
+
+def test_a_table_scrolls_itself_on_a_phone():
+    """A table cannot be narrower than its columns' own minimum.
+
+    The Storage table's seven columns came to 626 pixels inside a 375 pixel
+    screen and took the whole document sideways with them, so every page
+    scrolled, including the parts that fitted. Measured in a real browser at
+    375 wide: 626 against 375 before, and the page fits after. `display:
+    block` is what lets a table scroll at all; `overflow-x` on its own does
+    nothing to one.
+    """
+    css = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "theme" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    for query in re.finditer(r"@media ([^{]+)\{", css):
+        block = css[query.end() : css.find("\n}", query.end())]
+        if re.search(r"^\s+\.table \{", block, re.M) and "max-width" in query.group(1):
+            rule = block[block.index(".table {") :]
+            assert "display: block" in rule and "overflow-x: auto" in rule, (
+                "a table needs both to scroll itself: " + rule[:120]
+            )
+            return
+    raise AssertionError("the narrow-screen rule letting a table scroll itself is gone")

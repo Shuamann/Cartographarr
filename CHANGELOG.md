@@ -4,6 +4,17 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.115.4 - 2026-10-08
+
+### Fixed
+- Two pages ran off the side of a phone, and took every other page with them: once a document scrolls sideways it
+  scrolls everywhere, including the parts that fitted. The Storage table's seven columns came to 626 pixels
+  inside a 375 pixel screen, and a table cannot be narrower than its columns, so it scrolls inside itself now.
+- A row of three choices came to 417 pixels and neither wrapped nor scrolled. It wraps, rather than scrolling,
+  because with three of them a choice that is off the screen is a choice nobody makes.
+- Measured in a real browser at 375 wide, every page fits: Library's lists, an open file card, Storage and the
+  Dashboard.
+
 ## 0.115.3 - 2026-10-08
 
 ### Changed

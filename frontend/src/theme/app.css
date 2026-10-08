@@ -1383,6 +1383,18 @@ code {
   border-collapse: collapse;
   font-size: 13px;
 }
+/* On a phone a table scrolls inside itself rather than pushing the page.
+   A table cannot be narrower than its columns' own minimum, so Storage's
+   seven columns came to 626 pixels inside a 375 pixel screen and took the
+   whole document sideways with them: every page then scrolled, including the
+   parts that fitted. Measured at 375 wide: 626 against 375 before, and the
+   page fits after. `display: block` is what lets a table scroll at all. */
+@media (max-width: 700px) {
+  .table {
+    display: block;
+    overflow-x: auto;
+  }
+}
 .table td {
   padding: 7px 10px;
   border-bottom: 1px solid var(--border);
@@ -1410,6 +1422,15 @@ code {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   overflow: hidden;
+}
+/* Three choices of a few words each come to 417 pixels, which does not fit a
+   375 pixel screen, and the group neither wraps nor scrolls, so it took the
+   whole page sideways. Wrapping rather than scrolling because there are three
+   of them: a hidden choice is a choice nobody makes. */
+@media (max-width: 700px) {
+  .segmented {
+    flex-wrap: wrap;
+  }
 }
 .seg {
   font: inherit;
