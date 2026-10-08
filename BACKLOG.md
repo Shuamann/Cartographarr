@@ -157,6 +157,12 @@ Each of these cost real time. They are written down so they cost it once.
 - **A button inside a button is neither valid nor well behaved.** Making the
   parts of a card clickable meant turning the card into something that behaves
   like a button rather than being one.
+- **A date written into a test expires.** A test of "what has run in the last
+  forty eight hours" was given timestamps on a fixed day. It passed when it was
+  written and failed the next morning, with an error that says nothing about
+  the cause. Where the code under test counts back from now, the test has to
+  count back from now too. Fixed dates are fine where both sides of the
+  comparison are fixed, which is most of them.
 - **Measure before optimising, and after.** More than once the obvious cause
   was not the cause: the index that did not help, the test suite whose cost was
   the scheduler rather than the fixtures, the poster slowness that was the
