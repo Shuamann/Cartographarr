@@ -492,7 +492,22 @@ gain here".
 **Not built: an action.** The list shows both paths and leaves the deleting to
 a person. Wiring it to the tidy queue would mean deleting a file nobody asked
 about on the strength of an inference, which is a different kind of feature and
-wants more thought than a night.
+wants more thought than a night. Deleting a file the person has picked, from
+the row that shows both paths, is a different question and a reasonable one;
+it is a policy decision about what this app is allowed to do rather than a
+piece of work, and it should be asked rather than assumed.
+
+**Not built: asking Sonarr to find the missing episodes.** The obvious close of
+the loop, and the integration already searches for one episode by its show's
+TVDB id, so a season's worth is `EpisodeSearch` with a list of ids instead of
+one. It was left alone because there is no Sonarr connected to this install to
+check it against, and three things would be guesses: whether `EpisodeSearch`
+respects monitoring in the version somebody is running, what Sonarr says about
+an episode number it does not list at all (which is the double episode case
+again, and probably the common one), and whether a season Sonarr numbers
+differently lines up with Plex's numbering at all. Writing it blind against the
+documentation would put a button in front of somebody that quietly does
+nothing. This belongs with Tdarr and Trakt, below, waiting on an instance.
 
 ## What the server is doing for itself
 
@@ -527,10 +542,47 @@ poll of a page, so the Dashboard line misses the short ones. That is the right
 trade, and the ones it misses are not what made anything buffer. Everything
 that ran at all is written down on the stream poll and listed under Storage.
 
+## Collections, now that something reads them
+
+510 of them on this install, written down by the scan since the tags table
+existed and read by nothing but a report grouping. The first thing built on
+them is the one that needed no new data and answers a real question: never
+suggest deleting anything in these.
+
+It works because the cleanup list measures the only thing it can, which is how
+a file has been played, and a collection is where somebody has already written
+down what they care about. Keeping one file at a time was already there and
+does not scale: forty films is forty clicks, and another each time one of them
+ages past the threshold.
+
+Things it could do next, in the order they seem worth it:
+
+- **A tidy scoped to a collection**, which is how somebody thinks about a chunk
+  of their library. The bulk tidy already works from an attention list; taking
+  a collection instead is the same code with a different source of keys.
+- **A rule scoped to a collection**, for the same reason. Needs a condition
+  that can ask whether the thing playing is in one, which is one indexed
+  lookup against the tags table.
+- **A collection's own health**: its size, how many of its files are problems,
+  how much of it anybody has watched. Everything needed is already there and it
+  is a page rather than a feature.
+
+Worth knowing before building any of them: the largest collection on this
+install holds 1,727 titles and the next holds 42, so anything that walks a
+collection has to cope with one that is most of a library.
+
 ## Smaller things noticed and not done
 
 - **A weekly digest exists and is off by default.** Worth revisiting whether
-  anything else belongs in it once it has been run for a few weeks.
+  anything else belongs in it once it has been run for a few weeks. The server
+  unreachable alert and the disk warning are both candidates for a line in it.
+- **The attention list is not in the house style.** It still draws a small
+  poster beside a block of text, where everything else about a title now
+  carries its artwork across the row. It is the list most often looked at,
+  which is an argument both ways: worth doing, and worth not breaking.
+- **A report resolved by a replacement could say so on its row.** The
+  replacements feature already knows when a new file landed and already closes
+  the report; only the row does not mention it.
 
 ---
 
@@ -593,3 +645,7 @@ measured again.
   and have been failing for the life of the install without one.
 - **Tdarr and Trakt.** Both need an instance or a client id before anything
   can be written against them.
+- **Searching Sonarr for the episodes a season is missing.** Nothing to build
+  against: no Sonarr is connected to this install, and the three things that
+  decide whether it works at all cannot be checked from the documentation. See
+  the holes section above for what they are.
