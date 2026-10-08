@@ -1431,7 +1431,15 @@ function TidyJobRow({ job, waitForQuiet, onChanged }: { job: TidyJob; waitForQui
                 ? "Waiting for the streams to stop"
                 : "Waiting its turn"
               : `${job.status}: ${job.detail ?? ""}`}
-          {job.saved_bytes ? ` (${size(job.saved_bytes)} smaller)` : ""}
+          {/* A tidy can make a file larger, and often is meant to: adding a
+              track everything can play costs a few hundred megabytes. The
+              figure is what the file lost, so a negative one is growth, and
+              printing it as "-350 MB smaller" is nonsense. */}
+          {job.saved_bytes
+            ? job.saved_bytes > 0
+              ? ` (${size(job.saved_bytes)} smaller)`
+              : ` (${size(-job.saved_bytes)} larger)`
+            : ""}
           {/* Who asked, because a rule acting on its own is the case somebody
               will want to go and look at. */}
           {job.asked_by ? ` \u00b7 asked by ${job.asked_by}` : ""}

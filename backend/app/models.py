@@ -1077,6 +1077,11 @@ class MediaJob(Base):
     detail: Mapped[str | None] = mapped_column(Text)
     """The last thing worth saying: what it is doing, or why it stopped."""
     saved_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    """What the file lost, so a negative number means it grew. A tidy often is
+    meant to: adding a track every television can play costs a few hundred
+    megabytes and is the point of the step. Anything showing this has to say
+    which happened rather than printing a negative saving."""
+
     asked_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime | None] = mapped_column(index=True)
     finished_at: Mapped[datetime | None] = mapped_column()

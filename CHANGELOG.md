@@ -4,6 +4,13 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.115.2 - 2026-10-08
+
+### Fixed
+- A tidy that made a file larger read as "-350 MB smaller" in the queue. The figure recorded is what the file
+  lost, so a negative one is growth, and growth is a normal outcome rather than an error: adding a track every
+  television can play costs a few hundred megabytes and is the point of that step. It says larger or smaller.
+
 ## 0.115.1 - 2026-10-08
 
 ### Changed

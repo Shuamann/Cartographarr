@@ -200,3 +200,21 @@ def test_a_file_whose_tracks_state_no_size_is_counted_apart(client, monkeypatch)
     out = client.post("/api/library/tidy/many", json={"kind": "messy", "dry_run": True}).json()
     assert out["size_unknown"] == 1
     assert out["size_change"] == 0
+
+
+def test_a_tidy_that_grows_a_file_records_the_growth_as_a_loss(client):
+    """What the file lost, so a negative number means it grew. Adding a track
+    every television can play costs a few hundred megabytes and is the point
+    of the step, so this is a normal outcome and not an error. It is written
+    down here because the column is read in two places and a negative read as
+    a saving prints "350 MB smaller" about a file that got bigger.
+    """
+    from app.db import session_scope
+    from app.models import MediaJob
+    from app.services import mediafix
+
+    with session_scope() as db:
+        db.add(MediaJob(id=1, rating_key=1, path="/movies/1.mkv", status="running"))
+    mediafix._finish(1, "done", "Tidied, 1 change made, Plex told", saved=-350_000_000)
+    with session_scope() as db:
+        assert db.get(MediaJob, 1).saved_bytes == -350_000_000
