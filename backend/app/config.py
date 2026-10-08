@@ -391,6 +391,18 @@ class Settings(BaseSettings):
     """The hour to send it, in the server's own time. Settings shows what the
     server thinks the time is, in case TZ is not what you meant."""
 
+    keep_collections: str = ""
+    """Collections never to suggest deleting anything from, one per line.
+
+    The cleanup list works from how a file has been played, which is all it
+    can measure, and a collection is the one place somebody has already
+    written down what they care about. Keeping a file at a time already works
+    and does not scale: a box set of forty films is forty clicks, and another
+    one each time a film in it ages past the threshold.
+
+    Matched on the name as Plex reports it, ignoring case. A collection on a
+    show covers its episodes."""
+
     disk_sizes: str = ""
     """How big a disk really is, where it will not say, one per line.
 

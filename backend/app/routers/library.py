@@ -267,6 +267,25 @@ async def copies(_: AdminUser, section_id: int | None = None, sizes: bool = True
     return await asyncio.to_thread(read)
 
 
+@router.get("/collections")
+def collections(_: AdminUser, db: Db) -> list[dict]:
+    """Every collection Plex reports, with how many titles are in it.
+
+    So the setting that keeps them can be picked from rather than typed from
+    memory. A name typed with a letter wrong is a setting that silently
+    protects nothing, which is the worst way for this to fail.
+    """
+    from app.models import MediaTag
+
+    rows = db.execute(
+        select(MediaTag.value, func.count())
+        .where(MediaTag.kind == "collection")
+        .group_by(MediaTag.value)
+        .order_by(func.lower(MediaTag.value))
+    ).all()
+    return [{"name": name, "titles": int(n or 0)} for name, n in rows]
+
+
 @router.get("/cleanup")
 async def cleanup(_: AdminUser, days: int = Days) -> dict:
     """Big files nobody watches, and why each one stands out."""

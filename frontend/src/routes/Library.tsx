@@ -3485,6 +3485,9 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
     watching_days?: number;
     settling?: number;
     settling_days?: number;
+    /* Left out because they are in a collection somebody said to keep. */
+    in_collection?: number;
+    kept_collections?: string[];
   }>(`/library/attention?kind=${lens}&days=${days}`, [lens, days]);
   const keptList = useApi<Kept[]>("/library/cleanup/kept");
 
@@ -3624,6 +3627,16 @@ function Attention({ days, inFlight }: { days: number; inFlight: Map<number, str
               {" "}
               {data.data.settling} were added in the last {data.data.settling_days} days, so nobody not having
               watched them yet says nothing.
+            </>
+          )}
+          {Boolean(data.data.in_collection) && (
+            <>
+              {" "}
+              {data.data.in_collection} are in{" "}
+              {(data.data.kept_collections ?? []).length === 1
+                ? "a collection"
+                : `${(data.data.kept_collections ?? []).length} collections`}{" "}
+              you said to keep.
             </>
           )}
         </p>

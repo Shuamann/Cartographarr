@@ -229,6 +229,11 @@ const AREAS: Area[] = [
         keys: ["disk_sizes"],
       },
       {
+        title: "Collections to keep",
+        note: "Nothing in these is ever suggested for deletion. The cleanup list works from how a file has been played, which is all it can measure; a collection is where you have already written down what you care about. Keeping a file at a time works and does not scale: a box set of forty films is forty clicks, and another each time one of them ages past the threshold. One name per line, as Plex spells it, and a collection on a show covers its episodes.",
+        keys: ["keep_collections"],
+      },
+      {
         title: "Problem files",
         note: "The average bitrate above which a remotely watched file is listed as a problem in Library. Set it near what one remote stream can comfortably use.",
         keys: ["library_bitrate_threshold_mbps"],
@@ -453,6 +458,7 @@ const LABELS: Record<string, string> = {
   digest_hour: "At",
   watch_alerts: "Tell me about new devices and signals",
   disk_sizes: "Disk sizes",
+  keep_collections: "One name per line",
   disk_warn_percent: "Warn when free space is under",
   disk_critical_percent: "And say so more loudly under",
   keep_streams_days: "Keep stream records for",
@@ -525,6 +531,7 @@ const SHAPES: Record<string, FieldShape> = {
   impossible_max_accuracy_km: { unit: "km", min: 0, max: 5000, step: 10 },
   session_ttl_hours: { unit: "hours", min: 1, max: 8760, step: 1 },
   disk_sizes: { kind: "lines" },
+  keep_collections: { kind: "lines" },
   disk_warn_percent: { unit: "percent", min: 0, max: 90, step: 1 },
   disk_critical_percent: { unit: "percent", min: 0, max: 90, step: 1 },
   keep_streams_days: { unit: "days", min: 0, max: 3650, step: 1 },

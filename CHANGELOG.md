@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.115.0 - 2026-10-07
+
+### Added
+- Collections that are never suggested for deletion, under Settings, Library and files. The cleanup list works
+  from how a file has been played, which is all it can measure, and a collection is the one place somebody has
+  already written down what they care about. 510 of them sat in the database on the library this was written
+  against, read from Plex on every scan, and nothing had ever used them except a report grouping.
+- Keeping a file at a time already worked and does not scale: a box set of forty films is forty clicks, and
+  another one each time a film in it ages past the threshold. Verified against the real library: one collection
+  named took thirteen files out of the list.
+- A collection on a show covers its episodes, since Plex never files one against an episode, and matching on the
+  item's own key alone would protect nothing on television. The name is matched whatever its case, because a name
+  typed with a letter wrong is a setting that silently protects nothing.
+- How many were left out is said on the list, the way the two existing exclusions already say so. A list that
+  quietly shrinks is a list nobody can reason about.
+
 ## 0.114.0 - 2026-10-07
 
 ### Added

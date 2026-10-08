@@ -56,6 +56,36 @@ off, short enough that a show abandoned last year is not protected for ever.
 """
 
 
+def kept_collections() -> list[str]:
+    """The collections somebody has said to leave alone, lowercased."""
+    from app.settings_store import current
+
+    raw = (current().keep_collections or "").replace(";", "\n").replace(",", "\n")
+    return [line.strip().lower() for line in raw.splitlines() if line.strip()]
+
+
+def _in_kept_collections(db, names: list[str]) -> set[int]:
+    """Every rating key covered by one of those collections.
+
+    Plex files a collection against a film or a show, not against an episode,
+    so a show's episodes are covered through their grandparent. Returned as
+    the keys the collection names directly; the caller checks an item, its
+    season and its show against it, which is cheaper than expanding tens of
+    thousands of episodes here.
+    """
+    from sqlalchemy import func, select
+
+    from app.models import MediaTag
+
+    if not names:
+        return set()
+    return set(db.execute(
+        select(MediaTag.rating_key).where(
+            MediaTag.kind == "collection", func.lower(MediaTag.value).in_(names)
+        )
+    ).scalars())
+
+
 def _shows_being_watched(db, keys: list[int]) -> dict[int, tuple[str | None, int]]:
     """Shows anybody has played lately, and who last did.
 
@@ -96,6 +126,7 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
     now = int(datetime.now(UTC).timestamp())
     kept = _kept()
     named = labels()
+    wanted_collections = kept_collections()
 
     with session_scope() as db:
         items = db.execute(
@@ -110,6 +141,7 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             return {"items": [], "found": 0, "reclaimable": 0, "kept": len(kept), "days": days}
 
         keys = [item.rating_key for item in items]
+        protected = _in_kept_collections(db, wanted_collections)
         watching = _shows_being_watched(db, keys)
         played: dict[int, tuple[int, int | None]] = {
             key: (int(count or 0), last)
@@ -131,9 +163,19 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
             scaled[key] = (seen + int(count or 0), down + (0 if is_4k else int(count or 0)))
 
         out = []
-        spared = settling = 0
+        spared = settling = in_collection = 0
         for item in items:
             if item.rating_key in kept:
+                continue
+            # The item itself for a film, its show for an episode, since that
+            # is the level Plex files a collection at. Counted rather than
+            # silently dropped: a list that quietly shrinks is a list nobody
+            # can reason about, which is the rule the other two exclusions
+            # already follow.
+            if protected and not protected.isdisjoint(
+                {k for k in (item.rating_key, item.grandparent_rating_key, item.parent_rating_key) if k}
+            ):
+                in_collection += 1
                 continue
             plays, last = played.get(item.rating_key, (0, None))
             age_days = int((now - last) / 86400) if last else None
@@ -181,6 +223,8 @@ def candidates(days: int = 365, limit: int = 200) -> dict[str, Any]:
         "watching_days": WATCHING_DAYS,
         "settling": settling,
         "settling_days": SETTLING_DAYS,
+        "in_collection": in_collection,
+        "kept_collections": wanted_collections,
         "days": days,
     }
 
@@ -292,6 +336,8 @@ def attention(kind: str, days: int, threshold_kbps: int, limit: int = 200) -> di
                 "watching_days": found.get("watching_days"),
                 "settling": found.get("settling", 0),
                 "settling_days": found.get("settling_days"),
+                "in_collection": found.get("in_collection", 0),
+                "kept_collections": found.get("kept_collections", []),
             }
         else:
             found = library.problem_files(db, threshold_kbps, days, limit=wanted)
