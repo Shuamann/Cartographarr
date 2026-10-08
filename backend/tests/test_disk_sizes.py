@@ -79,3 +79,39 @@ def test_the_page_is_told_which_kind_of_answer_it_is_looking_at(client, monkeypa
     assert row["used"] == 5 * TB, "counted from the files here"
     assert row["free"] == 15 * TB
     assert row["stated"] is True, "and the page is told which kind of answer it is"
+
+
+def test_a_warning_on_a_stated_disk_says_where_the_figure_came_from(client):
+    """A stated capacity means the room left is worked out from the files this
+    app knows about, and anything else on the share is invisible to it. The
+    figure therefore errs towards saying there is more room than there is,
+    which is the dangerous direction for a warning about a disk filling. It is
+    still better than the share's own answer, which is the whole reason the
+    setting exists, so the message says which it is rather than the warning
+    being withheld.
+    """
+    from app.services import room
+
+    room.forget()
+    news = room.check(
+        [{"path": "/mnt/user/media2", "free": 1_000_000_000_000, "total": 20_000_000_000_000,
+          "labels": ["media2"], "stated": True}],
+        warn_at=10, critical_at=3,
+    )
+    assert len(news) == 1
+    heading, body = room.words(news[0])
+    assert "stated" in body
+    room.forget()
+
+
+def test_a_warning_read_off_the_disk_says_nothing_extra(client):
+    from app.services import room
+
+    room.forget()
+    news = room.check(
+        [{"path": "/mnt/disk1", "free": 1_000_000_000_000, "total": 20_000_000_000_000, "labels": ["disk1"]}],
+        warn_at=10, critical_at=3,
+    )
+    _, body = room.words(news[0])
+    assert "stated" not in body
+    room.forget()

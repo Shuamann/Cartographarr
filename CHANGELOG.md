@@ -4,6 +4,15 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.115.3 - 2026-10-08
+
+### Changed
+- A warning that a stated disk is getting full says the figure was worked out from the capacity you gave and the
+  files this app can see there. Anything else on that share is invisible to it, so the figure errs towards saying
+  there is more room than there is, which is the dangerous direction for this particular warning. Still better
+  than the share's own answer, which is the whole reason for stating a size, so the message says which it is
+  rather than the warning being withheld.
+
 ## 0.115.2 - 2026-10-08
 
 ### Fixed

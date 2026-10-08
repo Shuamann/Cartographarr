@@ -66,6 +66,14 @@ def check(disks: list[dict[str, Any]], warn_at: int, critical_at: int) -> list[d
             "total": int(total),
             "percent": round(int(free) / int(total) * 100, 1),
             "labels": disk.get("labels") or [],
+            # True where the capacity was written down rather than read off
+            # the disk, which means the room left is worked out from the files
+            # this app knows about. Anything else on the share is invisible to
+            # it, so the figure errs towards saying there is more room than
+            # there is, which is the dangerous direction for this warning. It
+            # is still better than the share's own answer, which is what the
+            # setting exists for, but the message has to say which it is.
+            "stated": bool(disk.get("stated")),
         })
     return news
 
@@ -81,6 +89,8 @@ def words(item: dict[str, Any]) -> tuple[str, str]:
     """What to say about one disk, as a heading and a line."""
     where = ", ".join(item["labels"]) or item["path"]
     left = f"{_size(item['free'])} left of {_size(item['total'])}, which is {item['percent']}%"
+    if item.get("stated"):
+        left += ", worked out from the capacity you stated and the files this app can see there"
     if item["state"] == "critical":
         return (f"{where} is nearly full", f"{left}. Nothing more will be said about it until it changes.")
     if item["state"] == "low":
@@ -124,7 +134,8 @@ async def look() -> dict[str, Any]:
         if not where:
             continue
         disk = disks.setdefault(where, {"path": where, "free": row.get("free"),
-                                        "total": row.get("total"), "labels": []})
+                                        "total": row.get("total"), "labels": [],
+                                        "stated": bool(row.get("stated"))})
         disk["labels"].append(row.get("store"))
     readable = [d for d in disks.values() if d.get("free") and d.get("total")]
     news = check(readable, settings.disk_warn_percent, settings.disk_critical_percent)
