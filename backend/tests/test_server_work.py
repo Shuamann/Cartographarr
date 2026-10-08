@@ -12,7 +12,7 @@ mistake it names.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.db import session_scope
 from app.plex import serverwork
@@ -26,7 +26,10 @@ ANALYSE = {
     "subtitle": None, "progress": 5, "section_id": None,
 }
 
-T0 = datetime(2026, 10, 7, 3, 0, 0)
+# Relative to now, not a date written down. `recent` asks what has run in the
+# last so many hours, so a fixed timestamp makes a test that passes on the day
+# it was written and fails the next morning, which is exactly what happened.
+T0 = datetime.now(UTC).replace(tzinfo=None, microsecond=0) - timedelta(hours=6)
 
 
 def put(rows, at):

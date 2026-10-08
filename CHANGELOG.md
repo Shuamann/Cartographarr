@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.115.1 - 2026-10-08
+
+### Changed
+- The explanations under each tidy step are held to a line length somebody can read. Across an open file card
+  they ran the full width, about 180 characters, and a paragraph that wide loses the reader at every line break.
+
+### Fixed
+- A test of what the server has run lately carried a date written into it, so it passed on the day it was written
+  and failed the next morning. It counts back from now like the code it tests.
+
 ## 0.115.0 - 2026-10-07
 
 ### Added

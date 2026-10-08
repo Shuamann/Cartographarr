@@ -1151,6 +1151,14 @@ code {
   gap: var(--space-2);
   cursor: pointer;
 }
+/* Why a step is worth doing, held to a line length somebody can read. Across
+   an open file card these ran the full width, which is about 180 characters,
+   and a paragraph that wide loses the reader at every line break. The same
+   measure the rest of the app already uses for explanations. */
+.tidy-step-why {
+  display: block;
+  max-width: 70ch;
+}
 .tidy-step input {
   width: auto;
   min-height: 0;

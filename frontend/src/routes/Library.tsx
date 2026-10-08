@@ -1341,7 +1341,7 @@ function TidyPanel({
       {blocked && <p className="note warn-note">{blocked}</p>}
       {t.steps.length > 0 && (
         <>
-          <p className="muted small">
+          <p className="muted small tidy-step-why">
             What each would be worth, worked out from each track's bitrate and how long the file runs. An
             estimate: the tracks being added are exact, since the encoder is given a fixed bitrate, and the ones
             being dropped are as good as the bitrates in the file.
@@ -1357,7 +1357,7 @@ function TidyPanel({
               />
               <span className="min0">
                 <strong>{step.what}</strong>
-                <span className="muted small">{step.why}</span>
+                <span className="muted small tidy-step-why">{step.why}</span>
               </span>
               {/* What it is worth, beside the step rather than under it,
                   so a column of numbers can be read down. */}
