@@ -173,6 +173,13 @@ Each of these cost real time. They are written down so they cost it once.
 
 - Nothing ships without the full test suite passing, a sweep of every page in a
   real browser, and a scan of the diff for anything personal.
+- The browser sweep is done twice: once at a desktop width, listening for
+  console errors, failed requests and React warnings, and once at 375 wide
+  asking only whether the document is wider than the window. The second one
+  found two pages that pushed every other page sideways, and neither was
+  visible in a screenshot. The check is one line, `scrollWidth > clientWidth`
+  on the document, and it is worth running on every page after any layout
+  change.
 - The version is bumped in four places and the changelog gets an entry, every
   time.
 - Commits are made as Shua Theater, and the message explains the reasoning
@@ -541,6 +548,12 @@ something of Plex's own is running most of the time, a cause keyed on it would
 relabel nearly every stall and say nothing. The figure to look at after a week
 is what share of stalls fall inside a spell against what share of all time the
 spells cover. Only a clear gap between those two is worth a cause.
+
+**What it costs to ask.** Measured against the real server with the app
+running: what the server is doing, 11 ms; the collections list, 7 ms; the
+seasons with holes in them, 250 ms for 26,908 episode rows read and grouped;
+and what is here twice, 530 ms including a round trip to Plex for the few
+dozen items with several files. Nothing here needs making faster.
 
 **What the live line cannot do.** A scan of a small library finished in six
 seconds on the server this was written against, which is shorter than any sane
