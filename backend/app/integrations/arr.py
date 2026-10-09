@@ -18,12 +18,24 @@ log = logging.getLogger(__name__)
 
 
 class ArrIntegration:
-    def __init__(self, name: str, label: str, path: str, id_param: str, slug_field: str) -> None:
+    def __init__(
+        self, name: str, label: str, path: str, id_param: str, slug_field: str,
+        alt_id_param: str | None = None, id_name: str = "", alt_id_name: str = "",
+    ) -> None:
         self.name = name
         self.label = label
         self.path = path  # "movie" or "series"
         self.id_param = id_param  # "tmdbId" or "tvdbId"
         self.slug_field = slug_field  # which column caches the slug
+        self.alt_id_param = alt_id_param
+        """A second id to try, where the service will filter on one. Radarr
+        takes imdbId as well as tmdbId; Sonarr's series endpoint takes only
+        tvdbId, so it has none and nothing changes for it."""
+
+        self.id_name = id_name or id_param
+        self.alt_id_name = alt_id_name or (alt_id_param or "")
+        """What to call them in a message. "TMDB id" reads to a person;
+        "tmdbId" reads to whoever wrote the query string."""
 
     # ---- configuration -----------------------------------------------------
 
@@ -127,10 +139,39 @@ class ArrIntegration:
             response.raise_for_status()
             return response.json() if response.content else None
 
-    async def find(self, external_id: str) -> dict | None:
-        found = await get_json(f"{self.base_url}/api/v3/{self.path}", headers=self.headers, params={self.id_param: external_id})
+    async def _by(self, param: str, value: str) -> dict | None:
+        found = await get_json(
+            f"{self.base_url}/api/v3/{self.path}", headers=self.headers, params={param: value}
+        )
         items = found if isinstance(found, list) else [found]
         return next((i for i in items if isinstance(i, dict) and i.get("id")), None)
+
+    async def find(self, external_id: str, alt_id: str | None = None) -> dict | None:
+        """The movie or series, by the id Plex matched it to, then by the other.
+
+        Two ids because they disagree. Plex matched a film to one Hamlet from
+        2024 and the library holds another, and either agreeing is enough to
+        find it. One extra request, on a path somebody has already clicked.
+        """
+        found = await self._by(self.id_param, external_id)
+        if found is None and alt_id and self.alt_id_param:
+            found = await self._by(self.alt_id_param, alt_id)
+        return found
+
+    def _missing(self, external_id: str, alt_id: str | None = None) -> LookupError:
+        """Why it was not found, naming what was looked for.
+
+        "Not in Radarr" about a film plainly sitting in Radarr is true and
+        useless. The id is the whole answer: seeing it is for a different film
+        is a glance, and guessing why the app is wrong is an evening.
+        """
+        tried = f"{self.id_name} {external_id}"
+        if alt_id and self.alt_id_param:
+            tried += f" or {self.alt_id_name} {alt_id}"
+        return LookupError(
+            f"{self.label} has nothing under {tried}, which is what this file is matched to. "
+            f"Either it was added to {self.label} under another id, or the match here is for a different title."
+        )
 
     async def _episode_id(self, series_id: int, season: int, episode: int) -> int | None:
         episodes = await get_json(
@@ -138,11 +179,14 @@ class ArrIntegration:
         )
         return next((e["id"] for e in episodes or [] if e.get("episodeNumber") == episode), None)
 
-    async def search(self, external_id: str, season: int | None = None, episode: int | None = None) -> str:
+    async def search(
+        self, external_id: str, season: int | None = None, episode: int | None = None,
+        alt_id: str | None = None,
+    ) -> str:
         """Ask for a search for this movie, or this one episode."""
-        found = await self.find(external_id)
+        found = await self.find(external_id, alt_id)
         if found is None:
-            raise LookupError(f"Not in {self.label}")
+            raise self._missing(external_id, alt_id)
         if self.path == "movie":
             await self._send("POST", "/api/v3/command", {"name": "MoviesSearch", "movieIds": [found["id"]]})
             return f"{self.label} is searching for {found.get('title')}"
@@ -156,11 +200,13 @@ class ArrIntegration:
 
     # ---- replacements: find, grab, follow, confirm or deny --------------------------
 
-    async def locate(self, external_id: str, season: int | None, episode: int | None) -> tuple[dict, int | None]:
+    async def locate(
+        self, external_id: str, season: int | None, episode: int | None, alt_id: str | None = None,
+    ) -> tuple[dict, int | None]:
         """The movie or series, and for Sonarr the episode id."""
-        found = await self.find(external_id)
+        found = await self.find(external_id, alt_id)
         if found is None:
-            raise LookupError(f"Not in {self.label}")
+            raise self._missing(external_id, alt_id)
         if self.path == "movie":
             return found, None
         if season is None or episode is None:
@@ -259,8 +305,13 @@ class ArrIntegration:
         return f"Tagged {found.get('title')} {self.REPLACE_TAG} in {self.label}"
 
 
-radarr = ArrIntegration("radarr", "Radarr", "movie", "tmdbId", "radarr_slug")
-sonarr = ArrIntegration("sonarr", "Sonarr", "series", "tvdbId", "sonarr_slug")
+radarr = ArrIntegration(
+    "radarr", "Radarr", "movie", "tmdbId", "radarr_slug",
+    alt_id_param="imdbId", id_name="TMDB id", alt_id_name="IMDb id",
+)
+# Sonarr's series endpoint filters on tvdbId alone, so there is no second
+# id to try and nothing here changes for it.
+sonarr = ArrIntegration("sonarr", "Sonarr", "series", "tvdbId", "sonarr_slug", id_name="TVDB id")
 
 
 def for_media_type(media_type: str | None) -> ArrIntegration:

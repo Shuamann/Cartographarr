@@ -458,8 +458,13 @@ register(
 # asks for a better release, which Radarr or Sonarr only takes if their own
 # quality profile rates it higher, and a tag marks it for you to look at.
 
-async def _arr_target(subject: Session) -> tuple[Any, Any, int | None, int | None, str]:
-    """Which service, which id, and which episode this subject is about."""
+async def _arr_target(subject: Session) -> tuple[Any, Any, int | None, int | None, str, str | None]:
+    """Which service, which id, and which episode this subject is about.
+
+    Two ids: the one the service filters on, and IMDb to fall back to. Plex
+    and the library disagree about which title an id means more often than
+    either simply lacks one.
+    """
     from app.db import session_scope
     from app.integrations import arr
     from app.models import MediaItem
@@ -477,23 +482,24 @@ async def _arr_target(subject: Session) -> tuple[Any, Any, int | None, int | Non
         external = (show.tvdb_id if show else None) if episodic else (
             item.tmdb_id if service.name == "radarr" else item.tvdb_id
         )
+        alt = (show.imdb_id if show else None) if episodic else item.imdb_id
         title = item.full_title or item.title
         season, episode = item.parent_media_index, item.media_index
     if not service.configured():
         raise LookupError(f"{service.label} is not set up")
     if not external:
         raise LookupError(f"No id for {title}, so {service.label} cannot find it")
-    return service, external, season, episode, title
+    return service, external, season, episode, title, alt
 
 
 async def _arr_search(session: Session, _params: Params) -> str:
-    service, external, season, episode, title = await _arr_target(session)
-    await service.search(external, season, episode)
+    service, external, season, episode, title, alt = await _arr_target(session)
+    await service.search(external, season, episode, alt)
     return f"asked {service.label} to look for a better {title}"
 
 
 async def _arr_tag(session: Session, _params: Params) -> str:
-    service, external, _season, _episode, title = await _arr_target(session)
+    service, external, _season, _episode, title, _alt = await _arr_target(session)
     await service.tag(external)
     return f"tagged {title} in {service.label}"
 
@@ -571,7 +577,9 @@ async def _queue_replacement(session: Session, params: Params) -> str:
     except HTTPException as exc:  # the route's own words, which are the clearest ones
         raise LookupError(str(exc.detail)) from exc
 
-    found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+    found, episode_id = await service.locate(
+        target["external"], target["season"], target["episode"], target.get("alt")
+    )
     raw = await asyncio.wait_for(service.releases(found["id"], episode_id), timeout=150)
     title = target["item"].get("title") or session.get("full_title") or "it"
     ranked = replacements.compare_releases(

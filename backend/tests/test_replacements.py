@@ -53,10 +53,13 @@ class FakeRadarr:
     def configured(self):
         return True
 
-    async def find(self, external_id):
+    # alt_id is the second id tried where the service filters on one, so a
+    # stand in has to take it or every call through here raises instead of
+    # answering, which is how it was noticed.
+    async def find(self, external_id, alt_id=None):
         return {"id": 7, "title": "Film"}
 
-    async def locate(self, external_id, season, episode):
+    async def locate(self, external_id, season, episode, alt_id=None):
         return {"id": 7, "title": "Film"}, None
 
     async def releases(self, arr_id, episode_id):

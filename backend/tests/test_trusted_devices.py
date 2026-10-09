@@ -171,6 +171,50 @@ def test_a_viewer_cannot_vouch_for_their_own_device(client):
     assert client.post("/api/devices/phone/trust").status_code in (401, 403)
 
 
+def every_route(routes):
+    """Flattened, in the order a request is matched against them.
+
+    app.routes holds a wrapper per included router rather than the routes
+    themselves, so walking it directly checks nothing at all. The first
+    version of the test below did exactly that and passed with the bug it was
+    written for put back on purpose, which is how it was found out.
+    """
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from every_route(inner.routes)
+        else:
+            yield route
+
+
+def test_no_two_handlers_answer_the_same_path():
+    """Two handlers on one method and path: the first wins and the second is
+    dead code that reads as live.
+
+    This happened on /api/library/collections. Two branches each added one,
+    answering different questions, and merging them produced an app where the
+    setting that picks a collection would have been fed by a handler nobody
+    was serving. Nothing failed: the suite passed, the app started, and the
+    route table had two entries where it should have had one.
+
+    The guard below cannot see it, and neither can the one that enumerates
+    from the OpenAPI schema, because the schema has one entry per path by
+    definition. Only the router tree shows it.
+    """
+    from app.main import app
+
+    seen: dict[tuple[str, str], int] = {}
+    for route in every_route(app.routes):
+        path, methods = getattr(route, "path", None), getattr(route, "methods", None)
+        if not path or not methods:
+            continue
+        for method in methods:
+            seen[(method, path)] = seen.get((method, path), 0) + 1
+    twice = sorted(f"{method} {path}" for (method, path), n in seen.items() if n > 1)
+    assert len(seen) > 100, f"only {len(seen)} routes seen, so this is not looking at the app"
+    assert not twice, "Two handlers answer each of these, and only the first one ever runs: " + ", ".join(twice)
+
+
 def test_a_literal_path_is_declared_before_the_one_with_a_placeholder():
     """A placeholder route swallows a literal one declared after it.
 
@@ -185,21 +229,6 @@ def test_a_literal_path_is_declared_before_the_one_with_a_placeholder():
     overall. /history/{row_id} was never a threat to /media/search.
     """
     from app.main import app
-
-    def every_route(routes):
-        """Flattened, in the order a request is matched against them.
-
-        app.routes holds a wrapper per included router rather than the routes
-        themselves, so walking it directly checks nothing at all. The first
-        version of this test did exactly that and passed with the bug it was
-        written for put back on purpose, which is how it was found out.
-        """
-        for route in routes:
-            inner = getattr(route, "original_router", None)
-            if inner is not None:
-                yield from every_route(inner.routes)
-            else:
-                yield route
 
     catchers: dict[tuple, str] = {}
     checked = 0

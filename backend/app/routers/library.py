@@ -20,7 +20,14 @@ Days = Query(90, ge=1, le=3650)
 
 @router.get("/collections")
 def collections(_: AdminUser, db: Db, days: int = Days) -> list:
-    """Each collection's size, problem files and how much of it is watched."""
+    """Each collection's size, problem files and how much of it is watched.
+
+    Also the list the kept collections setting is picked from, since it names
+    every collection and counts its titles. There was briefly a second handler
+    on this path doing only that: FastAPI matches the first one registered, so
+    the second answered nothing and the setting would have been picked from a
+    list nobody was serving.
+    """
     from app.services import collections as service
 
     return service.health(db, problem_days=days)
@@ -275,25 +282,6 @@ async def copies(_: AdminUser, section_id: int | None = None, sizes: bool = True
     return await asyncio.to_thread(read)
 
 
-@router.get("/collections")
-def collections(_: AdminUser, db: Db) -> list[dict]:
-    """Every collection Plex reports, with how many titles are in it.
-
-    So the setting that keeps them can be picked from rather than typed from
-    memory. A name typed with a letter wrong is a setting that silently
-    protects nothing, which is the worst way for this to fail.
-    """
-    from app.models import MediaTag
-
-    rows = db.execute(
-        select(MediaTag.value, func.count())
-        .where(MediaTag.kind == "collection")
-        .group_by(MediaTag.value)
-        .order_by(func.lower(MediaTag.value))
-    ).all()
-    return [{"name": name, "titles": int(n or 0)} for name, n in rows]
-
-
 @router.get("/cleanup")
 async def cleanup(_: AdminUser, days: int = Days) -> dict:
     """Big files nobody watches, and why each one stands out."""
@@ -451,7 +439,9 @@ async def tag_big_files(admin: AdminUser, keys: list[int] = Body(..., embed=True
     for key in keys:
         try:
             target, service = await _arr_target(key)
-            found, _episode = await service.locate(target["external"], target["season"], target["episode"])
+            found, _episode = await service.locate(
+                target["external"], target["season"], target["episode"], target.get("alt")
+            )
             await service.tag(found["id"])
             tagged.append(key)
         except HTTPException as exc:
@@ -860,8 +850,10 @@ async def replace_file(rating_key: int, admin: AdminUser, action: str = Body(...
         show = db.get(MediaItem, show_key) if episodic and show_key else None
         if episodic:
             external = show.tvdb_id if show else None
+            alt = show.imdb_id if show else None
         else:
             external = item.tmdb_id if service.name == "radarr" else item.tvdb_id
+            alt = item.imdb_id
         title = library._title(item)
         season, episode = item.parent_media_index, item.media_index
     if not service.configured():
@@ -878,7 +870,7 @@ async def replace_file(rating_key: int, admin: AdminUser, action: str = Body(...
         raise HTTPException(409, f"No {kind} id for this title, so {service.label} cannot find it")
     try:
         if action == "search":
-            result = await asyncio.wait_for(service.search(external, season, episode), timeout=45)
+            result = await asyncio.wait_for(service.search(external, season, episode, alt), timeout=45)
         else:
             result = await asyncio.wait_for(service.tag(external), timeout=45)
     except LookupError as exc:
@@ -975,6 +967,11 @@ async def _arr_target(rating_key: int):
                 "media_type": item.media_type,
                 "show_key": item.grandparent_rating_key,
                 "external": (show.tvdb_id if show else None) if item.media_type == "episode" else item.tmdb_id,
+                # A second id to try where the service will filter on one.
+                # Plex and the library disagree about which film an id means
+                # more often than either is simply absent, and for an episode
+                # the id that matters is the show's.
+                "alt": (show.imdb_id if show else None) if item.media_type == "episode" else item.imdb_id,
                 "season": item.parent_media_index,
                 "episode": item.media_index,
             }
@@ -1005,7 +1002,9 @@ async def find_releases(rating_key: int, _: AdminUser) -> dict:
 
     target, service = await _arr_target(rating_key)
     try:
-        found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+        found, episode_id = await service.locate(
+            target["external"], target["season"], target["episode"], target.get("alt")
+        )
         raw = await asyncio.wait_for(service.releases(found["id"], episode_id), timeout=150)
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -1042,7 +1041,9 @@ async def queue_replacement(
     if not release.get("guid") or release.get("indexer_id") is None:
         raise HTTPException(400, "Pick a release")
     try:
-        found, episode_id = await service.locate(target["external"], target["season"], target["episode"])
+        found, episode_id = await service.locate(
+            target["external"], target["season"], target["episode"], target.get("alt")
+        )
         existing = await service.current_file(found["id"], episode_id)
         await service.grab(release["guid"], int(release["indexer_id"]))
     except LookupError as exc:

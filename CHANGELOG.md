@@ -4,6 +4,26 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.116.1 - 2026-10-09
+
+### Fixed
+- "Not in Radarr" about a film plainly sitting in Radarr. The lookup asked for one id and nothing else, so the
+  message was true and gave nobody a thread to pull. It now names what it looked for and says the file may be
+  matched to a different title, which is a glance rather than an evening. Found on a real library, where Plex had
+  matched a Hamlet (2024) to a filmed stage production at Theatre Royal Windsor while Radarr held the Public
+  Theater one from the Delacorte under another id: two different films of the same play in the same year.
+- IMDb is tried after TMDB when Radarr has nothing under the first, since the two disagree more often than either
+  is simply absent, and either agreeing is enough. One extra request, on a path somebody has already clicked, and
+  never spent when the first id works. Sonarr's series endpoint filters on TVDB alone, so nothing changes there
+  and its message never names an id it did not look for.
+- Deliberately not matched by title and year. Two Hamlets from 2024 is the whole reason this came up, and a title
+  match would quietly pick one and then replace the wrong film.
+- Two handlers answered /api/library/collections after two branches each added one. FastAPI matches the first
+  registered, so the second was dead code that read as live, and the kept-collections setting would have been
+  picked from a list nobody was serving. The one that survives answers both questions. Two handlers on one path
+  is a failing test now; neither existing guard could see it, since the route-shadowing one looks for
+  placeholders and the other enumerates from the OpenAPI schema, which has one entry per path by definition.
+
 ## 0.116.0 - 2026-10-09
 
 ### Added
