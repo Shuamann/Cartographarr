@@ -1025,7 +1025,10 @@ async def find_releases(rating_key: int, _: AdminUser) -> dict:
 
 @router.post("/file/{rating_key}/replace")
 async def queue_replacement(
-    rating_key: int, admin: AdminUser, release: dict = Body(..., embed=True)
+    rating_key: int,
+    admin: AdminUser,
+    release: dict = Body(..., embed=True),
+    auto_confirm: bool = Body(False, embed=True),
 ) -> dict:
     """Grab the chosen release and follow it."""
     import json
@@ -1056,6 +1059,7 @@ async def queue_replacement(
             rating_key=rating_key, title=target["item"]["title"], service=service.name, arr_id=found["id"],
             episode_id=episode_id, guid=release["guid"], indexer_id=int(release["indexer_id"]), status="queued",
             release=json.dumps(release), current=json.dumps({**target["item"], "arr_file_id": (existing or {}).get("id")}),
+            auto_confirm=bool(auto_confirm),
             created_by=admin.username, created_at=now, updated_at=now,
         )
         db.add(row)
@@ -1104,10 +1108,9 @@ async def _decide(replacement_id: int, admin, confirm: bool) -> dict:
         if confirm:
             if row.status != "ready":
                 raise HTTPException(409, "It is not downloaded and waiting yet")
-            files = (json.loads(row.candidate or "{}") or {}).get("files") or []
-            if not files:
+            biggest = replacements.importable(row.candidate)
+            if biggest is None:
                 raise HTTPException(409, f"{service.label} found no file to import in the download")
-            biggest = max(files, key=lambda f: f.get("size") or 0)
             await service.manual_import([biggest], row.arr_id, row.episode_id, row.download_id)
             status = "importing"
         else:

@@ -847,6 +847,15 @@ class Replacement(Base):
     current: Mapped[str | None] = mapped_column(Text)  # JSON, the file it replaces
     candidate: Mapped[str | None] = mapped_column(Text)  # JSON, the downloaded file, then the imported one
     message: Mapped[str | None] = mapped_column(Text)
+    auto_confirm: Mapped[bool] = mapped_column(Boolean, default=False)
+    """Whether to import this one the moment the service holds it, instead of
+    waiting to be asked.
+
+    Set when the release is chosen, because confirming overrides the service's
+    own judgement about a file. That is reasonable for one release somebody
+    has looked at and wrong as a standing default for every release forever.
+    """
+
     created_by: Mapped[str | None] = mapped_column(String(64))
     resolved_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime | None] = mapped_column()

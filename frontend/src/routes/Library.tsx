@@ -1725,6 +1725,27 @@ function ReleasePicker({
     ref.current?.showModal();
   }, []);
 
+  /* Whether a grab says up front that it does not want to be asked again.
+     Remembered here because somebody who wants it usually wants it every
+     time, and still sent per grab: it overrides the service's own judgement
+     about one file, which is not a thing to leave switched on invisibly. */
+  const [letThrough, setLetThrough] = useState(() => {
+    try {
+      return localStorage.getItem("library.replace.letThrough") === "on";
+    } catch {
+      return false;
+    }
+  });
+
+  function chooseLetThrough(on: boolean) {
+    setLetThrough(on);
+    try {
+      localStorage.setItem("library.replace.letThrough", on ? "on" : "off");
+    } catch {
+      /* a browser that refuses to remember is not a reason to refuse the tick */
+    }
+  }
+
   async function queue(release: Release) {
 
     setError(null);
@@ -1733,7 +1754,7 @@ function ReleasePicker({
     // for twice.
     setAsking(release.guid);
     try {
-      await api.post(`/library/file/${ratingKey}/replace`, { release });
+      await api.post(`/library/file/${ratingKey}/replace`, { release, auto_confirm: letThrough });
       setQueued(release.guid);
       queueChanged();
     } catch (err) {
@@ -1850,6 +1871,13 @@ function ReleasePicker({
               <input type="checkbox" checked={hideBlocked} onChange={(e) => setHideBlocked(e.target.checked)} />
               Hide what {label} would refuse
             </label>
+            <label
+              className="check"
+              title={`${label} holds a release it will not take by itself, usually because it does not rate it an upgrade. Ticked, the import happens the moment it is held instead of waiting here to be asked.`}
+            >
+              <input type="checkbox" checked={letThrough} onChange={(e) => chooseLetThrough(e.target.checked)} />
+              Import it without asking me again
+            </label>
             <div className="segmented push-right">
               <button className={view === "list" ? "seg on" : "seg"} onClick={() => show("list")}>
                 List
@@ -1864,6 +1892,13 @@ function ReleasePicker({
             {rows.length} of {all.length} releases. Best first means most of this file's problems solved, then{" "}
             {label}&apos;s own score against your profile. <span className="pill ok">Waits</span> is held for you to
             confirm; <span className="pill warn">Auto</span> is imported by itself.
+            {letThrough && (
+              <>
+                {" "}
+                A held one will be imported as soon as it is held, without waiting here, because you asked for
+                that above. {label} is overruled about the file, not about anything else.
+              </>
+            )}
           </p>
 
           {rows.length === 0 ? (

@@ -193,12 +193,25 @@ def to_dict(row: Any) -> dict[str, Any]:
         "release": load(row.release),
         "current": load(row.current),
         "candidate": load(row.candidate),
+        "auto_confirm": bool(getattr(row, "auto_confirm", False)),
         "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "resolved_by": row.resolved_by,
         "checked_at": row.checked_at.isoformat() if getattr(row, "checked_at", None) else None,
     }
+
+
+def importable(candidate: str | None) -> dict | None:
+    """The file to import out of what the service found in the download.
+
+    The biggest, which is the feature rather than the whole download: a
+    release folder carries samples, subtitles and artwork beside the film.
+    One function because confirming by hand and confirming because it was
+    asked for in advance must not drift into choosing differently.
+    """
+    files = (json.loads(candidate or "{}") or {}).get("files") or []
+    return max(files, key=lambda f: f.get("size") or 0) if files else None
 
 
 def _service(name: str):
@@ -360,6 +373,32 @@ async def live(r: Any, service: Any, queue: list[dict[str, Any]] | None = None) 
                     update["candidate"] = json.dumps(_candidate(files))
                     update["status"] = "ready"
                     update["message"] = "; ".join(shown["queue"]["messages"])[:500] or None
+                    # Asked for in advance, so it is not held for an answer
+                    # somebody has already given. Only ever a step earlier:
+                    # the same import, from the same candidate, by the same
+                    # call, and if there is nothing to import it waits exactly
+                    # as it did before.
+                    # Once, ever. The poll runs on a timer and the queue can
+                    # sit at importPending for a while after the import is
+                    # asked for, so a guard on the status alone asks the
+                    # service to import the same download over and over.
+                    # `resolved_by` is the record that somebody, or this,
+                    # already answered it. A download that is held again after
+                    # an import that did not stick is left for a person: it
+                    # tried once and that was not enough.
+                    if getattr(r, "auto_confirm", False) and not r.resolved_by:
+                        wanted = importable(update["candidate"])
+                        if wanted is None:
+                            update["message"] = (
+                                f"{service.label} found no file to import in the download, so this is waiting "
+                                "for you after all."
+                            )
+                        else:
+                            await service.manual_import(
+                                [wanted], r.arr_id, r.episode_id, q.get("downloadId")
+                            )
+                            update["status"] = "importing"
+                            update["resolved_by"] = r.created_by
             elif state == "importing":
                 update["status"] = "importing"
             elif r.status == "queued":

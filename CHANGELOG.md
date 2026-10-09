@@ -4,6 +4,23 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.117.0 - 2026-10-09
+
+### Added
+- "Import it without asking me again", beside the release filters. Radarr holds a release it will not take by
+  itself, usually because it does not rate it an upgrade on what is there. The app already read the manual import
+  candidates at that point and offered Confirm, so nobody had to open Radarr, but it could not be decided in
+  advance: you picked a release, waited for the download, came back and clicked the thing you already knew you
+  wanted. Ticked, the import happens the moment it is held.
+- Decided per grab rather than as a setting. Confirming overrides the service's own judgement about a file, which
+  is reasonable for one release somebody has looked at and wrong left switched on for every release forever. The
+  tick is remembered in the browser and still sent with each grab.
+- It imports the same file confirming by hand would, from one function, since a release folder carries samples
+  and artwork beside the feature and two paths choosing differently is how one of them starts importing a sample.
+- A download the service finds no file in waits to be looked at rather than being marked imported, and says so.
+  It fires once: the queue can sit at import pending after the import is asked for, and a download held again
+  after an import that did not stick is left for a person, because it tried once and that was not enough.
+
 ## 0.116.1 - 2026-10-09
 
 ### Fixed
