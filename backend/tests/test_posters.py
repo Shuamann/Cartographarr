@@ -256,3 +256,40 @@ def test_only_an_admin_sees_or_clears_the_cache(client):
     as_viewer(client, "own")
     assert client.get("/api/posters").status_code == 403
     assert client.delete("/api/posters").status_code == 403
+
+
+def test_posters_for_what_left_the_library_are_forgotten(client):
+    """After a scan, a poster whose title the listing no longer had goes. The
+    show and season above an episode that is still here stay."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services import posters
+
+    claim(client)
+    scan_began = datetime.now(UTC)
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, title="Pilot", media_type="episode", parent_rating_key=50,
+                         grandparent_rating_key=500, library_seen_at=scan_began))
+        db.add(MediaItem(rating_key=2, title="Deleted film", media_type="movie",
+                         library_seen_at=scan_began - timedelta(days=1)))
+    where = posters.folder()[0]
+    where.mkdir(parents=True, exist_ok=True)
+    for name in ("1-small.jpg", "50-large.jpg", "500-art.jpg", "2-small.jpg", "99-large.jpg", "holiday.jpg"):
+        (where / name).write_bytes(b"x")
+    assert posters.forget_missing(scan_began) == 2
+    assert sorted(p.name for p in where.iterdir()) == ["1-small.jpg", "50-large.jpg", "500-art.jpg", "holiday.jpg"]
+
+
+def test_a_scan_that_listed_nothing_forgets_nothing(client):
+    from datetime import UTC, datetime
+
+    from app.services import posters
+
+    claim(client)
+    where = posters.folder()[0]
+    where.mkdir(parents=True, exist_ok=True)
+    (where / "7-small.jpg").write_bytes(b"x")
+    assert posters.forget_missing(datetime.now(UTC)) == 0
+    assert (where / "7-small.jpg").exists()

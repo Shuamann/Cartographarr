@@ -2,6 +2,7 @@ import MultiSelect from "../components/MultiSelect";
 import { askConfirm, tell } from "../components/Ask";
 import Loading from "../components/Loading";
 import MediaPanel from "../components/MediaPanel";
+import RecapView from "../components/Recap";
 import TitleRow, { TitleRows, type TitleFact } from "../components/TitleRow";
 import type { FilterState } from "../lib/filters";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -591,7 +592,7 @@ export default function PeopleRoute({
 
 // ---- user ----------------------------------------------------------------------
 
-type Tab = "overview" | "users" | "history" | "places" | "devices" | "activity" | "access";
+type Tab = "overview" | "recap" | "users" | "history" | "places" | "devices" | "activity" | "access";
 
 /* What somebody started and did not finish.
  *
@@ -697,6 +698,7 @@ function UserProfile({
 
   const tabs: [Tab, string][] = [
     ["overview", "Overview"],
+    ["recap", "Recap"],
     ["history", "History"],
     ["places", `Places ${u.places.length}`],
     ["devices", `Devices ${u.devices.length}`],
@@ -785,6 +787,7 @@ function UserProfile({
           </div>
         )}
         {tab === "activity" && <ActivityList query={`user_id=${userId}`} />}
+        {tab === "recap" && <RecapView userId={userId} />}
         {tab === "access" && <Access username={u.username} />}
       </div>
     </div>

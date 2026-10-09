@@ -376,9 +376,7 @@ answers whether it is the file or the person before anything is opened. An
 admin resolves from the row. A viewer sees their own reports and their own
 plays, and is told whether the file is there without being told where.
 
-Left for later: a report that was resolved by replacing the file could say so
-on its row, since the replacements feature already knows when a new file
-landed.
+A report closed by a replacement says Replaced on its row, since 0.116.0.
 
 ### Importing from Seerr
 
@@ -582,9 +580,9 @@ Things it could do next, in the order they seem worth it:
 - **A rule scoped to a collection**, for the same reason. Needs a condition
   that can ask whether the thing playing is in one, which is one indexed
   lookup against the tags table.
-- **A collection's own health**: its size, how many of its files are problems,
-  how much of it anybody has watched. Everything needed is already there and it
-  is a page rather than a feature.
+- **A collection's own health**: done in 0.116.0, under Library, Collections.
+  It reads the library once and indexes it, because of the collection that is
+  most of a library.
 
 Worth knowing before building any of them: the largest collection on this
 install holds 1,727 titles and the next holds 42, so anything that walks a
@@ -599,9 +597,8 @@ collection has to cope with one that is most of a library.
   poster beside a block of text, where everything else about a title now
   carries its artwork across the row. It is the list most often looked at,
   which is an argument both ways: worth doing, and worth not breaking.
-- **A report resolved by a replacement could say so on its row.** The
-  replacements feature already knows when a new file landed and already closes
-  the report; only the row does not mention it.
+- **A person's recap is not in the weekly digest.** The Recap tab has the
+  numbers; a line per person in the digest would be the obvious second use.
 
 ---
 

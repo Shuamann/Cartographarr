@@ -27,6 +27,7 @@ type IssueRow = {
   source: string;
   issue_type: Kind;
   status: "open" | "resolved";
+  replaced?: boolean;
   message: string | null;
   title: string | null;
   show_title: string | null;
@@ -185,8 +186,16 @@ function IssueTitle({ r }: { r: IssueRow }) {
   );
 }
 
-function StatusPill({ status }: { status: IssueRow["status"] }) {
-  return <span className={status === "open" ? "pill warn" : "pill ok"}>{status === "open" ? "Open" : "Resolved"}</span>;
+function StatusPill({ status, replaced }: { status: IssueRow["status"]; replaced?: boolean }) {
+  if (status === "open") return <span className="pill warn">Open</span>;
+  // A new file closed it: the file reported is not the one there now.
+  if (replaced)
+    return (
+      <span className="pill ok" title="A new file for this landed and closed the report">
+        Replaced
+      </span>
+    );
+  return <span className="pill ok">Resolved</span>;
 }
 
 export default function Issues() {
@@ -347,7 +356,7 @@ export default function Issues() {
                 <dl className="media-row-facts">
                   <dt>Status</dt>
                   <dd>
-                    <StatusPill status={r.status} />
+                    <StatusPill status={r.status} replaced={r.replaced} />
                     {replies > 0 && <span className="muted">{plural(replies, "reply", "replies")}</span>}
                   </dd>
                   <dt>Reported</dt>
@@ -605,7 +614,7 @@ function IssueCard({
           <dl className="spec">
             {(d.other_reports ?? []).map((o) => (
               <Pair key={o.id} label={TYPES[o.issue_type]}>
-                <StatusPill status={o.status} />
+                <StatusPill status={o.status} replaced={o.replaced} />
                 <span className="clip" title={o.message ?? undefined}>{o.message}</span>
                 <span className="muted">
                   {o.reporter_name ?? "someone"}, {ago(o.created_at)}

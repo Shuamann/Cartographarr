@@ -1,6 +1,7 @@
 import BrandIcon from "../components/BrandIcon";
 import Fact from "../components/Fact";
 import GapsSection from "../components/Gaps";
+import CollectionsSection from "../components/Collections";
 import { ServerWorkLately } from "../components/ServerWork";
 import { LINKS } from "../components/StreamDetail";
 import { askConfirm, askText, tell } from "../components/Ask";
@@ -158,6 +159,7 @@ const SECTIONS = [
   { id: "transcodes", title: "Why streams transcode" },
   { id: "four-k", title: "4K copies" },
   { id: "gaps", title: "Missing and doubled" },
+  { id: "collections", title: "Collections" },
   { id: "storage", title: "Storage" },
   { id: "requests", title: "Requested, never watched" },
   { id: "queue", title: "Remediation queue" },
@@ -316,6 +318,7 @@ export default function Library({
         {section === "transcodes" && <Transcodes days={days} />}
         {section === "four-k" && <FourKSection days={days} />}
         {section === "gaps" && <GapsSection />}
+        {section === "collections" && <CollectionsSection days={days} />}
         {section === "storage" && <StorageSection days={days} />}
         {section === "requests" && <Requests />}
         {section === "queue" && <RemediationQueue />}

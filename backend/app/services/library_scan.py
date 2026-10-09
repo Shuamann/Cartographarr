@@ -116,6 +116,12 @@ async def scan(client) -> dict[str, Any]:
         rows = await _tautulli_rows(client)
     counts = await asyncio.to_thread(_store, rows, started)
     await asyncio.to_thread(_record_sizes, started)
+    if rows:
+        # Posters kept for things this listing no longer has. A cache, so a
+        # listing that came back short costs some fetching again, nothing more.
+        from app.services import posters
+
+        counts["posters_forgotten"] = await asyncio.to_thread(posters.forget_missing, started)
     return {"movies": sum(1 for r in rows if r["media_type"] == "movie"),
             "episodes": sum(1 for r in rows if r["media_type"] == "episode"), **counts}
 

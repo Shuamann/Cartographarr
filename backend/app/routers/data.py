@@ -1141,6 +1141,15 @@ def user_playback(user_id: int, db: Db, scope: ViewerScope, days: int = Query(90
     return playback_summary(db, days, user_id=user_id)
 
 
+@router.get("/users/{user_id}/recap")
+def user_recap(user_id: int, db: Db, scope: ViewerScope, days: int = Query(30, ge=7, le=366)) -> dict:
+    """A person's month or year: hours, titles, genres, when and on what."""
+    from app.services import recap
+
+    privacy.require_self(scope, user_id)
+    return recap.for_user(db, user_id, days)
+
+
 @router.get("/devices/trust-suggestions")
 def trust_suggestions(admin: AdminUser) -> list:
     """Devices with a real history on one account and none on any other.

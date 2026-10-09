@@ -3676,6 +3676,29 @@ label.locked .pill {
   .profile-head {
     flex-direction: column;
   }
+  /* Stacked, the head lines its children up at the start, which sizes them
+     to their content: a long name then ran past the screen instead of
+     wrapping. The name is what says whose page this is, so it wraps. */
+  .profile-head > .min0 {
+    align-self: stretch;
+  }
+  .profile-head h1.clip {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---- a person's month or year ------------------------------------------------ */
+
+.recap .segmented {
+  margin-bottom: var(--space-3);
+}
+.recap-lead {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+}
+.recap h3 {
+  margin: var(--space-5) 0 var(--space-2);
 }
 
 /* ---- meanings with their own colour ------------------------------------------ */

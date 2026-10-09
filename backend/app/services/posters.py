@@ -157,6 +157,41 @@ def clear() -> int:
     return gone
 
 
+def forget_missing(seen_since) -> int:
+    """Remove posters for anything the latest library listing did not have.
+
+    A poster is kept under the key it was asked for: a film's, an episode's,
+    or the show or season above one. All of those are still in the library if
+    something listed since the scan began carries them.
+    """
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    with session_scope() as db:
+        here: set[int] = set()
+        for row in db.execute(
+            select(MediaItem.rating_key, MediaItem.parent_rating_key, MediaItem.grandparent_rating_key).where(
+                MediaItem.library_seen_at >= seen_since
+            )
+        ):
+            here.update(k for k in row if k)
+    if not here:
+        return 0
+    gone = 0
+    for p in _files(folder()[0], _OURS):
+        if int(p.name.split("-", 1)[0]) not in here:
+            try:
+                p.unlink()
+                gone += 1
+            except OSError:
+                pass
+    if gone:
+        log.info("removed %d posters for things no longer in the library", gone)
+    return gone
+
+
 def forget_older() -> int:
     """Remove the per-size files older builds kept, which nothing reads now.
 

@@ -972,6 +972,10 @@ class Issue(Base):
     updated_at: Mapped[datetime | None] = mapped_column()
     synced_at: Mapped[datetime | None] = mapped_column()
     seerr_gone_at: Mapped[datetime | None] = mapped_column()
+    replaced_at: Mapped[datetime | None] = mapped_column()
+    """When a new file for what it was about landed and closed it. Said on the
+    row, because "resolved" alone does not say the file is not the one that
+    was reported."""
     """When Seerr stopped listing a report that came from it. The report is
     kept: this app is where reports live, and one deleted or lost in Seerr is
     still somebody having said something was wrong."""

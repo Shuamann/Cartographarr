@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app import audit
 from app.auth.deps import AdminUser
@@ -80,6 +80,87 @@ def list_branding() -> dict:
         "theme": current().theme_colors or None,
         "images": {kind: stored(kind) is not None for kind in sorted(KINDS)},
     }
+
+
+HOME_SIZES = (180, 192, 512)
+"""180 is what an iPhone asks for, 192 and 512 what Android does."""
+
+BACKGROUND = "#0b1017"
+"""The dark page colour: what a phone shows while the app opens."""
+
+
+@router.get("/manifest.webmanifest")
+def manifest() -> Response:
+    """What a phone needs to put the app on its home screen as an app.
+
+    Without one, Add to Home Screen saves a bookmark: the browser's own bars
+    stay, and the icon is a screenshot or a letter. With it, the app opens
+    full screen under its own name and mark. Nothing here works offline, and
+    nothing pretends to: there is no service worker, because a page of live
+    streams read from a cache would be a page of stale ones.
+    """
+    import json
+
+    settings = current()
+    name = settings.app_name or "Cartographarr"
+    body = {
+        "name": name,
+        "short_name": name[:12],
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": BACKGROUND,
+        "theme_color": BACKGROUND,
+        "icons": [
+            {"src": f"/api/branding/home-icon/{size}", "sizes": f"{size}x{size}", "type": "image/png", "purpose": "any"}
+            for size in (192, 512)
+        ],
+    }
+    return Response(
+        json.dumps(body), media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=300"}
+    )
+
+
+def _home_icon(size: int) -> bytes:
+    """A square PNG for a home screen: the uploaded icon on the page colour,
+    or the app's own pin when there is none that can be drawn from."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    canvas = Image.new("RGB", (size, size), BACKGROUND)
+    path = stored("icon")
+    if path is not None and path.suffix != ".svg":
+        try:
+            with Image.open(path) as mark:
+                mark = mark.convert("RGBA")
+                # Inset, because both phones crop the corners into a rounded
+                # shape and a mark drawn to the edge loses its own.
+                mark.thumbnail((int(size * 0.8), int(size * 0.8)), Image.Resampling.LANCZOS)
+                canvas.paste(mark, ((size - mark.width) // 2, (size - mark.height) // 2), mark)
+                out = io.BytesIO()
+                canvas.save(out, "PNG", optimize=True)
+                return out.getvalue()
+        except Exception:  # noqa: BLE001 - an unreadable upload falls back to the pin
+            canvas = Image.new("RGB", (size, size), BACKGROUND)
+    # The pin from the browser tab's icon, drawn at this size.
+    accent = current().accent_color or "#22d3ee"
+    draw = ImageDraw.Draw(canvas)
+    u = size / 32
+    cx, top = size / 2, 6 * u
+    draw.ellipse((cx - 8 * u, top, cx + 8 * u, top + 16 * u), fill=accent)
+    draw.polygon([(cx - 7 * u, top + 11 * u), (cx + 7 * u, top + 11 * u), (cx, 28 * u)], fill=accent)
+    draw.ellipse((cx - 3.2 * u, top + 4.8 * u, cx + 3.2 * u, top + 11.2 * u), fill=BACKGROUND)
+    out = io.BytesIO()
+    canvas.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
+@router.get("/home-icon/{size}")
+def home_icon(size: int) -> Response:
+    if size not in HOME_SIZES:
+        raise HTTPException(404, f"Sizes made: {', '.join(map(str, HOME_SIZES))}")
+    return Response(_home_icon(size), media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
 
 
 @router.get("/{kind}")

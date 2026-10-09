@@ -18,6 +18,14 @@ router = APIRouter(prefix="/api/library")
 Days = Query(90, ge=1, le=3650)
 
 
+@router.get("/collections")
+def collections(_: AdminUser, db: Db, days: int = Days) -> list:
+    """Each collection's size, problem files and how much of it is watched."""
+    from app.services import collections as service
+
+    return service.health(db, problem_days=days)
+
+
 @router.get("/overview")
 def overview(_: AdminUser, db: Db) -> dict:
     from app.services.library_scan import in_library, last_scan

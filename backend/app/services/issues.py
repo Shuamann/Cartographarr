@@ -591,6 +591,8 @@ async def mark(issue_id: int, status: str, author: str | None, note: str | None 
         if issue is None:
             raise LookupError("No such issue")
         issue.status = status
+        # Somebody deciding it now, so it is theirs and not the replacement's.
+        issue.replaced_at = None
         issue.updated_at = datetime.now(UTC).replace(tzinfo=None)
         title = issue.title
     warning = await _mirror(issue_id, lambda seerr_id: set_status(seerr_id, status, author, note))
@@ -622,6 +624,7 @@ async def resolve_for_file(rating_key: int, note: str) -> list[int]:
                 issue.comments = json_module.dumps(notes)
                 issue.status = "resolved"
                 issue.updated_at = now
+                issue.replaced_at = now
                 found.append((issue.id, issue.seerr_id))
         return found
 

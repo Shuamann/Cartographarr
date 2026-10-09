@@ -18,6 +18,10 @@ PUBLIC = {
     ("POST", "/api/auth/plex/finish"),
     ("GET", "/api/branding"),
     ("GET", "/api/branding/{kind}"),
+    # A phone asks for these from the sign-in page, to put the app on its
+    # home screen. Names and a generated icon, nothing more.
+    ("GET", "/api/branding/manifest.webmanifest"),
+    ("GET", "/api/branding/home-icon/{size}"),
     # Trending TMDB art for the sign-in page; nothing about this server.
     ("GET", "/api/auth/backdrops"),
     # Token guarded, off (404) without a token.

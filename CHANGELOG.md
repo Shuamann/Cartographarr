@@ -4,6 +4,29 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.116.0 - 2026-10-09
+
+### Added
+- A Recap tab on a person's page: their month or year in a screenful. Hours and plays against the period before,
+  the days they watched, shows they started, when they mostly watch, their biggest day, what they watched most as
+  poster rows, and their genres by time spent. A viewer sees their own, under the same rule as the rest of their
+  profile, since it is history they can already read, added up.
+- Collections in Library: each collection's size, its problem files, how many of its titles anybody watched in the
+  last year, and when it was last played, largest first. A show's files are its episodes, since Plex files a
+  collection against the show.
+- The app installs on a phone's home screen as an app: its own name, its own icon made from the uploaded one or
+  the app's pin, and full screen without the browser's bars. There is no offline mode, on purpose: a page of live
+  streams read from a cache would be a page of stale ones.
+
+### Changed
+- A report closed by a new file landing says Replaced on its row rather than Resolved, so it is clear the file
+  reported is not the one there now. A person changing it afterwards makes it theirs again.
+- Posters kept for things no longer in the library are removed after each library scan. A listing that came back
+  short costs some fetching again and nothing more, because they are a cache.
+
+### Fixed
+- A long name on a person's page ran off the side of a phone's screen. It wraps.
+
 ## 0.115.4 - 2026-10-08
 
 ### Fixed

@@ -421,6 +421,14 @@ def test_a_replacement_landing_closes_what_was_reported(client, monkeypatch):
     assert detail["status"] == "resolved"
     assert "Replaced through Radarr" in detail["comment_list"][-1]["message"]
     assert detail["comment_list"][-1]["author"] == "Cartographarr"
+    # The row says a new file closed it, not just that it is resolved.
+    row = next(r for r in client.get("/api/issues?status=all").json()["items"] if r["id"] == made)
+    assert row["replaced"] is True
+    # Resolved by a person, it is resolved and nothing more.
+    by_hand = client.post("/api/issues", json={"rating_key": 5, "issue_type": "video", "message": "Blocky"}).json()["id"]
+    client.post(f"/api/issues/{by_hand}/status", json={"status": "resolved"})
+    row = next(r for r in client.get("/api/issues?status=all").json()["items"] if r["id"] == by_hand)
+    assert row["status"] == "resolved" and row["replaced"] is False
     # The new file's details are read again, so the findings describe what landed.
     with session_scope() as db:
         assert db.get(MediaItem, 5).file_checked_at is None

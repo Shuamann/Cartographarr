@@ -117,6 +117,9 @@ def _brief(issue: Issue, names: dict[int, str], items: dict[int, Any] | None = N
         # Kept here after Seerr stopped listing it, which is worth saying
         # beside the link that would no longer go anywhere.
         "seerr_gone": bool(issue.seerr_gone_at),
+        # Closed by a new file arriving rather than by somebody, which is the
+        # answer to "is the file I reported still the one there".
+        "replaced": bool(issue.replaced_at) and issue.status == "resolved",
     }
 
 
