@@ -42,6 +42,9 @@ OPS: dict[str, list[tuple[str, str]]] = {
     ],
     "number": [("gt", "more than"), ("gte", "at least"), ("lt", "less than"), ("lte", "at most"), ("eq", "exactly")],
     "bool": [("is", "is")],
+    # Its own type rather than a choice, because an item in no collection at
+    # all is a known answer and a choice field treats no value as unknown.
+    "collection": [("any", "is in"), ("none", "is not in")],
     "cidr": [("in", "is in"), ("not_in", "is not in")],
     "time": [("between", "is between"), ("not_between", "is not between")],
     "weekday": [("any", "is any of"), ("none", "is none of")],
@@ -87,6 +90,20 @@ def _resolution(session: Session, _ctx: Context) -> list[str]:
     return [str(v).lower().rstrip("p") for v in values if v]
 
 
+def _collections(session: Session, _ctx: Context) -> list[str] | None:
+    """Which collections cover the thing being asked about.
+
+    Plex files a collection against a film or a show and never against an
+    episode, so the item's own key, its season's and its show's are all
+    offered and whichever of them Plex tagged answers.
+    """
+    from app.services.collections import names_for
+
+    return names_for(
+        session.get("rating_key"), session.get("parent_rating_key"), session.get("grandparent_rating_key")
+    )
+
+
 FIELDS: list[Field] = [
     # ---- who -----------------------------------------------------------------
     Field("user", "User", "Who", "choice", lambda s, c: s.get("user_id"), options="users"),
@@ -120,6 +137,12 @@ FIELDS: list[Field] = [
         fixed=(("movie", "Movie"), ("episode", "Episode"), ("track", "Music"), ("clip", "Clip"), ("photo", "Photo")),
     ),
     Field("title", "Title", "Media", "text", lambda s, c: s.get("full_title")),
+    Field(
+        "collection", "Collection", "Media", "collection", _collections, options="collections",
+        triggers=("stream", "file", "issue"),
+        hint="Somebody has already written down which titles belong together, so a rule can name the "
+             "collection instead of listing them. Matched on the item, its season or its show.",
+    ),
     Field("content_rating", "Content rating", "Media", "choice", lambda s, c: s.get("content_rating"), options="content_ratings"),
     Field("year", "Year", "Media", "number", lambda s, c: s.get("year")),
     Field(
@@ -365,6 +388,16 @@ def _condition(node: Tree, session: Session, ctx: Context) -> bool:
         hit = bool(haves & wants)
         return hit if op == "any" else (not hit if op == "none" else False)
 
+    if spec.type == "collection":
+        wants = {_norm(v) for v in _as_list(want) if str(v).strip()}
+        # None means nothing identified the item, so neither answer is
+        # evidence. An empty list means it was looked up and is in no
+        # collection, which makes "is not in" true of it.
+        if not wants or have is None:
+            return False
+        hit = bool(set(have) & wants)
+        return hit if op == "any" else (not hit if op == "none" else False)
+
     if spec.type == "text":
         if have is None or want in (None, ""):
             return False
@@ -513,7 +546,7 @@ def validate(tree: Any, depth: int = 0) -> Tree:
         if item.get("op") not in ops:
             raise ValueError(f"{spec.label}: pick how to compare it")
         value = item.get("value")
-        if spec.type in ("choice", "weekday") and not _as_list(value):
+        if spec.type in ("choice", "weekday", "collection") and not _as_list(value):
             raise ValueError(f"{spec.label}: choose at least one")
         if spec.type in ("text", "cidr") and not str(value or "").strip():
             raise ValueError(f"{spec.label}: needs a value")

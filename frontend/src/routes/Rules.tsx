@@ -62,6 +62,7 @@ const emptyGroup = (op: "and" | "or" = "and"): CondGroup => ({ type: "group", op
 function blankValue(field: RuleField): unknown {
   switch (field.type) {
     case "choice":
+    case "collection":
     case "weekday":
       return [];
     case "bool":
@@ -1137,7 +1138,11 @@ function ValueEditor({
   onChange: (value: unknown) => void;
 }) {
   switch (field.type) {
-    case "choice": {
+    /* A collection is picked the same way as any other list of names. It is
+     * its own type on the server because an item in no collection at all is
+     * a known answer there, not a missing one. */
+    case "choice":
+    case "collection": {
       const options = optionsFor(field, catalogue);
       const selected = Array.isArray(value) ? (value as (string | number)[]) : [];
       const labels = selected.map((v) => options.find((o) => String(o.value) === String(v))?.label ?? String(v));

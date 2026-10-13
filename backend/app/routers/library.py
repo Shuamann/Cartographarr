@@ -635,24 +635,59 @@ async def tidy_file(
     return {"job": job_id}
 
 
+MANY_CAP = 200
+"""The most files one bulk tidy will touch.
+
+This rewrites whole films, and a mistake at four hundred files is a different
+kind of mistake from one at ten. An attention list is cut to this and asked
+again for the next lot, since it is ordered worst first and the first two
+hundred are the two hundred worth doing. A collection is not ordered by
+anything of the sort, so one over the cap is refused by name instead of
+quietly becoming its first two hundred titles.
+"""
+
+
+def _collection_rows(name: str) -> list[dict]:
+    """Every file in a collection, or the reason it cannot be tidied."""
+    from app.services import collections as collections_service
+
+    with session_scope() as db:
+        if not collections_service.exists(db, name):
+            raise HTTPException(404, f"No collection called {name!r}. They are read from Plex by the library scan.")
+        rows = collections_service.members(db, name)
+    if len(rows) > MANY_CAP:
+        raise HTTPException(
+            400,
+            f"{name} holds {len(rows):,} files, more than the {MANY_CAP} one tidy will touch. "
+            "Tidy these from the Messy files list, which puts the worst first, "
+            "or split the collection in Plex.",
+        )
+    if not rows:
+        raise HTTPException(404, f"{name} holds nothing the library still has.")
+    return rows
+
+
 @router.post("/tidy/many")
 async def tidy_many(
     admin: AdminUser,
     kind: str = Body("messy", embed=True),
+    collection: str | None = Body(None, embed=True),
     days: int = Body(365, embed=True),
     limit: int = Body(50, embed=True),
     dry_run: bool = Body(False, embed=True),
 ) -> dict:
-    """Queue every file in one of the attention lists.
+    """Queue every file in one of the attention lists, or in one collection.
 
     Each file gets its own job with its own steps, worked out from that file
     rather than from a rule applied to all of them: a file with styled
     subtitles and a file with twenty duplicates do not want the same thing
-    done to them.
+    done to them. That is what makes a collection a sensible thing to hand
+    this: a collection is a list of titles somebody wrote down, not a list of
+    files with one fault in common.
 
-    Capped, because this rewrites whole films and a mistake at four hundred
-    files is a different kind of mistake from one at ten. Ask again for the
-    next lot.
+    `collection` names one and wins over `kind`, which has a default and so
+    cannot be told apart from an unasked question. Everything past working out
+    the keys is the same either way.
     """
     import asyncio
 
@@ -660,14 +695,19 @@ async def tidy_many(
     from app.services import cleanup as cleanup_service
     from app.services import mediafix
 
-    if kind not in ("messy", "trouble"):
-        raise HTTPException(400, "That list cannot be tidied")
-    limit = max(1, min(limit, 200))
+    if collection:
+        rows = await asyncio.to_thread(_collection_rows, collection)
+        source = f"the {collection} collection"
+    else:
+        if kind not in ("messy", "trouble"):
+            raise HTTPException(400, "That list cannot be tidied")
+        limit = max(1, min(limit, MANY_CAP))
 
-    found = await asyncio.to_thread(
-        cleanup_service.attention, kind, days, current().library_bitrate_threshold_mbps * 1000, limit
-    )
-    rows = found.get("items", [])
+        found = await asyncio.to_thread(
+            cleanup_service.attention, kind, days, current().library_bitrate_threshold_mbps * 1000, limit
+        )
+        rows = found.get("items", [])
+        source = kind
 
     def plan_for(rating_key: int) -> tuple[list[str], int | None]:
         """The steps for one file, and what they would come to in bytes.
@@ -721,8 +761,11 @@ async def tidy_many(
         mediafix.start_worker()
         audit.record(
             admin, "library.tidy.many",
-            f"Queued tidying for {len(queued)} files from {kind}",
-            detail={"queued": len(queued), "skipped": len(skipped), "kind": kind},
+            f"Queued tidying for {len(queued)} files from {source}",
+            detail={
+                "queued": len(queued), "skipped": len(skipped),
+                "kind": None if collection else kind, "collection": collection,
+            },
         )
     return {
         "queued": len(queued),
@@ -730,6 +773,8 @@ async def tidy_many(
         "files": queued[:200],
         "not_done": skipped[:50],
         "dry_run": dry_run,
+        # Which lot this was, so the answer stands on its own in the log.
+        "collection": collection,
         # What the whole lot would come to. Counted over the files that would
         # actually be queued, since one with nothing to do to it changes
         # nothing either way.

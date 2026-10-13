@@ -572,21 +572,50 @@ down what they care about. Keeping one file at a time was already there and
 does not scale: forty films is forty clicks, and another each time one of them
 ages past the threshold.
 
-Things it could do next, in the order they seem worth it:
+What has been built on them:
 
-- **A tidy scoped to a collection**, which is how somebody thinks about a chunk
-  of their library. The bulk tidy already works from an attention list; taking
-  a collection instead is the same code with a different source of keys.
-- **A rule scoped to a collection**, for the same reason. Needs a condition
-  that can ask whether the thing playing is in one, which is one indexed
-  lookup against the tags table.
-- **A collection's own health**: done in 0.116.0, under Library, Collections.
-  It reads the library once and indexes it, because of the collection that is
-  most of a library.
+- **A collection's own health**: 0.116.0, under Library, Collections. It reads
+  the library once and indexes it, because of the collection that is most of a
+  library.
+- **A tidy scoped to a collection**: 0.118.0. `POST /api/library/tidy/many`
+  takes a `collection` beside the `kind` it already took, and everything past
+  working out the keys is the same code. Tidy all sits on each row of Library,
+  Collections. It turned out to be the same code with a different source of
+  keys, as expected, with two things worth having written down:
+  - The cap could not be the list's cap. An attention list is ordered worst
+    first, so cutting it to two hundred is taking the two hundred worth doing;
+    a collection is ordered by nothing of the sort, so one over the cap is
+    refused by name and told where to go instead. On this install the
+    Spider-Verse collection is refused and every other one fits.
+  - The keys come through the grandparent, the way the kept collections lookup
+    already does, because Plex files a collection against a film or a show and
+    never against an episode.
+- **A rule scoped to a collection**: 0.118.0. A `collection` condition type
+  with `is in` and `is not in`, one indexed lookup against media_tags per item.
+  It had to be its own type rather than another choice field: for a country,
+  no value means nobody knows where somebody is and neither answer is
+  evidence, while for a collection it means the lookup ran and found none, so
+  `is not in` has to be true of a film in no collection. An item with no
+  rating key at all still matches neither way. Offered to stream, file and
+  report rules, which meant the file and report subjects had to start carrying
+  the keys above the file as well as their own.
 
-Worth knowing before building any of them: the largest collection on this
-install holds 1,727 titles and the next holds 42, so anything that walks a
+Worth knowing before building anything else on them: the largest collection on
+this install holds 1,727 titles and the next holds 42, so anything that walks a
 collection has to cope with one that is most of a library.
+
+Still open:
+
+- **Nothing reads a collection on a show yet on this install.** Every one of
+  the 511 is filed against films, so the grandparent path is covered by tests
+  and by nothing else. The first show collection somebody makes is worth
+  checking by hand.
+- **A collection cannot be acted on from a rule.** A rule can ask whether
+  something is in one; it cannot be told to tidy one, or to keep one. The
+  kept collections setting is still a separate list of names typed into
+  Settings rather than something a rule expresses.
+- **The tidy has no way to do the next lot.** Over the cap, the answer is the
+  Messy files list rather than a second page of the collection.
 
 ## Smaller things noticed and not done
 

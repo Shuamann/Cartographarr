@@ -1264,6 +1264,7 @@ def rule_fields(_: AdminUser, db: Db) -> dict:
     """Everything the rule builder needs to draw its dropdowns. Admin only:
     the options list every device and user."""
     from app.models import Library
+    from app.services import collections as collections_service
     from app.services import conditions as cond
     from app.services.library import ISSUES as FILE_ISSUES
 
@@ -1320,6 +1321,9 @@ def rule_fields(_: AdminUser, db: Db) -> dict:
             # The faults Library lists, so a rule can name one without anyone
             # remembering its key.
             "findings": [{"value": key, "label": label} for key, label in FILE_ISSUES.items()],
+            # Matched on the name as Plex spells it, which is also what the
+            # kept collections setting and the bulk tidy take.
+            "collections": [{"value": name, "label": name} for name in collections_service.names(db)],
         },
     }
 

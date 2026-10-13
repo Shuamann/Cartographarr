@@ -85,7 +85,12 @@ def files(window_days: int = WINDOW_DAYS, limit: int = 2000) -> list[dict[str, A
             stall_count, stall_people = stalls.get(item.rating_key, (0, 0))
             out.append({
                 "subject": "file",
+                # A collection is filed against a film or a show, never
+                # against an episode, so the condition asking about one needs
+                # the keys above this file as well as its own.
                 "rating_key": item.rating_key,
+                "parent_rating_key": item.parent_rating_key,
+                "grandparent_rating_key": item.grandparent_rating_key,
                 "full_title": item.full_title or item.title,
                 "title": item.title,
                 "media_type": item.media_type,
@@ -144,6 +149,8 @@ def issues(window_hours: int = 24) -> list[dict[str, Any]]:
                 "message": row.message,
                 "user_id": row.reporter_user_id,
                 "rating_key": row.rating_key,
+                "parent_rating_key": item.parent_rating_key if item else None,
+                "grandparent_rating_key": item.grandparent_rating_key if item else None,
                 "full_title": row.title,
                 "media_type": row.media_type,
                 "file_bitrate": item.file_bitrate if item else None,

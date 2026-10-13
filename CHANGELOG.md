@@ -4,6 +4,33 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.118.0 - 2026-10-12
+
+### Added
+- Tidy a whole collection. The bulk tidy only ever took the name of an attention list: a list of files that share
+  one fault. A collection is the other way round, a list of titles somebody wrote down because they belong
+  together, and the faults in it are whatever each file happens to have, which is what this already copes with
+  since every file's steps are worked out from that file. Tidy all sits on each row of Library, Collections, and
+  it asks as a dry run first, so the question is answered with what would actually happen to which files and what
+  the whole lot would come to in bytes.
+- A collection over the cap is refused by name rather than quietly becoming its first two hundred titles. The cap
+  is there because this rewrites whole films and a mistake at four hundred files is a different kind of mistake
+  from one at ten. An attention list is ordered worst first, so cutting it to two hundred takes the two hundred
+  worth doing; a collection is ordered by nothing of the sort. On the library this was built against, one
+  collection holds 1,727 files and is refused, and the other 510 fit.
+- A collection on a show reaches that show's episodes, since Plex files a collection against a film or a show and
+  never against an episode. The same lookup the kept collections setting already used.
+- A rule can ask whether something is in a collection. "Collection is in" and "is not in", picked from the
+  collections Plex has, so a rule about the 4K demos or the kids' films names the collection instead of listing
+  forty titles and keeps up with Plex on its own. One indexed lookup against the tags the scan already writes.
+  Offered to rules about a stream, about a file behaving badly, and about a reported problem; matched against the
+  item, its season or its show.
+- "Is not in" is true of something in no collection at all. It reads like a detail and it is the whole condition:
+  every other list field in the rule builder treats a missing value as unknown and matches neither way, which is
+  right for a country, because not knowing where somebody is is not evidence that they are somewhere else. A
+  collection is not like that. The lookup ran, it found none, and a rule about everything outside the kids' films
+  has to catch it. Something whose rating key has not arrived yet still matches neither way.
+
 ## 0.117.0 - 2026-10-09
 
 ### Added
