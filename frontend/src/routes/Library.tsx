@@ -1,6 +1,7 @@
 import BrandIcon from "../components/BrandIcon";
 import Fact from "../components/Fact";
 import FixMatch from "../components/FixMatch";
+import MovePanel from "../components/MovePanel";
 import GapsSection from "../components/Gaps";
 import CollectionsSection from "../components/Collections";
 import { ServerWorkLately } from "../components/ServerWork";
@@ -1526,6 +1527,7 @@ function ArrActions({
     }
   }
 
+  const [moving, setMoving] = useState(false);
   const why = arr.configured ? undefined : `Connect ${arr.label} in Settings to use this`;
   return (
     <div className="arr-actions">
@@ -1536,6 +1538,17 @@ function ArrActions({
           Find a replacement
         </button>
         {extra}
+        {/* Moving is about the disk rather than the file, so it sits beside
+            the other things the service can be asked to do rather than with
+            tidying, which is about what is inside the file. */}
+        <button
+          className="btn"
+          onClick={() => setMoving((on) => !on)}
+          disabled={!arr.configured}
+          title={why ?? `Ask ${arr.label} to move it to another library source`}
+        >
+          Move it
+        </button>
       </div>
       {arr.configured ? (
         <p className="muted small">
@@ -1569,6 +1582,7 @@ function ArrActions({
         </p>
       )}
       {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} onClose={() => onPick(false)} />}
+      {moving && <MovePanel ratingKey={ratingKey} onClose={() => setMoving(false)} onMoved={() => queueChanged()} />}
     </div>
   );
 }

@@ -5996,3 +5996,61 @@ label.locked .pill {
 .tidy-worth {
   margin-top: var(--space-2);
 }
+
+/* Moving a title to another library source. A list to choose from rather than
+   a dropdown, because each row carries how much room its disk says it has and
+   that is the thing being chosen on. */
+.move-panel {
+  margin-top: var(--space-4);
+}
+.move-why {
+  max-width: 70ch;
+}
+.move-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--space-3) 0;
+}
+.move-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.move-row.on {
+  /* The token the other selected rows use. --bg-2 was invented here and is
+     defined nowhere, so the chosen destination had no highlight at all. */
+  background: var(--surface-2);
+}
+/* A bare input takes the control height and the full width from the rule that
+   gives every text box its size, so without this the radio was an invisible
+   four hundred pixel box shoving the path and the free space to the far edge.
+   The same fix .tidy-step input already carries. */
+.move-row input {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 0;
+  height: auto;
+}
+.move-path {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  /* Clipped at the front, not the back. Every one of these paths ends in the
+     name of the library and begins with a mount they share, so the end is the
+     part that says which one it is. */
+  direction: rtl;
+  text-align: left;
+}
+.move-free {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.move-reasons {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+}

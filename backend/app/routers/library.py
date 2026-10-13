@@ -322,6 +322,79 @@ def unkeep_file(rating_key: int, admin: AdminUser) -> dict:
     return {"rating_key": rating_key, "kept": False}
 
 
+async def _move_target(rating_key: int):
+    """The title as the service holds it, and the service holding it.
+
+    Reuses the lookup that finds a title by the id Plex matched it to and then
+    by IMDb, so a wrong match says which id it looked for here too rather than
+    failing as "not in Radarr" about a film plainly sitting in Radarr.
+    """
+    from app.integrations.base import get_json
+
+    target, service = await _arr_target(rating_key)
+    try:
+        found, _episode = await service.locate(
+            target["external"], target["season"], target["episode"], target.get("alt")
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    # The whole resource, because the move hands it back and the service
+    # expects every field it gave.
+    whole = await get_json(f"{service.base_url}/api/v3/{service.path}/{found['id']}", headers=service.headers)
+    if not whole:
+        raise HTTPException(502, f"{service.label} would not describe that title")
+    return whole, service
+
+
+@router.get("/file/{rating_key}/move")
+async def move_options(rating_key: int, _: AdminUser, to: str | None = None) -> dict:
+    """Where this title could go, and what moving it there would do.
+
+    Nothing is changed by asking. The plan is also run again when the move is
+    asked for, because a plan somebody read for two minutes is a plan about
+    the past.
+    """
+    from app.services import moves
+
+    whole, service = await _move_target(rating_key)
+    where = await moves.destinations(service)
+    plan = await moves.plan(service, rating_key, whole, to) if to else None
+    return {
+        "service": service.label,
+        "title": whole.get("title"),
+        "here": (whole.get("rootFolderPath") or "").rstrip("/") or None,
+        "bytes": int(whole.get("sizeOnDisk") or 0),
+        "destinations": where,
+        # Said rather than implied: it is the service's own reading of each
+        # share, and a share that over reports fools it as it fools everything.
+        "free_is_from": service.label,
+        "plan": plan,
+    }
+
+
+@router.post("/file/{rating_key}/move")
+async def move_file(rating_key: int, admin: AdminUser, to: str = Body(..., embed=True)) -> dict:
+    """Ask the service to move it, and tell Plex about both folders."""
+    from app import audit
+    from app.integrations.base import describe_failure
+    from app.services import moves
+
+    whole, service = await _move_target(rating_key)
+    try:
+        done = await moves.move(service, rating_key, whole, to)
+    except ValueError as exc:  # something changed between planning and asking
+        raise HTTPException(409, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        audit.record(admin, "library.move", f"Tried to move {whole.get('title')}", target=str(rating_key),
+                     result=f"failed: {describe_failure(exc)}")
+        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+    audit.record(
+        admin, "library.move",
+        f"Asked {service.label} to move {whole.get('title')} to {done['to']}", target=str(rating_key),
+    )
+    return done
+
+
 @router.get("/stores")
 async def stores(_: AdminUser, days: int = Query(30, ge=1, le=3650)) -> dict:
     """Each storage mount: what it holds, and what goes wrong watching from it."""

@@ -4,6 +4,32 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.120.0 - 2026-10-12
+
+### Added
+- Move a title from one library source to another, from the file card. An array fills up and the answer is to
+  move things off it, which by hand means moving the files, telling Radarr where they went and telling Plex, with
+  any one of the three wrong leaving a library that half knows where its own files are. Radarr and Sonarr each
+  move the files and update their own record in one operation, which nothing outside them can do correctly, so
+  that is asked for and Plex is then told about both folders. The app never moves a file itself.
+- A move is refused while anything is happening to the title: somebody is watching it, the service has a
+  download for it in its queue, this app is tidying or replacing it, the service has no file for it, or the
+  destination is unreachable, already its home, or smaller than the files. Every reason is given at once rather
+  than the first one found, and they are checked again immediately before the move, because a plan somebody read
+  two minutes ago is a plan about the past.
+- Two roots on one disk report the same free space, and moving between them frees nothing on the disk somebody is
+  emptying. That is said as a warning rather than a refusal, since moving a title between libraries on one disk
+  is a reasonable thing to want and identical figures are a strong hint rather than proof.
+- The room at each destination is labelled as the service's own reading. A share that over reports its size fools
+  Radarr exactly as it fools everything else, which is what the disk sizes setting exists to correct here and
+  what Radarr has no way to know about.
+
+### Fixed
+- A selected destination had no highlight, because the colour it asked for was invented here and defined nowhere.
+- A radio button in that list was being given the full width and height every text box gets, so it pushed the
+  path and the free space to the far edge of the row.
+- A path in that list was clipped at the end, which is the part naming the library. It is clipped at the front.
+
 ## 0.119.0 - 2026-10-12
 
 ### Added
