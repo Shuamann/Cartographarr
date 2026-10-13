@@ -1,5 +1,6 @@
 import BrandIcon from "../components/BrandIcon";
 import Fact from "../components/Fact";
+import FixMatch from "../components/FixMatch";
 import GapsSection from "../components/Gaps";
 import CollectionsSection from "../components/Collections";
 import { ServerWorkLately } from "../components/ServerWork";
@@ -792,7 +793,7 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
         <Loading compact label="Reading the file" />
       </div>
     );
-  return <FileCardView f={detail.data} days={days} />;
+  return <FileCardView f={detail.data} days={days} onChanged={detail.reload} />;
 }
 
 /* The card itself, given a file. Issues render it from their own payload
@@ -804,11 +805,23 @@ function FileCard({ ratingKey, days }: { ratingKey: number; days: number }) {
  * a second copy of every track in it, so a file with nothing wrong was mostly
  * a form. It opens when asked for, and while it is open its tick boxes are the
  * track list rather than a second one. */
-export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
+export function FileCardView({
+  f,
+  days,
+  onChanged,
+}: {
+  f: FileDetail;
+  days: number;
+  /* Set where the card can read itself again. A match changed is a new title,
+     a new year and new ids, so a card left as it was disagrees with both Plex
+     and this app's own row about the file it is describing. */
+  onChanged?: () => void;
+}) {
   const nav = useNav();
   const [showTitle, setShowTitle] = useState(false);
   const [tidying, setTidying] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [matching, setMatching] = useState(false);
   const plan = useApi<Tidy>(`/library/file/${f.rating_key}/tidy`, [f.rating_key]);
   const tidyable = Boolean(plan.data && (plan.data.steps.length > 0 || plan.data.audio.length + plan.data.subtitles.length > 0));
   const worth = f.findings.some((x) => x.severity !== "low");
@@ -942,6 +955,10 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
           primary={worth || !tidyable}
           picking={picking}
           onPick={setPicking}
+          /* Offered where the problem is named. "Radarr has nothing under
+             TMDB 1234" is a wrong match far more often than a missing film,
+             and until now that sentence was the end of the road. */
+          onFixMatch={() => setMatching(true)}
           extra={
             tidyable ? (
               <button className={worth ? "btn" : "btn primary"} onClick={() => setTidying(true)}>
@@ -964,7 +981,13 @@ export function FileCardView({ f, days }: { f: FileDetail; days: number }) {
         <button className="linkish" onClick={() => setShowTitle(!showTitle)}>
           {showTitle ? "Hide the title card" : "Title card"}
         </button>
+        <button className="linkish" onClick={() => setMatching(!matching)}>
+          {matching ? "Hide what Plex thinks this is" : "Fix the match"}
+        </button>
       </p>
+      {matching && (
+        <FixMatch ratingKey={f.rating_key} onClose={() => setMatching(false)} onDone={onChanged} />
+      )}
       {showTitle && <MediaPanel ratingKey={f.rating_key} />}
     </div>
   );
@@ -1470,6 +1493,7 @@ function ArrActions({
   primary,
   picking,
   onPick,
+  onFixMatch,
   extra,
 }: {
   ratingKey: number;
@@ -1478,6 +1502,7 @@ function ArrActions({
   primary: boolean;
   picking: boolean;
   onPick: (on: boolean) => void;
+  onFixMatch?: () => void;
   extra?: React.ReactNode;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -1527,7 +1552,22 @@ function ArrActions({
       ) : (
         <p className="muted small">{why}.</p>
       )}
-      {message && <p className={message.ok ? "note ok-note" : "note bad-note"}>{message.text}</p>}
+      {message && (
+        <p className={message.ok ? "note ok-note" : "note bad-note"}>
+          {message.text}
+          {/* The id in that sentence belonging to a different film is what a
+              wrong match looks like, and the remedy is one press away rather
+              than in another application. */}
+          {!message.ok && onFixMatch && (
+            <>
+              {" "}
+              <button className="linkish" onClick={onFixMatch}>
+                Fix the match
+              </button>
+            </>
+          )}
+        </p>
+      )}
       {picking && <ReleasePicker ratingKey={ratingKey} label={arr.label} title={title} onClose={() => onPick(false)} />}
     </div>
   );

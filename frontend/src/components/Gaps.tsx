@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import FixMatch from "./FixMatch";
 import Loading from "./Loading";
 import TitleRow, { TitleRows } from "./TitleRow";
 import { useApi } from "../lib/api";
@@ -213,6 +214,10 @@ function MissingEpisodes({ data }: { data: ReturnType<typeof useApi<Gaps>> }) {
 
 function HereTwice({ data }: { data: ReturnType<typeof useApi<Copies>> }) {
   const [open, setOpen] = useState<number | null>(null);
+  /* Which entry's match somebody is looking at. Separate from `open`, which
+     is a row's files: these are two different lists and sharing one piece of
+     state would close one by opening the other. */
+  const [matching, setMatching] = useState<number | null>(null);
   if (data.error)
     return (
       <p className="note bad-note" role="alert">
@@ -293,6 +298,11 @@ function HereTwice({ data }: { data: ReturnType<typeof useApi<Copies>> }) {
             match made twice, looks like. Matched on the id rather than the name, because two films can share a name
             and two entries for one film cannot share an id by accident.
           </p>
+          {/* Naming them was all this did. Where the cause is a match made
+              twice, the remedy is to point one of the two at what it actually
+              is, and that is Plex's own list of candidates. Per entry rather
+              than per group: which of the two is the wrong one is the
+              judgement nothing here can make. */}
           <div className="mini-list">
             {c.same_id.map((s) => (
               <div key={s.matched_on + "-" + s.id} className="mini">
@@ -301,12 +311,29 @@ function HereTwice({ data }: { data: ReturnType<typeof useApi<Copies>> }) {
                     {s.title} {s.year ? <span className="muted">{s.year}</span> : null}
                   </strong>
                   <p className="muted small">
-                    {s.items.length} entries, matched on {s.matched_on.toUpperCase()}
+                    {s.items.length} entries, matched on {s.matched_on.toUpperCase()} {s.id}
                   </p>
                   {s.items.map((i) => (
-                    <p key={i.rating_key} className="muted small mono">
-                      {i.file_path || "Item " + i.rating_key} {i.file_size ? "(" + size(i.file_size) + ")" : ""}
-                    </p>
+                    <Fragment key={i.rating_key}>
+                      <div className="row wrap same-id-item">
+                        <p className="muted small mono min0">
+                          {i.file_path || "Item " + i.rating_key} {i.file_size ? "(" + size(i.file_size) + ")" : ""}
+                        </p>
+                        <button
+                          className="linkish"
+                          onClick={() => setMatching(matching === i.rating_key ? null : i.rating_key)}
+                        >
+                          {matching === i.rating_key ? "Hide the candidates" : "Fix this one's match"}
+                        </button>
+                      </div>
+                      {matching === i.rating_key && (
+                        <FixMatch
+                          ratingKey={i.rating_key}
+                          onClose={() => setMatching(null)}
+                          onDone={() => data.reload()}
+                        />
+                      )}
+                    </Fragment>
                   ))}
                 </div>
               </div>

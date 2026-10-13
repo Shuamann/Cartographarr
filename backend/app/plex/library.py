@@ -65,7 +65,7 @@ def _still(item: Any) -> Any:
     return item
 
 
-def _ids(item: Any) -> dict[str, str | None]:
+def external_ids(item: Any) -> dict[str, str | None]:
     """The external ids, from Plex's guids. One missing leaves only that one
     empty: an episode Plex matched on TVDB alone still has its TVDB id."""
     out: dict[str, str | None] = {key: None for _, key in GUIDS}
@@ -125,7 +125,7 @@ def row(item: Any, section_id: int, show: Any = None) -> dict[str, Any] | None:
         # What the Tautulli scan cannot give.
         "file_path": (getattr(part, "file", None) or None) if part is not None else None,
         "duration": _int(getattr(item, "duration", None)),
-        **_ids(item),
+        **external_ids(item),
     }
 
 
@@ -393,7 +393,7 @@ def detail_row(item: Any) -> dict[str, Any]:
         # Lifted out before the row is written, since these are their own
         # table. A list in a column would answer nothing.
         "_tags": _tags(item),
-        **_ids(item),
+        **external_ids(item),
     }
 
 

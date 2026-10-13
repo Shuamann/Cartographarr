@@ -617,6 +617,79 @@ Still open:
 - **The tidy has no way to do the next lot.** Over the cap, the answer is the
   Messy files list rather than a second page of the collection.
 
+## Fixing a wrong match, now that two pages name one
+
+A wrong match was the only library problem the app could see from two places
+and fix from neither. A file matched to the wrong entry carries the wrong
+external ids, so the lookup fails and the error now says which id it asked
+for; separate items matched to the same entry are the "Two entries for one
+title" list. Both are the same fault wearing two coats, and the remedy for
+both is Plex's own Fix Match, which the app sent nobody to.
+
+What the server actually answers, measured before anything was written, and
+not what the plexapi docstring suggests:
+
+- **`manual=1` is the whole thing.** `/library/metadata/{key}/matches` on its
+  own comes back with one candidate: the match Plex already made. A list of
+  one, which happens to be the thing you are trying to change, reads as "there
+  is nothing else this could be". With `manual=1` the same call comes back
+  with twenty.
+- **A candidate carries no agent and no score.** plexapi's SearchResult offers
+  both and both read as None on every row of every item tried. The agent
+  belongs to the library, so it is reported once for the list instead of being
+  claimed per candidate.
+- **A fifth of candidates have no year.** 67 of 302 across 17 items, and 62 of
+  302 have no summary. The year is the first thing anybody would sort or guess
+  on, and a fifth of the list cannot be sorted by it at all.
+- **An episode has no match of its own.** Its own candidate list comes back
+  size=0 from the server, and plexapi puts the mixin on Movie, Show, Artist
+  and Album only. Since the ids the Sonarr lookup uses for an episode are the
+  show's, an episode is offered its show's match.
+- **The current match was first on all 17 items tried,** and it is still found
+  by comparing guids, because nothing promises that order and marking the
+  wrong row as the one in use is worse than marking none.
+
+Costs: a candidate list is 189 to 1269 ms, median 374, and reading the item
+back afterwards about 10 ms. Both sit on a press, so neither is cached.
+
+The trap that would have been paid for later: **the ids have to be written
+over, not merged.** The detail pass keeps only the values it is given, so a
+film re-matched to an entry with no TMDB id would have kept the old film's
+TMDB id for ever, which is the wrong id that sent somebody to Radarr in the
+first place. Every id is written, including the absent ones, and the episodes
+under a re-matched show are emptied rather than read, since there can be
+hundreds of them and the detail pass reads an emptied one within the minute.
+For that minute they say they have no id, which is true.
+
+Deliberately not built:
+
+- **Nothing picks a candidate.** Not even a highlight on the closest one. Two
+  filmed productions of one play in one year is the case this exists for, and
+  that is exactly the case a confident-looking score gets wrong. The summary
+  is shown because it is what tells those two apart.
+- **No typed search.** Plex Web offers a title and year box beside its list.
+  The list here is already built from the item's own title, which is the wrong
+  title in precisely the case being fixed, and twenty candidates for that
+  title is what Plex Web shows by default too. Worth adding the day a file is
+  named so badly that the right entry is not among the twenty.
+- **No candidate artwork.** The server hands back a poster URL on about half
+  the candidates, pointing at images.plex.tv. Drawing them would be the
+  clearest way to tell two productions apart, and it is also the app's first
+  third party image request from the browser. Worth doing through the existing
+  image proxy rather than by pointing the page at Plex's CDN.
+- **Unmatching.** Plex also offers "unmatch", which leaves an item with no
+  metadata at all. Nothing in the app wants that, and the one route to it
+  would be somebody pressing it to see what it does.
+
+Still open:
+
+- **The write half has never been run against a real library.** Applying a
+  match changes somebody's server, and the honest way to prove it is a file
+  that does not matter. Everything up to the PUT is checked against the real
+  server: the candidate list, that all 302 candidates carry both fields Plex
+  is sent, and the read back afterwards. Wants the same disposable file the
+  first real tidy wants.
+
 ## Smaller things noticed and not done
 
 - **A weekly digest exists and is off by default.** Worth revisiting whether
@@ -686,6 +759,10 @@ measured again.
 
 - **The first real tidy.** Tidying rewrites a whole file and has never been
   run end to end against a real one. Wants a disposable file to prove it on.
+- **The first real match fix.** Applying a match is a write to somebody's
+  library, so it is checked by test and by everything that happens before the
+  PUT. Wants the same disposable file, or a title nobody minds being
+  re-matched.
 - **Update checks.** They need a GitHub token to read a private repository,
   and have been failing for the life of the install without one.
 - **Tdarr and Trakt.** Both need an instance or a client id before anything

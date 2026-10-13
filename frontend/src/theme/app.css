@@ -3318,6 +3318,38 @@ label.locked .pill {
 .tidy > .note {
   margin: 0 0 var(--space-3);
 }
+/* ---- fixing a wrong Plex match -------------------------------------------- */
+
+.match-fix {
+  margin-top: var(--space-3);
+}
+.match-fix > .track-group-head {
+  margin-bottom: var(--space-2);
+}
+/* The name and the summary above, the one action to the right, and both wrap
+   onto their own line on a phone rather than pushing the row wider than the
+   window. */
+.match-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.match-row.on {
+  background: var(--surface-2);
+}
+.same-id-item {
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: 2px;
+}
+/* On a phone the button takes a third of the row, and a name that would fit
+   on one line breaks into three beside it. The whole candidate reads first,
+   and the one thing to do with it sits under it. */
+@media (max-width: 600px) {
+  .match-row > .min0 {
+    flex-basis: 100%;
+  }
+}
+
 .arr-actions {
   margin-top: 10px;
 }

@@ -4,6 +4,35 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.119.0 - 2026-10-12
+
+### Added
+- Fix a wrong Plex match without leaving the app. A file matched to the wrong entry carries the wrong external
+  ids, so Radarr or Sonarr has nothing under them, and two items matched to the same entry are the "Two entries
+  for one title" list on Missing and doubled. The app named both and could fix neither: the remedy lived in Plex
+  Web. Plex's own candidate list now opens from the file card in Library, under the error that names the id, and
+  from each entry in that doubled list.
+- Nothing is ever picked for you. Twenty candidates come back and a fifth of them carry no year at all, which is
+  why there is no "best match" button: two filmed productions of one play in one year is the case this exists
+  for, and that is the case a confident sort gets wrong. Each candidate shows its summary, which is what tells
+  those two apart, and the one in use is marked. Changing a match is confirmed first, naming what it is matched
+  to now and what it would become.
+- An episode is offered its show's match, because an episode has no match of its own: its own candidate list
+  comes back empty from Plex, and the ids the Sonarr lookup uses for an episode are the show's.
+
+### Fixed
+- The ids on a re-matched title are replaced rather than merged, including the ones the new match does not have.
+  The pass that fills ids in keeps only the values it is given, so a film re-matched to an entry with no TMDB id
+  would have kept the old film's TMDB id for ever, which is the wrong id that sent somebody to Radarr in the
+  first place. A missing id is honest; a wrong one is the whole problem. Episodes under a re-matched show are
+  emptied the same way and read again within the minute.
+
+### Measured
+- A candidate list costs 189 to 1269 ms against a real server, median 374 over 17 items and 302 candidates, and
+  reading the item back afterwards about 10 ms. The current match was in its own list on all 17 and first on all
+  17, and it is still found by its guid, because nothing says it has to be first and marking the wrong row as the
+  one in use is worse than marking none.
+
 ## 0.118.0 - 2026-10-12
 
 ### Added

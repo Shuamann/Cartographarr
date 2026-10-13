@@ -928,6 +928,66 @@ async def replace_file(rating_key: int, admin: AdminUser, action: str = Body(...
     return {"ok": True, "message": result}
 
 
+@router.get("/file/{rating_key}/match")
+async def match_candidates(rating_key: int, _: AdminUser) -> dict:
+    """What Plex says this item could be, for somebody to choose from.
+
+    Read only. The answer is Plex's own Fix Match list, which is the one place
+    a wrong match can be put right, and until now meant leaving the app.
+    """
+    import asyncio
+
+    from app.plex import rematch
+    from app.plex.server import NotConfigured
+    from app.redact import redact
+
+    try:
+        return await asyncio.to_thread(rematch.candidates, rating_key)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except NotConfigured as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - the server not answering is the answer
+        raise HTTPException(502, f"Plex would not say what this could be: {redact(exc)}") from exc
+
+
+@router.post("/file/{rating_key}/match")
+async def fix_match(rating_key: int, admin: AdminUser, guid: str = Body(..., embed=True)) -> dict:
+    """Match this item to one of the candidates Plex offered.
+
+    A real change to somebody's server, so it is confirmed in the browser
+    before it gets here, written to the log like the other Plex writes, and
+    the app's own row is made to agree rather than left saying what the old
+    match said.
+    """
+    import asyncio
+
+    from app.plex import rematch
+    from app.plex.server import NotConfigured
+    from app.redact import redact
+
+    try:
+        done = await asyncio.to_thread(rematch.apply, rating_key, guid)
+    except LookupError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except NotConfigured as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        audit.record(admin, "library.match", f"Tried to re-match {rating_key}", target=str(rating_key),
+                     result=f"failed: {redact(exc)}")
+        raise HTTPException(502, f"Plex would not take that match: {redact(exc)}") from exc
+    named = done.get("name") or done["guid"]
+    audit.record(
+        admin, "library.match",
+        f"Matched {done.get('title') or done['rating_key']} to {named}"
+        + (f" ({done['year']})" if done.get("year") else ""),
+        target=str(done["rating_key"]),
+        detail={"was": done.get("was_guid"), "now": done["guid"], "asked_about": done.get("asked_about"),
+                "changed": done.get("changed")},
+    )
+    return {"ok": True, **done}
+
+
 def _capacity():
     from app.services.streams import upload_capacity
 
