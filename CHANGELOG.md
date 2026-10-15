@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.122.0 - 2026-10-14
+
+### Added
+- Moves can be queued. Tick titles in Browse, pick where they go, and they move one at a time, each starting when
+  the one before it has finished. A move is the disk reading and writing a whole file, so two at once is each of
+  them taking twice as long, and emptying an array means fifty of them rather than one.
+- Each is checked again when its turn comes, not only when it was queued. One that cannot move yet, because
+  somebody is watching it or the service has a download going for it, keeps its place and says what it is waiting
+  for, and the rest of the queue carries on. Failing it would throw away a move somebody still wants, and
+  stopping at it would mean a queue left overnight did nothing.
+- A move is counted as finished when the file is actually in the new folder, not when the service writes down
+  that it should be. The record changes first, so taking that as done would start the next move while the disk is
+  still copying this one, which is the whole thing one at a time exists to avoid.
+- A queue left in flight by a restart is picked back up rather than stopping for ever with nothing watching it. A
+  move already asked for is never asked for twice: it is looked at instead, and landed means done.
+- Queued moves sit in the Remediation queue beside tidying and replacements, and one still waiting can be taken
+  out. One already moving is left to the service, since stopping it halfway is how a file ends up in neither
+  place.
+
 ## 0.121.0 - 2026-10-14
 
 ### Added

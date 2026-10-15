@@ -278,3 +278,346 @@ def _tell_plex(rating_key: int, old_folder: str | None) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 - the move itself worked
             log.warning("could not ask Plex to scan after a move (%s): %s", which, exc)
     return done
+
+
+# ---- the queue ---------------------------------------------------------------
+#
+# One at a time, because a move is the disk reading and writing a whole file
+# and two at once is each of them taking twice as long. The queue exists so
+# somebody can pick fifty titles off a full array in one sitting and walk away,
+# which is the only way this is any use at scale.
+
+import asyncio  # noqa: E402
+
+WATCH_EVERY = 15
+"""Seconds between asking the service whether the move has landed. The move
+takes minutes to hours, so this is cheap and still prompt."""
+
+CEILING_HOURS = 8
+"""How long one move may take before it is given up on. Generous, because a
+large file across a network is slow and giving up early leaves the queue
+stopped behind something that was going to work."""
+
+RETRY_AFTER = 60
+"""Seconds before going round again when every queued job is waiting on
+something, such as somebody watching the title whose turn it is."""
+
+FRUITLESS_ROUNDS = 5
+"""Rounds where nothing could be started before the worker rests.
+
+Without this it spins for ever on a job that cannot move, which is a task that
+never ends and never says so. The five minute check starts it again, so a
+queue waiting on somebody to stop watching still drains itself; it just does
+so on that timer rather than on this loop."""
+
+_running: Any = None
+
+
+def queue(rating_key: int, service_name: str, arr_id: int | None, title: str | None,
+          to_path: str, from_path: str | None, size: int | None, who: str | None) -> dict[str, Any]:
+    """Put one title in the queue, or hand back the job already waiting for it."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    with session_scope() as db:
+        # Asking twice for the same title is somebody pressing twice, not a
+        # second move: the first one is still going to happen.
+        already = db.execute(
+            select(MoveJob).where(MoveJob.rating_key == rating_key, MoveJob.status.in_(("queued", "moving")))
+        ).scalars().first()
+        if already is not None:
+            return as_dict(already)
+        job = MoveJob(
+            rating_key=rating_key, title=title, service=service_name, arr_id=arr_id,
+            to_path=to_path, from_path=from_path, bytes=size, status="queued",
+            asked_by=who, created_at=datetime.now(UTC),
+        )
+        db.add(job)
+        db.flush()
+        return as_dict(job)
+
+
+def as_dict(job: Any) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "rating_key": job.rating_key,
+        "title": job.title,
+        "service": job.service,
+        "arr_id": job.arr_id,
+        "to": job.to_path,
+        "from": job.from_path,
+        "bytes": job.bytes,
+        "status": job.status,
+        "message": job.message,
+        "asked_by": job.asked_by,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+    }
+
+
+def listing(limit: int = 100) -> list[dict[str, Any]]:
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    with session_scope() as db:
+        rows = db.execute(select(MoveJob).order_by(MoveJob.id.desc()).limit(limit)).scalars().all()
+        return [as_dict(job) for job in rows]
+
+
+def cancel(job_id: int) -> bool:
+    """Take one out of the queue.
+
+    A move already under way is left alone. The service is doing it, and
+    stopping it halfway is how a file ends up in neither place.
+    """
+    from datetime import UTC, datetime
+
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    with session_scope() as db:
+        job = db.get(MoveJob, job_id)
+        if job is None or job.status != "queued":
+            return False
+        job.status = "cancelled"
+        job.message = "Taken out of the queue"
+        job.finished_at = datetime.now(UTC)
+        return True
+
+
+def _mark(job_id: int, **fields: Any) -> None:
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    with session_scope() as db:
+        job = db.get(MoveJob, job_id)
+        if job is None:
+            return
+        for key, value in fields.items():
+            setattr(job, key, value)
+
+
+def start_worker() -> None:
+    """Make sure something is working through the queue."""
+    global _running
+
+    if _running is not None and not _running.done():
+        return
+    _running = asyncio.get_event_loop().create_task(_work())
+
+
+def _waiting() -> list[int]:
+    from sqlalchemy import select
+
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    with session_scope() as db:
+        return list(db.execute(
+            select(MoveJob.id).where(MoveJob.status == "queued").order_by(MoveJob.id)
+        ).scalars())
+
+
+async def _work() -> None:
+    """Work through the queue, one title at a time.
+
+    A job whose turn comes while something is happening to it is left queued
+    with the reason written on it, and the next one is tried instead. Stopping
+    the whole queue because the first title is being watched would mean a
+    queue left overnight did nothing, and failing it would throw away a move
+    somebody still wants.
+    """
+    fruitless = 0
+    while True:
+        ids = await asyncio.to_thread(_waiting)
+        if not ids:
+            return
+        started_any = False
+        for job_id in ids:
+            if await _one(job_id):
+                started_any = True
+        if started_any:
+            fruitless = 0
+            continue
+        fruitless += 1
+        if fruitless >= FRUITLESS_ROUNDS:
+            return
+        await asyncio.sleep(RETRY_AFTER)
+
+
+async def _one(job_id: int) -> bool:
+    """Try one job. True if it was started, whatever became of it after."""
+    from datetime import UTC, datetime
+
+    from app.db import session_scope
+    from app.integrations import arr
+    from app.integrations.base import get_json
+    from app.models import MoveJob
+
+    def load():
+        with session_scope() as db:
+            job = db.get(MoveJob, job_id)
+            return as_dict(job) if job is not None and job.status == "queued" else None
+
+    job = await asyncio.to_thread(load)
+    if job is None:
+        return False
+    service = arr.radarr if job["service"] == "radarr" else arr.sonarr
+    if not service.configured():
+        await asyncio.to_thread(_mark, job_id, message=f"{service.label} is not set up")
+        return False
+
+    try:
+        whole = await get_json(
+            f"{service.base_url}/api/v3/{service.path}/{job['arr_id']}", headers=service.headers
+        )
+    except Exception as exc:  # noqa: BLE001 - a blip is not a failed move
+        await asyncio.to_thread(_mark, job_id, message=f"{service.label}: {exc}")
+        return False
+    if not whole:
+        await asyncio.to_thread(
+            _mark, job_id, status="failed", message=f"{service.label} no longer knows that title",
+            finished_at=datetime.now(UTC),
+        )
+        return True
+
+    checked = await plan(service, job["rating_key"], whole, job["to"])
+    if not checked["can_move"]:
+        # Still wanted, just not now. The reason is written down so the queue
+        # says what it is waiting for rather than looking stuck.
+        await asyncio.to_thread(_mark, job_id, message="; ".join(checked["blockers"]))
+        return False
+
+    await asyncio.to_thread(
+        _mark, job_id, status="moving", message=None, started_at=datetime.now(UTC),
+        from_path=checked["from"],
+    )
+    try:
+        await move(service, job["rating_key"], whole, job["to"])
+    except Exception as exc:  # noqa: BLE001 - one bad title must not stop the queue
+        log.exception("move job %s could not be asked for", job_id)
+        await asyncio.to_thread(
+            _mark, job_id, status="failed", message=str(exc), finished_at=datetime.now(UTC)
+        )
+        return True
+
+    await _watch(service, job_id, job["arr_id"], job["to"])
+    return True
+
+
+async def _watch(service: Any, job_id: int, arr_id: int, to_path: str) -> None:
+    """Wait for the service to finish moving, so the next one starts after it.
+
+    Asked of the title itself rather than of a named command, because the
+    command's name is a thing to guess at across versions and where the file
+    sits is the answer either way.
+    """
+    from datetime import UTC, datetime
+
+    from app.integrations.base import get_json
+
+    waited = 0
+    while waited < CEILING_HOURS * 3600:
+        await asyncio.sleep(WATCH_EVERY)
+        waited += WATCH_EVERY
+        try:
+            whole = await get_json(
+                f"{service.base_url}/api/v3/{service.path}/{arr_id}", headers=service.headers
+            )
+        except Exception as exc:  # noqa: BLE001 - a blip is not a failed move
+            log.debug("could not check on move %s: %s", job_id, exc)
+            continue
+        if whole and has_landed(whole, to_path):
+            await asyncio.to_thread(
+                _mark, job_id, status="done", message=None, finished_at=datetime.now(UTC)
+            )
+            return
+    await asyncio.to_thread(
+        _mark, job_id, status="failed", finished_at=datetime.now(UTC),
+        message=f"It had not landed after {CEILING_HOURS} hours, so the queue moved on. Check {service.label}.",
+    )
+
+
+def has_landed(whole: dict[str, Any], to_path: str) -> bool:
+    """Whether the title is now where it was asked to go.
+
+    Both the folder the service records and where the file actually sits. The
+    record changes first, so taking that alone as done starts the next move
+    while the disk is still copying this one, which is the whole thing a queue
+    of one at a time exists to avoid.
+    """
+    where = (whole.get("rootFolderPath") or "").rstrip("/")
+    if where != to_path.rstrip("/"):
+        return False
+    file_at = (whole.get("movieFile") or {}).get("path") or whole.get("path") or ""
+    return bool(whole.get("hasFile")) and str(file_at).startswith(to_path.rstrip("/"))
+
+
+async def resume() -> str:
+    """Pick the queue back up, including a move that was in flight.
+
+    A move takes minutes to hours and the app can be restarted in the middle
+    of one. The job is then left saying "moving" with nothing watching it, so
+    the queue would stop there for ever with no sign of why.
+
+    A move already asked for is not asked for again. The service was told and
+    is either still doing it or has finished, and re-issuing it would either
+    do nothing or start a second copy of the same work. So it is looked at:
+    landed means done, and anything else means watch it again from here.
+    """
+    from sqlalchemy import func, select
+
+    from app.db import session_scope
+    from app.integrations import arr
+    from app.integrations.base import get_json
+    from app.models import MoveJob
+
+    def in_flight():
+        with session_scope() as db:
+            return [
+                as_dict(job)
+                for job in db.execute(select(MoveJob).where(MoveJob.status == "moving")).scalars()
+            ]
+
+    def still_queued():
+        with session_scope() as db:
+            return db.execute(
+                select(func.count()).select_from(MoveJob).where(MoveJob.status == "queued")
+            ).scalar() or 0
+
+    picked_up = 0
+    for job in await asyncio.to_thread(in_flight):
+        service = arr.radarr if job["service"] == "radarr" else arr.sonarr
+        if not service.configured():
+            continue
+        try:
+            whole = await get_json(
+                f"{service.base_url}/api/v3/{service.path}/{job['arr_id']}", headers=service.headers
+            )
+        except Exception as exc:  # noqa: BLE001 - try again on the next round
+            log.debug("could not look at move %s: %s", job["id"], exc)
+            continue
+        if whole and has_landed(whole, job["to"]):
+            from datetime import UTC, datetime
+
+            await asyncio.to_thread(
+                _mark, job["id"], status="done", message=None, finished_at=datetime.now(UTC)
+            )
+            continue
+        # Still going, and nothing is watching it any more.
+        asyncio.get_event_loop().create_task(_watch(service, job["id"], job["arr_id"], job["to"]))
+        picked_up += 1
+
+    waiting = await asyncio.to_thread(still_queued)
+    if waiting:
+        start_worker()
+    if not waiting and not picked_up:
+        return ""
+    return f"{waiting} waiting, {picked_up} picked back up"

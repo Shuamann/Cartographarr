@@ -503,6 +503,47 @@ class StreamSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column()
 
 
+class MoveJob(Base):
+    """A title waiting to be moved to another library source, or being moved.
+
+    One at a time, because a move is the disk reading and writing the whole
+    file and two at once is each of them taking twice as long. The queue
+    exists so somebody can pick fifty titles off a full array in one sitting
+    and walk away, which is the only way the feature is any use at scale.
+
+    The service does the moving. This records what was asked for, watches for
+    it to land, and tells Plex. Nothing here moves a file.
+    """
+
+    __tablename__ = "move_jobs"
+    __table_args__ = (Index("ix_move_jobs_status", "status", "id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rating_key: Mapped[int] = mapped_column(Integer, index=True)
+    title: Mapped[str | None] = mapped_column(Text)
+    service: Mapped[str] = mapped_column(String(16))  # radarr or sonarr
+    arr_id: Mapped[int | None] = mapped_column(Integer)
+    to_path: Mapped[str] = mapped_column(Text)
+    from_path: Mapped[str | None] = mapped_column(Text)
+    bytes: Mapped[int | None] = mapped_column(BigInteger)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    """queued, moving, done, failed, cancelled.
+
+    Indexed with the id above rather than on its own: every read of this table
+    asks for one status in the order it was asked for, and `index=True` here
+    would make a second index under the name the composite one already has."""
+
+    message: Mapped[str | None] = mapped_column(Text)
+    """Why it is waiting, or why it stopped. A job whose turn came while
+    somebody was watching it stays queued and says so rather than failing:
+    the point of a queue somebody walks away from is that it drains itself."""
+
+    asked_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime | None] = mapped_column(index=True)
+    started_at: Mapped[datetime | None] = mapped_column()
+    finished_at: Mapped[datetime | None] = mapped_column()
+
+
 class ServerJob(Base):
     """A spell of the Plex server doing something of its own.
 

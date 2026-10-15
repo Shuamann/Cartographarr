@@ -133,6 +133,26 @@ tasks.register(tasks.Task(
     "sync", "Sync history", "New plays, titles, file details, devices, locations, sharing signals and stall causes.",
     _cycle, lambda: current().sync_interval_minutes * 60,
 ))
+async def _move_queue() -> str:
+    """Keep the move queue going, including across a restart.
+
+    A move takes minutes to hours and the app can be restarted in the middle
+    of one. Without this a queue somebody left overnight would stop at
+    whichever job was in flight, with no sign of why.
+    """
+    from app.services import moves
+
+    found = await moves.resume()
+    if not found:
+        raise tasks.Skipped("Nothing waiting to move")
+    return found
+
+
+tasks.register(tasks.Task(
+    "move_queue", "Keep the move queue going",
+    "Starts the mover again if it was left partway through, such as by a restart.",
+    _move_queue, lambda: 300, store_every_run=False,
+))
 tasks.register(tasks.Task(
     "backup", "Back up the database",
     "A snapshot of everything the app has worked out, kept beside the live file. Taken while it is in use, so "

@@ -2132,9 +2132,65 @@ const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
  * of them as a banner above an unrelated list, so neither was anywhere you
  * would go looking.
  */
+type MoveJob = {
+  id: number;
+  rating_key: number;
+  title: string | null;
+  service: string;
+  to: string;
+  from: string | null;
+  bytes: number | null;
+  status: string;
+  message: string | null;
+  asked_by: string | null;
+  created_at: string | null;
+};
+
+/* One queued move.
+ *
+ * A move waiting its turn and a move under way read the same way round as a
+ * tidy does, so the one queue stays one queue rather than three dialects. */
+function MoveJobRow({ job, onChanged }: { job: MoveJob; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const waiting = job.status === "queued";
+  return (
+    <div className="mini">
+      <div className="min0">
+        <strong>{job.title ?? `Item ${job.rating_key}`}</strong>
+        <p className="muted small">
+          moving {job.bytes ? size(job.bytes) : "it"} to {job.to}
+          {job.status === "moving" ? " \u00b7 under way" : waiting ? " \u00b7 waiting its turn" : ` \u00b7 ${job.status}`}
+          {/* Why it is still waiting, which is otherwise the thing somebody
+              watches for ten minutes before asking about. */}
+          {job.message ? ` \u00b7 ${job.message}` : ""}
+          {job.asked_by ? ` \u00b7 asked by ${job.asked_by}` : ""}
+        </p>
+      </div>
+      {waiting && (
+        <button
+          className="tab"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api.del(`/library/moves/${job.id}`);
+              onChanged();
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Take it out
+        </button>
+      )}
+    </div>
+  );
+}
+
 function RemediationQueue() {
   const list = useApi<Replacement[]>("/library/replacements");
   const tidy = useApi<TidyJob[]>("/library/tidy/jobs?limit=40");
+  const movesList = useApi<MoveJob[]>("/library/moves?limit=100");
   // Why a job is sitting there rather than running, which is otherwise the
   // sort of thing somebody watches for ten minutes before asking about.
   const settings = useApi<{ key: string; value: unknown }[]>("/settings");
@@ -2147,17 +2203,23 @@ function RemediationQueue() {
   const current = rows.filter((r) => ACTIVE_STATUSES.includes(r.status));
   const running = jobs.filter(working);
 
+  const moving = (job: MoveJob) => job.status === "queued" || job.status === "moving";
+  const moveJobs = movesList.data ?? [];
+  const movesNow = moveJobs.filter(moving);
+
   const again = useRef(() => {
     list.reload();
     tidy.reload();
+    movesList.reload();
   });
   again.current = () => {
     list.reload();
     tidy.reload();
+    movesList.reload();
   };
 
   // Only while something is working: a finished list does not change by itself.
-  const busy = current.length > 0 || running.length > 0;
+  const busy = current.length > 0 || running.length > 0 || movesNow.length > 0;
   useEffect(() => {
     if (!busy) return;
     const timer = setInterval(() => again.current(), 5000);
@@ -2192,6 +2254,11 @@ function RemediationQueue() {
       at: job.created_at ?? "",
       node: <TidyJobRow job={job} waitForQuiet={waitForQuiet} onChanged={() => again.current()} />,
     })),
+    ...(active ? movesNow : moveJobs.filter((j) => !moving(j))).map((job) => ({
+      key: `m${job.id}`,
+      at: job.created_at ?? "",
+      node: <MoveJobRow job={job} onChanged={() => again.current()} />,
+    })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
@@ -2199,14 +2266,14 @@ function RemediationQueue() {
       <div className="row-between queue-bar">
         <p className="muted small">
           Everything being done to a file. Radarr and Sonarr import an upgrade by themselves; anything else waits here
-          for you to confirm or deny.
+          for you to confirm or deny. Moves run one at a time, each starting when the one before it has finished.
         </p>
         <div className="segmented">
           <button className={active ? "seg on" : "seg"} onClick={() => setTab("active")}>
-            Active {current.length + running.length}
+            Active {current.length + running.length + movesNow.length}
           </button>
           <button className={!active ? "seg on" : "seg"} onClick={() => setTab("history")}>
-            History {rows.length - current.length + jobs.length - running.length}
+            History {rows.length - current.length + jobs.length - running.length + moveJobs.length - movesNow.length}
           </button>
         </div>
       </div>
@@ -3104,6 +3171,7 @@ function Browse({
   const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("browse.perHour") ?? 0));
   const [asTiles, setAsTiles] = useState(() => localStorage.getItem("browse.tiles") !== "off");
   const [chosen, setChosen] = useState<Set<number>>(new Set());
+  const [movingTo, setMovingTo] = useState<string>("");
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
@@ -3136,6 +3204,71 @@ function Browse({
   useEffect(() => {
     setWanted(PAGE);
   }, [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season, stores]);
+
+  /* Where the ticked titles could go. Asked of the first of them, since
+     every film shares Radarr's root folders, and only while something is
+     ticked so browsing costs nothing. */
+  const firstPicked = [...chosen][0];
+  const where = useApi<{ destinations: { path: string; free: number | null; accessible: boolean }[]; free_is_from: string }>(
+    firstPicked === undefined ? null : `/library/file/${firstPicked}/move`,
+    [firstPicked],
+  );
+
+  /* Queue a move for everything ticked.
+   *
+   * One request each rather than one for the lot, because each has to be
+   * looked up in the service and a single failure must not take the rest of
+   * the list with it. What could not be queued is named rather than counted:
+   * "forty of fifty" is a number nobody can act on.
+   */
+  async function queueMoves() {
+    const keys = [...chosen];
+    if (!keys.length || !movingTo) return;
+    const room = where.data?.destinations.find((d) => d.path === movingTo)?.free;
+    const total = (data.data?.items ?? []).filter((r) => chosen.has(r.rating_key))
+      .reduce((n, r) => n + (r.file_size ?? 0), 0);
+    if (
+      !(await askConfirm({
+        title: `Queue ${keys.length} ${keys.length === 1 ? "move" : "moves"}?`,
+        body: (
+          <>
+            <p>
+              They go to {movingTo}, one at a time, each starting when the one before it has finished. About{" "}
+              {size(total)} in all, against {room === null || room === undefined ? "an unknown amount" : size(room)}{" "}
+              free as {where.data?.free_is_from ?? "the service"} reads it.
+            </p>
+            <p>
+              Each is checked again when its turn comes. One that cannot move yet, because somebody is watching it
+              or a download is going for it, waits its turn again rather than failing, and the rest carry on.
+            </p>
+            <p>Nothing is deleted. Watch it under Remediation queue.</p>
+          </>
+        ),
+        confirm: `Queue ${keys.length}`,
+        danger: true,
+      }))
+    )
+      return;
+    setBusy(true);
+    setMessage(null);
+    const refused: string[] = [];
+    for (const key of keys) {
+      try {
+        await api.post("/library/moves", { rating_key: key, to: movingTo });
+      } catch (err) {
+        const title = (data.data?.items ?? []).find((r) => r.rating_key === key)?.title ?? String(key);
+        refused.push(`${title}: ${(err as Error).message}`);
+      }
+    }
+    setBusy(false);
+    setChosen(new Set());
+    queueChanged();
+    setMessage(
+      refused.length
+        ? { text: `Queued ${keys.length - refused.length}. Not queued: ${refused.join("; ")}`, ok: false }
+        : { text: `Queued ${keys.length}. They run one at a time under Remediation queue.`, ok: true },
+    );
+  }
 
   const query = new URLSearchParams({ days: String(days), sort, limit: String(wanted) });
   if (perHour) query.set("min_gb_per_hour", String(perHour));
@@ -3477,6 +3610,24 @@ function Browse({
         <div className="row wrap">
           <button className="btn" disabled={busy} onClick={tag}>
             {busy ? "Tagging..." : `Tag ${chosen.size} in Radarr or Sonarr`}
+          </button>
+          {/* Moving a pile of titles off a full disk is the reason the ticks
+              exist at all now, so it sits beside tagging rather than inside
+              each title. */}
+          <label className="inline-select">
+            <span className="muted small">Move to</span>
+            <select value={movingTo} onChange={(e) => setMovingTo(e.target.value)}>
+              <option value="">Pick a place</option>
+              {(where.data?.destinations ?? []).map((d) => (
+                <option key={d.path} value={d.path} disabled={!d.accessible}>
+                  {d.path}
+                  {d.free === null || d.free === undefined ? "" : ` (${size(d.free)} free)`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn" disabled={busy || !movingTo} onClick={queueMoves}>
+            {busy ? "Queueing..." : `Queue ${chosen.size}`}
           </button>
           <button className="tab" onClick={() => setChosen(new Set())}>
             Clear

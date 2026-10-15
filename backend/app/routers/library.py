@@ -395,6 +395,56 @@ async def move_file(rating_key: int, admin: AdminUser, to: str = Body(..., embed
     return done
 
 
+@router.get("/moves")
+def move_queue(_: AdminUser, limit: int = Query(100, ge=1, le=500)) -> list[dict]:
+    """What is queued to move, moving, or lately moved."""
+    from app.services import moves
+
+    return moves.listing(limit)
+
+
+@router.post("/moves")
+async def queue_move(
+    admin: AdminUser,
+    rating_key: int = Body(..., embed=True),
+    to: str = Body(..., embed=True),
+) -> dict:
+    """Put one title in the move queue.
+
+    Nothing is checked against the service here beyond finding the title:
+    whether it can move is asked when its turn comes, because by then the
+    answer may be different, and a queue somebody fills in one sitting is
+    mostly a list of things that cannot move for another hour yet.
+    """
+    import asyncio
+
+    from app import audit
+    from app.services import moves
+
+    whole, service = await _move_target(rating_key)
+    job = await asyncio.to_thread(
+        moves.queue, rating_key, service.name, whole.get("id"), whole.get("title"),
+        to, (whole.get("rootFolderPath") or "").rstrip("/") or None,
+        int(whole.get("sizeOnDisk") or 0), admin.username,
+    )
+    moves.start_worker()
+    audit.record(admin, "library.move.queue",
+                 f"Queued a move of {whole.get('title')} to {to}", target=str(rating_key))
+    return job
+
+
+@router.delete("/moves/{job_id}")
+def unqueue_move(job_id: int, admin: AdminUser) -> dict:
+    """Take one out of the queue. One already moving is left to the service."""
+    from app import audit
+    from app.services import moves
+
+    if not moves.cancel(job_id):
+        raise HTTPException(409, "That one is not waiting any more")
+    audit.record(admin, "library.move.cancel", f"Took move {job_id} out of the queue")
+    return {"ok": True}
+
+
 @router.get("/stores")
 async def stores(_: AdminUser, days: int = Query(30, ge=1, le=3650)) -> dict:
     """Each storage mount: what it holds, and what goes wrong watching from it."""
