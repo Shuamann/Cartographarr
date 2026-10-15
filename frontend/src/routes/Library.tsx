@@ -2993,6 +2993,14 @@ type Tile = {
   marks: string[];
 };
 
+/* A screenful, and how many more each press asks for. */
+const PAGE = 60;
+
+/* What the server will send at once. Past this the answer is a narrower filter
+   rather than a longer page: every row carries its tracks and its plays, and
+   five hundred of them is already a megabyte. */
+const BROWSE_CAP = 500;
+
 type BrowseList = {
   items: Tile[];
   total: number;
@@ -3003,6 +3011,11 @@ type BrowseList = {
   languages: string[];
   resolutions: string[];
   marks: string[];
+  /* Every location these rows could come from, worked out before any were
+     dropped for being in the wrong one, so ticking one does not remove the
+     others. */
+  stores: string[];
+  offset: number;
 };
 
 const MARKS: Record<string, { label: string; tone: string; why: string }> = {
@@ -3072,6 +3085,20 @@ function Browse({
   const [problem, setProblem] = useState(() => localStorage.getItem("browse.problem") ?? "");
   const [resolution, setResolution] = useState(() => localStorage.getItem("browse.resolution") ?? "");
   const [sectionId, setSectionId] = useState(() => localStorage.getItem("browse.section") ?? "");
+  /* Which locations to look at. Several at once, because the question is
+     usually "what is still on these two disks" rather than "what is on this
+     one". Empty means all of them, which is also what no tick means. */
+  const [stores, setStores] = useState<Set<string>>(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem("browse.stores") ?? "[]");
+      return new Set(Array.isArray(kept) ? (kept as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+  /* How many rows to ask for. Sixty is a screenful; the rest is asked for by
+     somebody who wants it rather than sent to everybody who does not. */
+  const [wanted, setWanted] = useState(PAGE);
   const [language, setLanguage] = useState(() => localStorage.getItem("browse.language") ?? "");
   const [search, setSearch] = useState("");
   const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("browse.perHour") ?? 0));
@@ -3106,7 +3133,11 @@ function Browse({
     localStorage.setItem(`browse.${key}`, value);
   }
 
-  const query = new URLSearchParams({ days: String(days), sort, limit: "60" });
+  useEffect(() => {
+    setWanted(PAGE);
+  }, [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season, stores]);
+
+  const query = new URLSearchParams({ days: String(days), sort, limit: String(wanted) });
   if (perHour) query.set("min_gb_per_hour", String(perHour));
   if (kind) query.set("media_type", kind);
   if (problem) query.set("problem", problem);
@@ -3116,13 +3147,15 @@ function Browse({
   if (search.trim()) query.set("search", search.trim());
   if (place.show !== null) query.set("show", String(place.show));
   if (place.season !== null) query.set("season", String(place.season));
+  for (const where of stores) query.append("store", where);
 
   // Episodes are only asked for once a season is open. Above that the lists
   // are shows and seasons, which are their own shape.
   const showing = kind === "episode" && place.season === null;
   const data = useApi<BrowseList>(
     showing ? null : `/library/browse?${query}`,
-    [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season],
+    [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season,
+     wanted, [...stores].sort().join("|")],
   );
   const showList = useApi<{ items: Show[]; total: number }>(
     kind === "episode" && place.show === null
@@ -3234,6 +3267,38 @@ function Browse({
             ))}
           </select>
         </label>
+        {(data.data?.stores ?? []).length > 1 && (
+          <fieldset className="browse-stores">
+            <legend>Where it lives</legend>
+            {(data.data?.stores ?? []).map((where) => (
+              <label key={where} className="check">
+                <input
+                  type="checkbox"
+                  checked={stores.has(where)}
+                  onChange={(e) => {
+                    const next = new Set(stores);
+                    if (e.target.checked) next.add(where);
+                    else next.delete(where);
+                    setStores(next);
+                    localStorage.setItem("browse.stores", JSON.stringify([...next]));
+                  }}
+                />
+                {where}
+              </label>
+            ))}
+            {stores.size > 0 && (
+              <button
+                className="linkish"
+                onClick={() => {
+                  setStores(new Set());
+                  localStorage.setItem("browse.stores", "[]");
+                }}
+              >
+                all of them
+              </button>
+            )}
+          </fieldset>
+        )}
         <label>
           Audio language
           <select value={language} onChange={(e) => remember("language", e.target.value, setLanguage)}>
@@ -3395,6 +3460,15 @@ function Browse({
         <p className="muted small count-line">
           {data.data.total.toLocaleString()} {data.data.total === 1 ? "title" : "titles"}, {size(data.data.size)}.
           {data.data.items.length < data.data.total ? ` Showing the first ${data.data.items.length}.` : ""}
+          {data.data.items.length < data.data.total && (
+            <>
+              {" "}
+              <button className="linkish" onClick={() => setWanted((n) => Math.min(n + PAGE, BROWSE_CAP))}>
+                Show more
+              </button>
+              {wanted >= BROWSE_CAP && " That is as many as one page will carry; narrow it to see the rest."}
+            </>
+          )}
         </p>
       )}
 

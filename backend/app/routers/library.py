@@ -471,7 +471,9 @@ async def browse_library(
     search: str | None = None,
     show: int | None = None,
     season: int | None = None,
+    store: list[str] | None = Query(None),
     limit: int = Query(60, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=100_000),
 ) -> dict:
     """The library as something to look through, sorted by what is wrong."""
     import asyncio
@@ -483,7 +485,8 @@ async def browse_library(
             return library.browse(
                 db, days, sort=sort, min_gb_per_hour=min_gb_per_hour, min_bitrate_kbps=min_bitrate_kbps,
                 resolution=resolution, section_id=section_id, language=language, media_type=media_type,
-                problem=problem, search=search, show=show, season=season, limit=limit,
+                problem=problem, search=search, show=show, season=season, stores=store,
+                limit=limit, offset=offset,
             )
 
     return await asyncio.to_thread(look)

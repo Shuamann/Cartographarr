@@ -647,7 +647,9 @@ def browse(
     search: str | None = None,
     show: int | None = None,
     season: int | None = None,
+    stores: list[str] | None = None,
     limit: int = 120,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """The library as something to look through, with what is wrong on each.
 
@@ -695,6 +697,12 @@ def browse(
     cache = _rows_cache((tuple(sorted(named.items())), settings.library_store_depth))
 
     out = []
+    # Every store the rows could come from, collected before any of them are
+    # dropped for being in the wrong one. Narrowing a list must not remove the
+    # options for narrowing it: tick one location and the others vanishing is
+    # a filter nobody can use twice.
+    all_stores: set[str] = set()
+    wanted_stores = {s for s in (stores or []) if s}
     for item in rows:
         known = cache.get(item.rating_key)
         stamp = (item.file_checked_at, item.file_size, item.file_path)
@@ -724,6 +732,10 @@ def browse(
             if len(cache) < CACHE_LIMIT:
                 cache[item.rating_key] = (stamp, about)
 
+        if about["store"]:
+            all_stores.add(about["store"])
+        if wanted_stores and about["store"] not in wanted_stores:
+            continue
         if min_gb_per_hour and about["gb_per_hour"] < min_gb_per_hour:
             continue
         if language and language.lower() not in about["languages"]:
@@ -781,9 +793,13 @@ def browse(
     }.get(sort, lambda r: -r["gb_per_hour"])
     out.sort(key=order)
 
+    start = max(0, offset)
     return {
-        "items": out[:limit],
+        "items": out[start:start + limit],
         "total": len(out),
+        # Where the shown rows start, so a page asking for more knows what it
+        # already has rather than counting its own list and hoping.
+        "offset": start,
         "size": sum(r["file_size"] or 0 for r in out),
         "sort": sort if sort in BROWSE_SORTS else "per_hour",
         "sorts": [{"key": key, "label": label} for key, label in BROWSE_SORTS.items()],
@@ -791,6 +807,9 @@ def browse(
         "languages": sorted({lang for row in out for lang in row["languages"]}),
         "resolutions": sorted({str(row["video_resolution"] or "").lower() for row in out if row["video_resolution"]}),
         "marks": sorted({mark for row in out for mark in row["marks"]}),
+        # Named `stores` to match the Storage page, which calls the same thing
+        # a store. These are the locations a library sits on.
+        "stores": sorted(all_stores),
     }
 
 

@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.121.0 - 2026-10-14
+
+### Added
+- Browse can be narrowed to where a file lives, by ticking locations rather than picking one from a list. The
+  question somebody moving things off a full array actually has is "what is still on these two disks", which a
+  dropdown cannot ask. Every row already knew which store it sat on and nothing had ever let you ask about it.
+- The list of locations is worked out before any row is dropped for being in the wrong one, so ticking one does
+  not remove the others. A filter whose options disappear as you use it is a filter nobody can use twice.
+- Browse shows more than the first page. It answered with sixty rows and said so, with no way to ask for the
+  rest, which on a library of four thousand films is most of it hidden. Each press asks for sixty more, up to the
+  five hundred one page will carry, and past that it says to narrow instead: every row brings its tracks and its
+  plays, and five hundred of them is already a megabyte.
+- Narrowing the list starts it again from the top, so the page is never a long list of something nobody asked
+  for any more.
+
 ## 0.120.0 - 2026-10-12
 
 ### Added
