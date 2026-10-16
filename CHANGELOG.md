@@ -4,6 +4,28 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.123.0 - 2026-10-16
+
+### Fixed
+- The television archives could not be browsed at all. The locations on offer were whatever the last film list
+  had shown, because the shows list is its own endpoint and had never heard of a store, so the only places to
+  tick were ones films live in. Shows now carry where they live, and a show part way through a move carries both
+  places: one real library has a show spread across two.
+- Only the first five hundred of anything could be reached. "Show more" grew one request and the server will not
+  send more than five hundred rows at once, so 2,597 of the 3,097 films in one location were unreachable by any
+  amount of pressing. Each press asks for the next page and adds it underneath instead.
+- A show measured itself as nothing. Radarr puts a film's size at the top of its record and Sonarr keeps a
+  series' under statistics, and only the first was read, so a show move skipped the check that there is room for
+  it and could never be seen to land: it would have sat until the eight hour ceiling gave up while the files had
+  in fact arrived. Both shapes are read now.
+
+### Changed
+- The locations filter is the same control five other filters already use, rather than a bordered strip crammed
+  in beside the dropdowns.
+- A show can be queued whole from the shows list. It says so plainly, because it was already true and unsaid:
+  the service keeps one folder per series, so asking about an episode moves the show, and a single season cannot
+  be sent somewhere else on its own.
+
 ## 0.122.0 - 2026-10-14
 
 ### Added

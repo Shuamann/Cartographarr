@@ -196,3 +196,41 @@ def test_the_move_checks_again_before_asking(service, monkeypatch):
     with pytest.raises(ValueError, match="watched"):
         asyncio.run(moves.move(service, 1, movie(), NAS))
     assert asked == [], "nothing should have been asked of anybody"
+
+
+def test_a_show_measures_itself_where_the_service_keeps_it():
+    """A film carries sizeOnDisk at the top; a series keeps it under
+    statistics. Reading only the top one measured every show as nought bytes,
+    which skips the check that the destination has room for it."""
+    series = {"statistics": {"sizeOnDisk": 50_000_000_000, "episodeFileCount": 40}}
+    assert moves.size_of(series) == 50_000_000_000
+    assert moves.size_of({"sizeOnDisk": 4_000_000_000}) == 4_000_000_000
+    assert moves.size_of({}) == 0
+
+
+def test_a_show_says_it_has_files_the_way_a_series_does():
+    """A series never says hasFile, so asking only for that made every show
+    look like it had nothing to move and refused the move outright."""
+    assert moves.has_files({"statistics": {"episodeFileCount": 40}}) is True
+    assert moves.has_files({"statistics": {"episodeFileCount": 0, "sizeOnDisk": 0}}) is False
+    assert moves.has_files({"hasFile": True}) is True
+    assert moves.has_files({"hasFile": False}) is False
+
+
+def test_a_show_can_be_seen_to_land():
+    """Without this a show move sat until the eight hour ceiling gave up on
+    it, while the files had in fact arrived: nothing could ever see a series
+    as landed, because the test asked for a field a series does not have."""
+    landed = {"rootFolderPath": "/nas/tv", "path": "/nas/tv/A Show",
+              "statistics": {"episodeFileCount": 40, "sizeOnDisk": 5}}
+    assert moves.has_landed(landed, "/nas/tv") is True
+    still_away = {**landed, "rootFolderPath": "/array/tv", "path": "/array/tv/A Show"}
+    assert moves.has_landed(still_away, "/nas/tv") is False
+
+
+def test_a_series_is_known_from_a_film():
+    """Said out loud wherever a move is shown, because one path per series
+    means asking about an episode moves the show and a season cannot go
+    anywhere on its own."""
+    assert moves.is_a_show({"statistics": {"sizeOnDisk": 1}}) is True
+    assert moves.is_a_show({"sizeOnDisk": 1, "movieFile": {"path": "/a"}}) is False

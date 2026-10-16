@@ -2,6 +2,7 @@ import BrandIcon from "../components/BrandIcon";
 import Fact from "../components/Fact";
 import FixMatch from "../components/FixMatch";
 import MovePanel from "../components/MovePanel";
+import MultiSelect from "../components/MultiSelect";
 import GapsSection from "../components/Gaps";
 import CollectionsSection from "../components/Collections";
 import { ServerWorkLately } from "../components/ServerWork";
@@ -3063,10 +3064,6 @@ type Tile = {
 /* A screenful, and how many more each press asks for. */
 const PAGE = 60;
 
-/* What the server will send at once. Past this the answer is a narrower filter
-   rather than a longer page: every row carries its tracks and its plays, and
-   five hundred of them is already a megabyte. */
-const BROWSE_CAP = 500;
 
 type BrowseList = {
   items: Tile[];
@@ -3109,6 +3106,13 @@ type Show = {
   year: number | null;
   library: string | null;
   plays: number;
+  /* Where its episodes sit. A show has no file of its own, so this is the
+     only place it has, and one part way through a move has two. */
+  stores: string[];
+  /* One of its episodes. A show mostly has no row of its own, so looking it
+     up in Radarr or Sonarr goes through an episode, which resolves to the
+     series. */
+  episode_key: number | null;
 };
 
 type SeasonList = {
@@ -3163,9 +3167,14 @@ function Browse({
       return new Set<string>();
     }
   });
-  /* How many rows to ask for. Sixty is a screenful; the rest is asked for by
-     somebody who wants it rather than sent to everybody who does not. */
-  const [wanted, setWanted] = useState(PAGE);
+  /* Pages after the first, kept here and shown under them.
+   *
+   * Growing one request instead was the first try and cannot work: the server
+   * will not send more than five hundred rows at once, so 2,597 of the 3,097
+   * films in one location could not be reached by any amount of pressing.
+   * Each press asks for the next page and adds it on. */
+  const [extra, setExtra] = useState<Tile[]>([]);
+  const [gettingMore, setGettingMore] = useState(false);
   const [language, setLanguage] = useState(() => localStorage.getItem("browse.language") ?? "");
   const [search, setSearch] = useState("");
   const [perHour, setPerHour] = useState(() => Number(localStorage.getItem("browse.perHour") ?? 0));
@@ -3201,9 +3210,26 @@ function Browse({
     localStorage.setItem(`browse.${key}`, value);
   }
 
+  // Narrowing the list throws away the pages that were added to the old one,
+  // or the page keeps showing a long tail of something nobody asked for.
   useEffect(() => {
-    setWanted(PAGE);
+    setExtra([]);
   }, [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season, stores]);
+
+  async function showMore() {
+    const have = (data.data?.items.length ?? 0) + extra.length;
+    setGettingMore(true);
+    try {
+      const next = new URLSearchParams(query);
+      next.set("offset", String(have));
+      const page = await api.get<BrowseList>(`/library/browse?${next}`);
+      setExtra((was) => [...was, ...page.items]);
+    } catch (err) {
+      setMessage({ text: (err as Error).message, ok: false });
+    } finally {
+      setGettingMore(false);
+    }
+  }
 
   /* Where the ticked titles could go. Asked of the first of them, since
      every film shares Radarr's root folders, and only while something is
@@ -3225,7 +3251,7 @@ function Browse({
     const keys = [...chosen];
     if (!keys.length || !movingTo) return;
     const room = where.data?.destinations.find((d) => d.path === movingTo)?.free;
-    const total = (data.data?.items ?? []).filter((r) => chosen.has(r.rating_key))
+    const total = shown.filter((r) => chosen.has(r.rating_key))
       .reduce((n, r) => n + (r.file_size ?? 0), 0);
     if (
       !(await askConfirm({
@@ -3256,7 +3282,7 @@ function Browse({
       try {
         await api.post("/library/moves", { rating_key: key, to: movingTo });
       } catch (err) {
-        const title = (data.data?.items ?? []).find((r) => r.rating_key === key)?.title ?? String(key);
+        const title = shown.find((r) => r.rating_key === key)?.title ?? String(key);
         refused.push(`${title}: ${(err as Error).message}`);
       }
     }
@@ -3270,7 +3296,7 @@ function Browse({
     );
   }
 
-  const query = new URLSearchParams({ days: String(days), sort, limit: String(wanted) });
+  const query = new URLSearchParams({ days: String(days), sort, limit: String(PAGE) });
   if (perHour) query.set("min_gb_per_hour", String(perHour));
   if (kind) query.set("media_type", kind);
   if (problem) query.set("problem", problem);
@@ -3288,14 +3314,23 @@ function Browse({
   const data = useApi<BrowseList>(
     showing ? null : `/library/browse?${query}`,
     [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season,
-     wanted, [...stores].sort().join("|")],
+     [...stores].sort().join("|")],
   );
-  const showList = useApi<{ items: Show[]; total: number }>(
+  const showList = useApi<{ items: Show[]; total: number; stores: string[] }>(
     kind === "episode" && place.show === null
-      ? `/library/shows?days=${days}${sectionId ? `&section_id=${sectionId}` : ""}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}`
+      ? `/library/shows?days=${days}${sectionId ? `&section_id=${sectionId}` : ""}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}${[...stores].map((s) => `&store=${encodeURIComponent(s)}`).join("")}`
       : null,
-    [days, kind, sectionId, search, place.show],
+    [days, kind, sectionId, search, place.show, [...stores].sort().join("|")],
   );
+  /* The places on offer come from whichever list is on screen. Taking them
+     from the film list while shows were showing is what left the television
+     archives unreachable: the only places offered were ones films live in. */
+  const places = showing ? showList.data?.stores ?? [] : data.data?.stores ?? [];
+
+  /* Everything on screen: the first page, and whatever pressing for more has
+     added under it. */
+  const shown = [...(data.data?.items ?? []), ...extra];
+
   const seasonList = useApi<SeasonList>(
     kind === "episode" && place.show !== null && place.season === null
       ? `/library/shows/${place.show}?days=${days}`
@@ -3400,37 +3435,17 @@ function Browse({
             ))}
           </select>
         </label>
-        {(data.data?.stores ?? []).length > 1 && (
-          <fieldset className="browse-stores">
-            <legend>Where it lives</legend>
-            {(data.data?.stores ?? []).map((where) => (
-              <label key={where} className="check">
-                <input
-                  type="checkbox"
-                  checked={stores.has(where)}
-                  onChange={(e) => {
-                    const next = new Set(stores);
-                    if (e.target.checked) next.add(where);
-                    else next.delete(where);
-                    setStores(next);
-                    localStorage.setItem("browse.stores", JSON.stringify([...next]));
-                  }}
-                />
-                {where}
-              </label>
-            ))}
-            {stores.size > 0 && (
-              <button
-                className="linkish"
-                onClick={() => {
-                  setStores(new Set());
-                  localStorage.setItem("browse.stores", "[]");
-                }}
-              >
-                all of them
-              </button>
-            )}
-          </fieldset>
+        {places.length > 1 && (
+          <MultiSelect
+            label="Where it lives"
+            options={places.map((where) => ({ value: where, label: where }))}
+            selected={[...stores]}
+            onChange={(next) => {
+              const picked = new Set(next.map(String));
+              setStores(picked);
+              localStorage.setItem("browse.stores", JSON.stringify([...picked]));
+            }}
+          />
         )}
         <label>
           Audio language
@@ -3520,8 +3535,17 @@ function Browse({
               </p>
               <div className={asTiles ? "poster-wall" : "mini-list"}>
                 {showList.data.items.map((s) => (
+                  <div key={s.rating_key} className={asTiles ? "poster-pick" : "row show-pick"}>
+                    {s.episode_key !== null && (
+                      <label className="check" title="Pick it to move the whole show">
+                        <input
+                          type="checkbox"
+                          checked={chosen.has(s.episode_key)}
+                          onChange={(e) => choose(s.episode_key as number, e.target.checked)}
+                        />
+                      </label>
+                    )}
                   <button
-                    key={s.rating_key}
                     className={asTiles ? "poster-tile" : "mini mini-button"}
                     onClick={() => setPlace({ show: s.rating_key, season: null, title: s.title })}
                   >
@@ -3545,6 +3569,7 @@ function Browse({
                     </div>
                     <span className="muted small">Open</span>
                   </button>
+                  </div>
                 ))}
               </div>
             </>
@@ -3592,14 +3617,13 @@ function Browse({
       {!showing && data.data && (
         <p className="muted small count-line">
           {data.data.total.toLocaleString()} {data.data.total === 1 ? "title" : "titles"}, {size(data.data.size)}.
-          {data.data.items.length < data.data.total ? ` Showing the first ${data.data.items.length}.` : ""}
-          {data.data.items.length < data.data.total && (
+          {shown.length < data.data.total ? ` Showing the first ${shown.length.toLocaleString()}.` : ""}
+          {shown.length < data.data.total && (
             <>
               {" "}
-              <button className="linkish" onClick={() => setWanted((n) => Math.min(n + PAGE, BROWSE_CAP))}>
-                Show more
+              <button className="linkish" disabled={gettingMore} onClick={showMore}>
+                {gettingMore ? "Getting more..." : "Show more"}
               </button>
-              {wanted >= BROWSE_CAP && " That is as many as one page will carry; narrow it to see the rest."}
             </>
           )}
         </p>
@@ -3629,6 +3653,12 @@ function Browse({
           <button className="btn" disabled={busy || !movingTo} onClick={queueMoves}>
             {busy ? "Queueing..." : `Queue ${chosen.size}`}
           </button>
+          {showing && (
+            <span className="muted small">
+              A show moves whole: the service keeps one folder per series, so a season cannot go somewhere else on
+              its own.
+            </span>
+          )}
           <button className="tab" onClick={() => setChosen(new Set())}>
             Clear
           </button>
@@ -3637,7 +3667,7 @@ function Browse({
 
       {!showing && !asTiles && (
         <div className="file-list">
-          {(data.data?.items ?? []).map((row) => (
+          {shown.map((row) => (
             <div key={row.rating_key} className="big-row">
               <label className="check big-pick">
                 <input
@@ -3677,7 +3707,7 @@ function Browse({
       )}
 
       <div className="poster-wall" hidden={showing || !asTiles}>
-        {(data.data?.items ?? []).map((tile) => (
+        {shown.map((tile) => (
           <button
             key={tile.rating_key}
             className={chosen.has(tile.rating_key) ? "poster-tile picked" : "poster-tile"}
@@ -3719,7 +3749,7 @@ function Browse({
           </button>
         ))}
       </div>
-      {data.data && data.data.items.length === 0 && <p className="muted">Nothing matches those filters.</p>}
+      {data.data && shown.length === 0 && <p className="muted">Nothing matches those filters.</p>}
 
       {open !== null && <FileDialog ratingKey={open} days={days} onClose={() => setOpen(null)} />}
     </>

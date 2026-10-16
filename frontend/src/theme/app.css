@@ -6081,3 +6081,34 @@ label.locked .pill {
   min-height: 0;
   height: auto;
 }
+
+/* A show in the list, with the tick that queues the whole of it beside the
+   button that opens it. A button inside a button is neither valid nor well
+   behaved, so the tick is a sibling. */
+.show-pick {
+  align-items: center;
+  gap: var(--space-2);
+}
+.show-pick > .mini-button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.poster-pick {
+  position: relative;
+}
+.poster-pick > .check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.show-pick input,
+.poster-pick input {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 0;
+  height: auto;
+}

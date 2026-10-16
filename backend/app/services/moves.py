@@ -45,6 +45,42 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+def size_of(whole: dict[str, Any]) -> int:
+    """How much the title takes up, whichever service holds it.
+
+    A film carries `sizeOnDisk` at the top. A series keeps it under
+    `statistics`, so reading only the top one measured every show as nought
+    bytes and skipped the check that the destination has room for it.
+    """
+    top = whole.get("sizeOnDisk")
+    if top:
+        return int(top)
+    return int((whole.get("statistics") or {}).get("sizeOnDisk") or 0)
+
+
+def has_files(whole: dict[str, Any]) -> bool:
+    """Whether there is anything to move.
+
+    A film says `hasFile`. A series says how many episode files it has, and
+    never says `hasFile` at all, so asking only for that made every show look
+    like it had nothing to move.
+    """
+    if "hasFile" in whole:
+        return bool(whole.get("hasFile"))
+    stats = whole.get("statistics") or {}
+    return bool(stats.get("episodeFileCount") or stats.get("sizeOnDisk"))
+
+
+def is_a_show(whole: dict[str, Any]) -> bool:
+    """Whether this is a series rather than a film.
+
+    Worth saying out loud wherever it is shown, because the service keeps one
+    path per series: moving an episode moves the whole show, and there is no
+    such thing as moving one season somewhere else.
+    """
+    return "statistics" in whole and "movieFile" not in whole
+
+
 async def destinations(service: Any) -> list[dict[str, Any]]:
     """Where this service could put a title, and what each one says it has.
 
@@ -152,7 +188,7 @@ async def blockers(service: Any, rating_key: int, movie: dict[str, Any]) -> list
     everything they are waiting for.
     """
     stopping: list[str] = []
-    if not movie.get("hasFile"):
+    if not has_files(movie):
         stopping.append(f"{service.label} has no file for it, so there is nothing to move")
     queued = await _queue_for(service, movie.get("id"))
     if queued:
@@ -176,7 +212,7 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
     where = [d for d in where_all if d["path"] == to_path.rstrip("/")]
     target = where[0] if where else None
     current = (movie.get("rootFolderPath") or "").rstrip("/")
-    bytes_moved = int(movie.get("sizeOnDisk") or 0)
+    bytes_moved = size_of(movie)
 
     stopping = await blockers(service, rating_key, movie)
     worth_knowing: list[str] = []
@@ -212,6 +248,10 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
         "from": current or None,
         "to": target["path"] if target else to_path,
         "bytes": bytes_moved,
+        # Said plainly wherever this is shown: the service keeps one path per
+        # series, so an episode cannot be moved on its own and neither can a
+        # season. Asking about either moves the show.
+        "whole_show": is_a_show(movie),
         # Named rather than presented as the truth: it is the service's own
         # reading of the share, and a share that over reports fools it exactly
         # as it fools everything else.
@@ -557,7 +597,7 @@ def has_landed(whole: dict[str, Any], to_path: str) -> bool:
     if where != to_path.rstrip("/"):
         return False
     file_at = (whole.get("movieFile") or {}).get("path") or whole.get("path") or ""
-    return bool(whole.get("hasFile")) and str(file_at).startswith(to_path.rstrip("/"))
+    return has_files(whole) and str(file_at).startswith(to_path.rstrip("/"))
 
 
 async def resume() -> str:

@@ -111,3 +111,64 @@ def test_asking_past_the_end_gives_nothing_rather_than_the_last_page(client):
     the start would loop forever as somebody pressed for more."""
     library_of_two_disks()
     assert browse(limit=2, offset=99)["items"] == []
+
+
+def episode(key, show, title, path):
+    from app.models import MediaItem
+
+    return MediaItem(
+        rating_key=key, media_type="episode", title=title, full_title=title, section_id=2,
+        grandparent_rating_key=show, grandparent_title=f"Show {show}",
+        parent_media_index=1, media_index=key, file_path=path, file_size=GB, duration=2_700_000,
+    )
+
+
+def tv():
+    put([
+        episode(11, 100, "A", "/array/tv/Show 100/A.mkv"),
+        episode(12, 100, "B", "/array/tv/Show 100/B.mkv"),
+        episode(21, 200, "C", "/nas/tv/Show 200/C.mkv"),
+        episode(31, 300, "D", "/array/tv/Show 300/D.mkv"),
+        episode(32, 300, "E", "/nas/tv/Show 300/E.mkv"),
+    ])
+
+
+def shows(**kw):
+    with session_scope() as db:
+        return library.shows(db, 90, **kw)
+
+
+def test_the_shows_list_offers_the_places_shows_live(client):
+    """Browsing television, the ticks were whatever the last film list had
+    offered, because this endpoint had never heard of a store. The television
+    archives could not be reached at all: the only places on offer were ones
+    films live in."""
+    tv()
+    # A store is named by the first part of its path, as deep as the setting
+    # says, so these are the two disks rather than the two folders.
+    assert shows()["stores"] == ["/array", "/nas"]
+
+
+def test_a_show_is_listed_if_any_of_it_is_in_the_ticked_place(client):
+    """The point of ticking is to find what to move off a disk, and a show
+    with one episode left on it is still something on it."""
+    tv()
+    assert {s["rating_key"] for s in shows(stores=["/nas"])["items"]} == {200, 300}
+
+
+def test_a_show_knows_the_places_it_is_spread_across(client):
+    tv()
+    spread = next(s for s in shows()["items"] if s["rating_key"] == 300)
+    assert spread["stores"] == ["/array", "/nas"]
+
+
+def test_narrowing_shows_keeps_the_other_places_on_offer(client):
+    tv()
+    assert shows(stores=["/nas"])["stores"] == shows()["stores"]
+
+
+def test_every_show_carries_an_episode_to_look_it_up_by(client):
+    """A show mostly has no row of its own, so anything that finds it in
+    Radarr or Sonarr goes through an episode, which resolves to the series."""
+    tv()
+    assert all(s["episode_key"] is not None for s in shows()["items"])

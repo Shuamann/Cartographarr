@@ -34,6 +34,9 @@ type Options = {
   title: string | null;
   here: string | null;
   bytes: number;
+  /* The service keeps one folder per series, so asking about an episode moves
+     the show and a season cannot go anywhere on its own. */
+  whole_show: boolean;
   destinations: Where[];
   free_is_from: string;
   plan: Plan | null;
@@ -78,6 +81,7 @@ export default function MovePanel({
             <p>
               {o.service} will move {size(chosen.bytes)} from {chosen.from ?? "where it is"} to {picked}, and update
               its own record. Plex is told about both folders afterwards.
+              {o.whole_show && " That is the whole show, every season of it."}
             </p>
             <p>
               {picked} has {room === null || room === undefined ? "an unknown amount of" : size(room)} free, as{" "}
@@ -126,9 +130,16 @@ export default function MovePanel({
       <h4>Move it somewhere else</h4>
       <p className="muted small move-why">
         {o.service} moves the files and updates its own record in one go, which is the only way the two stay
-        honest. It is holding {size(o.bytes)} for this title, in {o.here ?? "a folder it has not named"}. The room
-        shown is {o.free_is_from}&apos;s own reading of each share.
+        honest. It is holding {size(o.bytes)} for {o.whole_show ? "this whole show" : "this title"}, in{" "}
+        {o.here ?? "a folder it has not named"}. The room shown is {o.free_is_from}&apos;s own reading of each
+        share.
       </p>
+      {o.whole_show && (
+        <p className="note move-why">
+          This moves the whole show, every season of it. {o.service} keeps one folder per series, so a single
+          season cannot be sent somewhere else on its own.
+        </p>
+      )}
       <div className="move-list">
         {o.destinations
           .filter((d) => d.path !== o.here)

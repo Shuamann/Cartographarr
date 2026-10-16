@@ -511,6 +511,7 @@ def shows(
     days: int,
     section_id: int | None = None,
     search: str | None = None,
+    stores: list[str] | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
     """Every show, from its episodes.
@@ -542,6 +543,10 @@ def shows(
             func.coalesce(func.sum(MediaItem.file_size), 0).label("file_size"),
             func.coalesce(func.sum(MediaItem.duration), 0).label("ms"),
             func.min(MediaItem.year).label("year"),
+            # Any one of its episodes. A show mostly has no row of its own, so
+            # anything that has to look the show up in Radarr or Sonarr goes
+            # through an episode, which resolves to the series.
+            func.min(MediaItem.rating_key).label("episode_key"),
         )
         .where(*where)
         .group_by(MediaItem.grandparent_rating_key)
@@ -560,6 +565,28 @@ def shows(
     )
 
     sections = {s.section_id: s.name for s in db.execute(select(Library)).scalars()}
+
+    # Where each show's episodes sit. A show has no file of its own, so this
+    # is the only way it has a place at all, and one part way through a move
+    # has two. A second query rather than a column on the grouping above,
+    # because a group can only carry one of several paths and the answer here
+    # is all of them.
+    from app.services.stores import labels, name_for
+
+    named = labels()
+    lives: dict[int, set[str]] = {}
+    for key, path in db.execute(
+        select(MediaItem.grandparent_rating_key, MediaItem.file_path).where(
+            *where, MediaItem.file_path.is_not(None)
+        )
+    ).all():
+        where_it_is = name_for(path, named)
+        if where_it_is:
+            lives.setdefault(key, set()).add(where_it_is)
+
+    all_stores = {name for places in lives.values() for name in places}
+    wanted_stores = {s for s in (stores or []) if s}
+
     out = [
         {
             "rating_key": r.rating_key,
@@ -572,11 +599,23 @@ def shows(
             "section_id": r.section_id,
             "library": sections.get(r.section_id),
             "plays": int(played.get(r.rating_key) or 0),
+            "stores": sorted(lives.get(r.rating_key, set())),
+            "episode_key": r.episode_key,
         }
         for r in rows
+        # Any episode in a ticked place is enough. The point of ticking is to
+        # find what to move off a disk, and a show with one episode left on it
+        # is still something on it.
+        if not wanted_stores or (wanted_stores & lives.get(r.rating_key, set()))
     ]
     out.sort(key=lambda s: (s["title"] or "").lower())
-    return {"items": out[:limit], "total": len(out)}
+    return {
+        "items": out[:limit],
+        "total": len(out),
+        # Every place a show could be, worked out before any was dropped for
+        # being in the wrong one.
+        "stores": sorted(all_stores),
+    }
 
 
 def seasons(db: Session, show_key: int, days: int) -> dict[str, Any]:

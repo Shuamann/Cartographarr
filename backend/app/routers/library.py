@@ -74,9 +74,9 @@ def space(_: AdminUser, db: Db) -> dict:
 
 @router.get("/shows")
 def shows(_: AdminUser, db: Db, days: int = Days, section_id: int | None = None,
-          search: str | None = None) -> dict:
+          search: str | None = None, store: list[str] | None = Query(None)) -> dict:
     """Every show, built from its episodes."""
-    return library.shows(db, days, section_id=section_id, search=search)
+    return library.shows(db, days, section_id=section_id, search=search, stores=store)
 
 
 @router.get("/shows/{show_key}")
@@ -363,7 +363,9 @@ async def move_options(rating_key: int, _: AdminUser, to: str | None = None) -> 
         "service": service.label,
         "title": whole.get("title"),
         "here": (whole.get("rootFolderPath") or "").rstrip("/") or None,
-        "bytes": int(whole.get("sizeOnDisk") or 0),
+        "bytes": moves.size_of(whole),
+        # One path per series, so asking about an episode moves the show.
+        "whole_show": moves.is_a_show(whole),
         "destinations": where,
         # Said rather than implied: it is the service's own reading of each
         # share, and a share that over reports fools it as it fools everything.
@@ -425,7 +427,7 @@ async def queue_move(
     job = await asyncio.to_thread(
         moves.queue, rating_key, service.name, whole.get("id"), whole.get("title"),
         to, (whole.get("rootFolderPath") or "").rstrip("/") or None,
-        int(whole.get("sizeOnDisk") or 0), admin.username,
+        moves.size_of(whole), admin.username,
     )
     moves.start_worker()
     audit.record(admin, "library.move.queue",
