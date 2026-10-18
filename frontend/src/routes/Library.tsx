@@ -2133,6 +2133,14 @@ const ACTIVE_STATUSES = ["queued", "downloading", "ready", "importing"];
  * of them as a banner above an unrelated list, so neither was anywhere you
  * would go looking.
  */
+/* How long ago, in words. */
+function since(when: string): string {
+  const ms = Date.now() - new Date(when.endsWith("Z") ? when : when + "Z").getTime();
+  const minutes = Math.max(0, Math.round(ms / 60000));
+  if (minutes < 60) return minutes === 1 ? "a minute" : `${minutes} minutes`;
+  return `${(minutes / 60).toFixed(1)} hours`;
+}
+
 type MoveJob = {
   id: number;
   rating_key: number;
@@ -2145,6 +2153,7 @@ type MoveJob = {
   message: string | null;
   asked_by: string | null;
   created_at: string | null;
+  started_at: string | null;
 };
 
 /* One queued move.
@@ -2160,7 +2169,15 @@ function MoveJobRow({ job, onChanged }: { job: MoveJob; onChanged: () => void })
         <strong>{job.title ?? `Item ${job.rating_key}`}</strong>
         <p className="muted small">
           moving {job.bytes ? size(job.bytes) : "it"} to {job.to}
-          {job.status === "moving" ? " \u00b7 under way" : waiting ? " \u00b7 waiting its turn" : ` \u00b7 ${job.status}`}
+          {/* How long it has been going. The service reports no progress
+              through a move, so elapsed time is the only honest thing to
+              show beside one: twenty gigabytes copying with nothing changing
+              on screen reads as a job that has died. */}
+          {job.status === "moving"
+            ? ` \u00b7 under way${job.started_at ? ` for ${since(job.started_at)}` : ""}`
+            : waiting
+              ? " \u00b7 waiting its turn"
+              : ` \u00b7 ${job.status}`}
           {/* Why it is still waiting, which is otherwise the thing somebody
               watches for ten minutes before asking about. */}
           {job.message ? ` \u00b7 ${job.message}` : ""}
@@ -3316,16 +3333,31 @@ function Browse({
     [days, sort, kind, problem, resolution, sectionId, language, search, perHour, place.show, place.season,
      [...stores].sort().join("|")],
   );
-  const showList = useApi<{ items: Show[]; total: number; stores: string[] }>(
+  const showList = useApi<{
+    items: Show[];
+    total: number;
+    stores: string[];
+    sort: string;
+    sorts: { key: string; label: string }[];
+    sections: { section_id: number; name: string }[];
+  }>(
     kind === "episode" && place.show === null
-      ? `/library/shows?days=${days}${sectionId ? `&section_id=${sectionId}` : ""}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}${[...stores].map((s) => `&store=${encodeURIComponent(s)}`).join("")}`
+      ? `/library/shows?days=${days}&sort=${encodeURIComponent(sort)}${sectionId ? `&section_id=${sectionId}` : ""}${search.trim() ? `&search=${encodeURIComponent(search.trim())}` : ""}${[...stores].map((s) => `&store=${encodeURIComponent(s)}`).join("")}`
       : null,
-    [days, kind, sectionId, search, place.show, [...stores].sort().join("|")],
+    [days, kind, sectionId, search, sort, place.show, [...stores].sort().join("|")],
   );
-  /* The places on offer come from whichever list is on screen. Taking them
-     from the film list while shows were showing is what left the television
-     archives unreachable: the only places offered were ones films live in. */
-  const places = showing ? showList.data?.stores ?? [] : data.data?.stores ?? [];
+  /* Every control takes its options from whichever list is on screen.
+     Taking them from the file list while shows were showing is what left Sort
+     by empty, Library listing every library on the server, and the television
+     archives unreachable. */
+  const live = showing ? showList.data : data.data;
+  const places = live?.stores ?? [];
+  const sorts = live?.sorts ?? [];
+  const sections = live?.sections ?? [];
+  /* What the server settled on, which is not always what was asked for: a way
+     of sorting files means nothing to a list of shows, so it falls back and
+     the control has to show where it landed rather than go blank. */
+  const sortNow = live?.sort ?? sort;
 
   /* Everything on screen: the first page, and whatever pressing for more has
      added under it. */
@@ -3380,14 +3412,18 @@ function Browse({
       <div className="row wrap big-filters">
         <label>
           Sort by
-          <select value={sort} onChange={(e) => remember("sort", e.target.value, setSort)}>
-            {(data.data?.sorts ?? []).map((s) => (
+          <select value={sortNow} onChange={(e) => remember("sort", e.target.value, setSort)}>
+            {sorts.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
               </option>
             ))}
           </select>
         </label>
+        {/* These three are about one file. A show has no resolution, no one
+            audio language and no size per hour, so above a list of shows they
+            are hidden rather than left to sit there empty. */}
+        {!showing && (
         <label>
           Showing
           <select value={problem} onChange={(e) => remember("problem", e.target.value, setProblem)}>
@@ -3399,6 +3435,7 @@ function Browse({
             ))}
           </select>
         </label>
+        )}
         <label>
           Kind
           <select
@@ -3413,6 +3450,7 @@ function Browse({
             <option value="">Both</option>
           </select>
         </label>
+        {!showing && (
         <label>
           Resolution
           <select value={resolution} onChange={(e) => remember("resolution", e.target.value, setResolution)}>
@@ -3424,11 +3462,12 @@ function Browse({
             ))}
           </select>
         </label>
+        )}
         <label>
           Library
           <select value={sectionId} onChange={(e) => remember("section", e.target.value, setSectionId)}>
             <option value="">All</option>
-            {(data.data?.sections ?? []).map((x) => (
+            {sections.map((x) => (
               <option key={x.section_id} value={x.section_id}>
                 {x.name}
               </option>
@@ -3447,6 +3486,7 @@ function Browse({
             }}
           />
         )}
+        {!showing && (
         <label>
           Audio language
           <select value={language} onChange={(e) => remember("language", e.target.value, setLanguage)}>
@@ -3458,6 +3498,8 @@ function Browse({
             ))}
           </select>
         </label>
+        )}
+        {!showing && (
         <label>
           At least
           <select
@@ -3474,6 +3516,7 @@ function Browse({
             ))}
           </select>
         </label>
+        )}
         <label>
           Search
           <input value={search} placeholder="Title" onChange={(e) => setSearch(e.target.value)} />

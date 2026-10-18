@@ -74,9 +74,10 @@ def space(_: AdminUser, db: Db) -> dict:
 
 @router.get("/shows")
 def shows(_: AdminUser, db: Db, days: int = Days, section_id: int | None = None,
-          search: str | None = None, store: list[str] | None = Query(None)) -> dict:
+          search: str | None = None, store: list[str] | None = Query(None),
+          sort: str = "title") -> dict:
     """Every show, built from its episodes."""
-    return library.shows(db, days, section_id=section_id, search=search, stores=store)
+    return library.shows(db, days, section_id=section_id, search=search, stores=store, sort=sort)
 
 
 @router.get("/shows/{show_key}")

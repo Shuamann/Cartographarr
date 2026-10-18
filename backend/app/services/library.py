@@ -413,6 +413,19 @@ def messy_files(db: Session, days: int, issue: str | None = None, limit: int = 2
     }
 
 
+SHOW_SORTS = {
+    "size": "Largest first",
+    "plays": "Most watched",
+    "quiet": "Least watched",
+    "title": "Title",
+}
+"""How a list of shows can be ordered.
+
+Fewer than a list of files, because most of those are about one file: a show
+has no bitrate, no resolution and no one container, and offering to sort by
+them was offering something that could not work."""
+
+
 BROWSE_SORTS = {
     "per_hour": "Biggest per hour",
     "bitrate": "Highest bitrate",
@@ -512,6 +525,7 @@ def shows(
     section_id: int | None = None,
     search: str | None = None,
     stores: list[str] | None = None,
+    sort: str = "title",
     limit: int = 500,
 ) -> dict[str, Any]:
     """Every show, from its episodes.
@@ -608,10 +622,20 @@ def shows(
         # is still something on it.
         if not wanted_stores or (wanted_stores & lives.get(r.rating_key, set()))
     ]
-    out.sort(key=lambda s: (s["title"] or "").lower())
+    out.sort(key={
+        "size": lambda s: -(s["file_size"] or 0),
+        "plays": lambda s: -s["plays"],
+        "quiet": lambda s: (s["plays"], -(s["file_size"] or 0)),
+        "title": lambda s: (s["title"] or "").lower(),
+    }.get(sort, lambda s: (s["title"] or "").lower()))
     return {
         "items": out[:limit],
         "total": len(out),
+        # The same shape the file list answers with, so the controls above
+        # either list work without knowing which one is showing.
+        "sort": sort if sort in SHOW_SORTS else "title",
+        "sorts": [{"key": key, "label": label} for key, label in SHOW_SORTS.items()],
+        "sections": libraries_holding(db, "episode"),
         # Every place a show could be, worked out before any was dropped for
         # being in the wrong one.
         "stores": sorted(all_stores),
@@ -670,6 +694,29 @@ def seasons(db: Session, show_key: int, days: int) -> dict[str, Any]:
             for r in rows
         ],
     }
+
+
+def libraries_holding(db: Session, media_type: str | None) -> list[dict[str, Any]]:
+    """The libraries that actually hold this kind of thing.
+
+    Every library on the server was offered whatever was being browsed, so
+    looking at films offered TV/Series and Music, and picking one asked for
+    films in a library that has none. Asked without the library filter
+    applied, so picking one does not remove the others.
+    """
+    from app.services.library_scan import in_library
+
+    where = [in_library()]
+    if media_type:
+        where.append(MediaItem.media_type == media_type)
+    here = set(
+        db.execute(select(MediaItem.section_id).where(*where).distinct()).scalars()
+    )
+    return [
+        {"section_id": s.section_id, "name": s.name}
+        for s in db.execute(select(Library).order_by(Library.section_id)).scalars()
+        if s.name and s.section_id in here
+    ]
 
 
 def browse(
@@ -842,7 +889,7 @@ def browse(
         "size": sum(r["file_size"] or 0 for r in out),
         "sort": sort if sort in BROWSE_SORTS else "per_hour",
         "sorts": [{"key": key, "label": label} for key, label in BROWSE_SORTS.items()],
-        "sections": [{"section_id": key, "name": name} for key, name in sorted(sections.items()) if name],
+        "sections": libraries_holding(db, media_type),
         "languages": sorted({lang for row in out for lang in row["languages"]}),
         "resolutions": sorted({str(row["video_resolution"] or "").lower() for row in out if row["video_resolution"]}),
         "marks": sorted({mark for row in out for mark in row["marks"]}),

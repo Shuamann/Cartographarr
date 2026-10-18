@@ -172,3 +172,64 @@ def test_every_show_carries_an_episode_to_look_it_up_by(client):
     Radarr or Sonarr goes through an episode, which resolves to the series."""
     tv()
     assert all(s["episode_key"] is not None for s in shows()["items"])
+
+
+def mixed_library():
+    """Films in one library, episodes in another, which is the normal shape."""
+    from app.models import Library
+
+    with session_scope() as db:
+        db.add(Library(section_id=1, name="Movies"))
+        db.add(Library(section_id=2, name="TV/Series"))
+        db.add(Library(section_id=9, name="Music"))
+    library_of_two_disks()
+    tv()
+
+
+def test_a_library_is_only_offered_where_it_holds_that_kind(client):
+    """Every library on the server was offered whatever was being browsed, so
+    looking at films offered TV/Series and Music, and picking one asked for
+    films in a library that has none of them."""
+    mixed_library()
+    films = {s["name"] for s in browse()["sections"]}
+    with session_scope() as db:
+        episodes = {s["name"] for s in library.browse(db, 90, media_type="episode")["sections"]}
+    assert films == {"Movies"}
+    assert episodes == {"TV/Series"}
+    assert "Music" not in films | episodes, "a library with nothing in it is offered to nobody"
+
+
+def test_picking_a_library_does_not_remove_the_others(client):
+    """The same rule the places follow: a filter whose options disappear as
+    you use it is a filter nobody can use twice."""
+    mixed_library()
+    with session_scope() as db:
+        everything = library.browse(db, 90, media_type="episode")["sections"]
+        narrowed = library.browse(db, 90, media_type="episode", section_id=2)["sections"]
+    assert narrowed == everything
+
+
+def test_the_shows_list_carries_its_own_sorts_and_libraries(client):
+    """They were drawn from the file list, which browsing shows does not use,
+    so Sort by sat empty and did nothing until somebody changed Kind and
+    changed it back."""
+    mixed_library()
+    answer = shows()
+    assert [s["key"] for s in answer["sorts"]] == ["size", "plays", "quiet", "title"]
+    assert {s["name"] for s in answer["sections"]} == {"TV/Series"}
+
+
+def test_shows_can_be_put_in_order_of_size(client):
+    """Which is the order somebody emptying a disk wants them in."""
+    mixed_library()
+    biggest = shows(sort="size")["items"]
+    assert [s["file_size"] for s in biggest] == sorted((s["file_size"] for s in biggest), reverse=True)
+
+
+def test_a_way_of_sorting_files_falls_back_rather_than_going_blank(client):
+    """A show has no bitrate, so asking for that order has to land somewhere
+    rather than leaving the control showing nothing."""
+    mixed_library()
+    answer = shows(sort="bitrate")
+    assert answer["sort"] == "title"
+    assert answer["sort"] in {s["key"] for s in answer["sorts"]}

@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.123.1 - 2026-10-18
+
+### Fixed
+- Sort by and Library were empty and did nothing while browsing television, until somebody changed Kind and
+  changed it back. Both drew their options from the file list, which browsing shows does not use. The shows list
+  carries its own now, so the controls work the moment the page opens.
+- The Library list held every library on the server, so looking at films offered TV/Series, Kids TV/Series and
+  Music, and picking one asked for films in a library that has none. A library is only offered where it holds the
+  kind being looked at, worked out before the filter is applied so picking one does not remove the others.
+- Shows can be put in order of size, which is the order somebody emptying a disk wants them in. Asking for a way
+  of sorting that means nothing to a show, such as bitrate, lands on title rather than leaving the control blank.
+- The filters that are about one file are not shown above a list of shows. A show has no resolution, no one audio
+  language and no size per hour, and offering to filter on them was offering something that cannot work.
+
+### Changed
+- A move under way says how long it has been going. The service reports no progress through a move, so elapsed
+  time is the only honest thing to show, and twenty gigabytes copying with nothing changing on screen reads as a
+  job that has died.
+
 ## 0.123.0 - 2026-10-16
 
 ### Fixed
