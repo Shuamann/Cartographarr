@@ -4,6 +4,25 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.124.0 - 2026-10-18
+
+### Fixed
+- Moves did not happen. The service decides whether there is anything to move by comparing the path it is sent
+  with the one it holds, and only the root folder was being changed, so it was being asked to move each title to
+  where it already was. It answered that it had accepted the request, wrote nothing in its own history, and
+  moved nothing. Every move asked for this way looked like it had worked. The folder now moves with it, keeping
+  its own name so nothing is renamed as a side effect.
+- A move made from a title's own card left no trace. It asked the service there and then and recorded nothing,
+  so the queue showed nothing, there was no way to see whether it had finished, and a move that silently did not
+  happen looked exactly like one that had. Every move goes through the queue now: one record, one thing watching
+  it, one place to look.
+- The queue showed an empty page when it could not read the move list, so a queue with nothing in it and a queue
+  that could not be read looked the same. It says what went wrong.
+
+### Changed
+- First real move, proven end to end against a real server: 22.3 GB from one disk to another, seen to land, with
+  Plex told about both the old folder and the new one.
+
 ## 0.123.1 - 2026-10-18
 
 ### Fixed

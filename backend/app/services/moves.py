@@ -40,6 +40,7 @@ for two minutes is a plan about the past.
 from __future__ import annotations
 
 import logging
+import posixpath
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -278,7 +279,18 @@ async def move(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
         raise ValueError("; ".join(checked["blockers"]))
 
     was = (movie.get("path") or "").rstrip("/")
+    # Both, and `path` is the one that matters. The service decides whether
+    # there is anything to move by comparing the path it is sent with the one
+    # it holds, so sending a new rootFolderPath and leaving path alone is
+    # asking it to move a title to where it already is. It answers 202, writes
+    # nothing in its own history, and nothing moves: a real move asked for
+    # that way looked like it worked and did not happen.
+    folder = posixpath.basename(was) or posixpath.basename(
+        (movie.get("folderName") or "").rstrip("/")
+    )
     body = {**movie, "rootFolderPath": checked["to"]}
+    if folder:
+        body["path"] = posixpath.join(checked["to"], folder)
     async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
         response = await client.put(
             f"{service.base_url}/api/v3/{service.path}/{movie['id']}",

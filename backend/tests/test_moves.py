@@ -234,3 +234,69 @@ def test_a_series_is_known_from_a_film():
     anywhere on its own."""
     assert moves.is_a_show({"statistics": {"sizeOnDisk": 1}}) is True
     assert moves.is_a_show({"sizeOnDisk": 1, "movieFile": {"path": "/a"}}) is False
+
+
+def test_the_new_folder_is_sent_and_not_only_the_new_root(service, monkeypatch):
+    """The service decides whether there is anything to move by comparing the
+    path it is sent with the one it holds. Sending a new rootFolderPath and
+    leaving path alone is asking it to move a title to where it already is: it
+    answers 202, writes nothing in its own history, and nothing moves. A real
+    move asked for that way looked like it had worked and had not happened.
+    """
+    sent = {}
+
+    class Reply:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def put(self, url, headers=None, params=None, json=None):
+            sent.update({"params": params, "body": json})
+            return Reply()
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: Client())
+    monkeypatch.setattr(moves, "_tell_plex", lambda key, old: {"old": True, "new": True})
+    asyncio.run(moves.move(service, 1, movie(path=ARRAY + "/A Film (2019)"), NAS))
+
+    assert sent["params"] == {"moveFiles": "true"}
+    assert sent["body"]["rootFolderPath"] == NAS
+    assert sent["body"]["path"] == NAS + "/A Film (2019)", "the folder has to move with it"
+
+
+def test_the_folder_name_is_kept(service, monkeypatch):
+    """Only the disk changes. Rebuilding the folder name from the title would
+    rename somebody's library as a side effect of moving it."""
+    sent = {}
+
+    class Reply:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def put(self, url, headers=None, params=None, json=None):
+            sent.update({"body": json})
+            return Reply()
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: Client())
+    monkeypatch.setattr(moves, "_tell_plex", lambda key, old: {})
+    odd = movie(path=ARRAY + "/A Film (2019) [Remux-1080p]")
+    asyncio.run(moves.move(service, 1, odd, NAS))
+    assert sent["body"]["path"] == NAS + "/A Film (2019) [Remux-1080p]"

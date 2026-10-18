@@ -106,7 +106,7 @@ export default function MovePanel({
     try {
       await api.post(`/library/file/${ratingKey}/move`, { to: picked });
       setMessage({
-        text: `${o.service} is moving it. It takes as long as copying the files takes, and Plex has been told about both folders.`,
+        text: `Queued. Moves run one at a time, and it is watched until the files are actually there. Follow it under Library, Remediation queue.`,
         ok: true,
       });
       onMoved?.();

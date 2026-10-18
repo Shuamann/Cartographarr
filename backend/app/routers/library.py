@@ -382,20 +382,27 @@ async def move_file(rating_key: int, admin: AdminUser, to: str = Body(..., embed
     from app.integrations.base import describe_failure
     from app.services import moves
 
+    # Through the queue, like every other move.
+    #
+    # This used to ask the service there and then and record nothing, so a
+    # move made from a title's own card left no trace: the queue showed
+    # nothing, there was no way to see whether it had finished, and a move
+    # that silently did not happen looked exactly like one that had. One path
+    # means one record, one thing watching it, and one place to look.
+    import asyncio
+
     whole, service = await _move_target(rating_key)
-    try:
-        done = await moves.move(service, rating_key, whole, to)
-    except ValueError as exc:  # something changed between planning and asking
-        raise HTTPException(409, str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        audit.record(admin, "library.move", f"Tried to move {whole.get('title')}", target=str(rating_key),
-                     result=f"failed: {describe_failure(exc)}")
-        raise HTTPException(502, f"{service.label}: {describe_failure(exc)}") from exc
+    job = await asyncio.to_thread(
+        moves.queue, rating_key, service.name, whole.get("id"), whole.get("title"),
+        to, (whole.get("rootFolderPath") or "").rstrip("/") or None,
+        moves.size_of(whole), admin.username,
+    )
+    moves.start_worker()
     audit.record(
         admin, "library.move",
-        f"Asked {service.label} to move {whole.get('title')} to {done['to']}", target=str(rating_key),
+        f"Queued a move of {whole.get('title')} to {to}", target=str(rating_key),
     )
-    return done
+    return job
 
 
 @router.get("/moves")

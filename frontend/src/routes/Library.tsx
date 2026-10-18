@@ -2250,7 +2250,12 @@ function RemediationQueue() {
     return () => window.removeEventListener(QUEUE_CHANGED, go);
   }, []);
 
-  if (list.error) return <p className="note bad-note" role="alert">{list.error}</p>;
+  // Every list that feeds this page, not just the first. The moves list
+  // failing used to leave the page looking empty and correct, which is how a
+  // queue with nothing in it and a queue that could not be read looked the
+  // same.
+  const trouble = list.error || tidy.error || movesList.error;
+  if (trouble) return <p className="note bad-note" role="alert">{trouble}</p>;
   if (!list.data) return <Loading label="Reading the queue" />;
 
   /* One list rather than two.
