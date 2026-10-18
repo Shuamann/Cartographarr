@@ -690,6 +690,29 @@ Still open:
   is sent, and the read back afterwards. Wants the same disposable file the
   first real tidy wants.
 
+## A move renumbers the file in Plex
+
+Worth knowing before building anything else on moves, and measured rather than
+assumed: when the service moves a file, Plex finds it in its new folder, takes
+it in as a new item with a new rating key, and the old key stops answering. A
+real move returned 404 for the old key on every one of six tries.
+
+Everything in this app is keyed on the rating key, so a move breaks the link
+between a title and everything recorded about it: its plays, its stalls, its
+issues and whether somebody kept it. The old row is marked as gone so nothing
+claims the file is on a disk it left, and the next library scan takes the file
+in under its new number, but the history does not follow it across.
+
+Whether that matters depends on how often somebody moves things. The thing to
+look at is whether a moved title's plays still find it, and the way to join
+them back up is the external ids, which both rows carry. Not built, because
+the first question is whether anybody notices.
+
+What is also not built: a library scan after a move, so the new number appears
+at once rather than within six hours. One scan is 43 seconds against 31,000
+items, which is fine once and not fine fifty times, so it wants to run when a
+queue of moves goes idle rather than after each one.
+
 ## Smaller things noticed and not done
 
 - **A weekly digest exists and is off by default.** Worth revisiting whether

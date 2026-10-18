@@ -4,6 +4,21 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.124.1 - 2026-10-18
+
+### Fixed
+- A moved file went on being listed under the disk it had left. Plex was told to scan the moment the service
+  accepted the request, which is before a byte has moved, so the scan ran against a folder the file had not
+  reached and a 22 GB copy finished long afterwards with nobody looking again. Plex is told when the move lands.
+- Where a file lives was still read from the path written down at the last library scan, so a card said one disk
+  while the panel beside it read the new one off the service, for as long as six hours. The row is read back from
+  Plex after the move, rather than copied from the service: the two see the same disks through different mounts,
+  so the service's path is not one this app could open.
+- A move makes Plex take the file in as something new with a new number, and the old number stops existing.
+  Measured on a real move: it answered 404 every time. The old row is marked as something the library no longer
+  has, which is what every list here already hides, so the stale entry goes at once and the next scan picks the
+  file up under its new number.
+
 ## 0.124.0 - 2026-10-18
 
 ### Fixed

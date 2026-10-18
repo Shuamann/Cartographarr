@@ -119,6 +119,14 @@ def mover(monkeypatch):
     monkeypatch.setattr(moves, "move", move)
     monkeypatch.setattr("app.integrations.arr.radarr", Service())
     monkeypatch.setattr(moves, "WATCH_EVERY", 0)
+    # Settling waits for Plex to finish a scan. A test has no Plex and no
+    # reason to wait thirty seconds for one.
+    monkeypatch.setattr(moves, "SETTLE_SECONDS", 0)
+    state["settled"] = []
+    monkeypatch.setattr(
+        moves, "settle",
+        lambda key, old: state["settled"].append((key, old)) or {"old": True, "new": True, "row": True},
+    )
     return asked, state
 
 
@@ -209,3 +217,14 @@ def test_a_title_with_no_file_has_not_landed(client):
 def test_a_trailing_slash_is_not_a_different_folder(client):
     assert moves.has_landed({"rootFolderPath": NAS + "/", "hasFile": True,
                              "movieFile": {"path": NAS + "/A/A.mkv"}}, NAS) is True
+
+
+def test_plex_is_told_and_the_row_read_back_when_it_lands(client, mover):
+    """The move is only finished once this app and Plex agree with the service
+    about where the file is. Without this the card went on naming the old disk
+    for as long as six hours, beside a panel reading the new one."""
+    asked, state = mover
+    job = put(rating_key=5)
+    asyncio.run(moves._one(job["id"]))
+    assert state["settled"] == [(5, ARRAY)], "told about the old folder as well as the new"
+    assert one(job["id"])["status"] == "done"

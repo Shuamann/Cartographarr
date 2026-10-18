@@ -266,7 +266,12 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
 
 
 async def move(service: Any, rating_key: int, movie: dict[str, Any], to_path: str) -> dict[str, Any]:
-    """Ask the service to move it, then tell Plex about both folders.
+    """Ask the service to move it.
+
+    Only asks. Plex is told when the files have actually arrived, which is the
+    job of whatever is watching: telling it here means a scan that runs before
+    a single byte has moved, finds the file in neither place, and leaves both
+    Plex and this app saying it is somewhere it is not.
 
     The checks run again here. A plan somebody read for two minutes is a plan
     about the past, and the things it checks are exactly the ones that start
@@ -298,8 +303,100 @@ async def move(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
         )
         response.raise_for_status()
 
-    told = _tell_plex(rating_key, was)
-    return {**checked, "asked": True, "was": was, "plex": told}
+    return {**checked, "asked": True, "was": was}
+
+
+def settle(rating_key: int, old_folder: str | None) -> dict[str, Any]:
+    """Tell Plex the file has arrived, then write down where it says it is.
+
+    The row is read back rather than worked out. Plex and the service see the
+    same disks through different mounts, so the path the service reports is
+    not the one Plex uses and not one this container could open: copying it
+    into the row would be writing a path nothing can find.
+
+    Plex needs a moment to finish scanning, so it is asked more than once. If
+    it never catches up the row is left alone and marked for re-reading, and
+    the next library scan sorts it out: a stale path is better than a wrong
+    one.
+    """
+    import time
+
+    told = _tell_plex(rating_key, old_folder)
+    for _ in range(TRIES_AFTER_LANDING):
+        time.sleep(SETTLE_SECONDS)
+        if _reread(rating_key, old_folder):
+            return {**told, "row": True}
+    # Plex could not answer for that item, which after a move it usually
+    # cannot: it finds the file in its new folder, takes it in as a new thing
+    # with a new number, and the old number stops existing. Measured on a real
+    # move: the key answered 404 every time.
+    #
+    # So the old row is marked as one the library no longer has, which is what
+    # every list here already filters on. The next library scan picks the file
+    # up under its new number. Saying nothing instead would leave the card
+    # naming the disk the file left, for as long as six hours, beside a panel
+    # reading the new one.
+    _no_longer_here(rating_key)
+    return {**told, "row": False, "renumbered": True}
+
+
+SETTLE_SECONDS = 5
+"""How long to give Plex between asking it to scan and believing its answer."""
+
+TRIES_AFTER_LANDING = 6
+"""How many times to ask before leaving it to the next library scan. Thirty
+seconds in all, against a scan of one folder that usually takes under one."""
+
+
+def _reread(rating_key: int, old_folder: str | None) -> bool:
+    """Write down where Plex now says the file is. True if it has moved on."""
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.plex import library as plex_library
+
+    try:
+        found = plex_library.details([rating_key])
+    except Exception as exc:  # noqa: BLE001 - the move itself worked
+        log.debug("could not re-read %s after a move: %s", rating_key, exc)
+        return False
+    row = found[0] if found else None
+    where = (row or {}).get("file_path")
+    if not where:
+        return False
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is None:
+            return False
+        if item.file_path == where:
+            # Plex is still answering with the old folder, so its scan has not
+            # finished. Saying so is the difference between waiting and
+            # writing down an answer that was never true.
+            return False
+        item.file_path = where
+        if row.get("file_size"):
+            item.file_size = row["file_size"]
+        item.file_checked_at = None
+    return True
+
+
+def _no_longer_here(rating_key: int) -> None:
+    """Mark the old row as one the library does not have any more.
+
+    Not a new flag: every list here already hides what the last scan did not
+    see, so saying the scan did not see it is how a thing stops being in the
+    library. The file is not lost, it is under a new number, and the next scan
+    finds it there.
+    """
+    from datetime import datetime
+
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    with session_scope() as db:
+        item = db.get(MediaItem, rating_key)
+        if item is not None:
+            item.library_seen_at = datetime(1970, 1, 1)
+            item.file_checked_at = None
 
 
 def _tell_plex(rating_key: int, old_folder: str | None) -> dict[str, Any]:
@@ -560,11 +657,12 @@ async def _one(job_id: int) -> bool:
         )
         return True
 
-    await _watch(service, job_id, job["arr_id"], job["to"])
+    await _watch(service, job_id, job["rating_key"], job["arr_id"], job["to"], checked["from"])
     return True
 
 
-async def _watch(service: Any, job_id: int, arr_id: int, to_path: str) -> None:
+async def _watch(service: Any, job_id: int, rating_key: int, arr_id: int, to_path: str,
+                 was: str | None = None) -> None:
     """Wait for the service to finish moving, so the next one starts after it.
 
     Asked of the title itself rather than of a named command, because the
@@ -587,6 +685,10 @@ async def _watch(service: Any, job_id: int, arr_id: int, to_path: str) -> None:
             log.debug("could not check on move %s: %s", job_id, exc)
             continue
         if whole and has_landed(whole, to_path):
+            # Now, not when it was asked for. Both folders, because one of
+            # them no longer holds the file, and then the row is read back
+            # from Plex so this app stops saying the old disk.
+            await asyncio.to_thread(settle, rating_key, was)
             await asyncio.to_thread(
                 _mark, job_id, status="done", message=None, finished_at=datetime.now(UTC)
             )
@@ -664,7 +766,9 @@ async def resume() -> str:
             )
             continue
         # Still going, and nothing is watching it any more.
-        asyncio.get_event_loop().create_task(_watch(service, job["id"], job["arr_id"], job["to"]))
+        asyncio.get_event_loop().create_task(
+            _watch(service, job["id"], job["rating_key"], job["arr_id"], job["to"], job["from"])
+        )
         picked_up += 1
 
     waiting = await asyncio.to_thread(still_queued)

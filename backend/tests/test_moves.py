@@ -300,3 +300,114 @@ def test_the_folder_name_is_kept(service, monkeypatch):
     odd = movie(path=ARRAY + "/A Film (2019) [Remux-1080p]")
     asyncio.run(moves.move(service, 1, odd, NAS))
     assert sent["body"]["path"] == NAS + "/A Film (2019) [Remux-1080p]"
+
+
+def test_plex_is_not_told_while_the_files_are_still_copying(service, monkeypatch):
+    """A 22 GB copy takes minutes. Telling Plex the moment the service
+    accepted the request meant a scan that ran before a byte had moved, found
+    the file in neither folder, and left Plex and this app both saying it was
+    somewhere it is not."""
+    told = []
+
+    class Reply:
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def put(self, url, headers=None, params=None, json=None):
+            return Reply()
+
+    import httpx
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: Client())
+    monkeypatch.setattr(moves, "settle", lambda key, old: told.append(key))
+    monkeypatch.setattr(moves, "_tell_plex", lambda key, old: told.append(("early", key)))
+    asyncio.run(moves.move(service, 1, movie(), NAS))
+    assert told == [], "asking is not arriving"
+
+
+def test_the_row_is_read_back_rather_than_guessed(client, monkeypatch):
+    """Plex and the service see the same disks through different mounts, so
+    the path the service reports is not one this container could open.
+    Writing it into the row would record a path nothing can find."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    from datetime import UTC, datetime
+
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, media_type="movie", title="A Film",
+                         file_path="/old/movies/A Film/A.mkv", file_size=1, section_id=1,
+                         # Set, so clearing it is something a test can see.
+                         file_checked_at=datetime.now(UTC)))
+
+    monkeypatch.setattr("app.plex.library.details",
+                        lambda keys: [{"rating_key": 1, "file_path": "/new/movies/A Film/A.mkv",
+                                       "file_size": 99}])
+    assert moves._reread(1, "/old/movies") is True
+    with session_scope() as db:
+        item = db.get(MediaItem, 1)
+        assert item.file_path == "/new/movies/A Film/A.mkv"
+        assert item.file_size == 99
+        assert item.file_checked_at is None
+
+
+def test_plex_still_saying_the_old_folder_is_not_an_answer(client, monkeypatch):
+    """Its scan has not finished. Writing that down is recording an answer
+    that was never true, and saying so is the difference between waiting and
+    believing."""
+    from app.db import session_scope
+    from app.models import MediaItem
+
+    with session_scope() as db:
+        db.add(MediaItem(rating_key=1, media_type="movie", title="A Film",
+                         file_path="/old/movies/A Film/A.mkv", file_size=1, section_id=1))
+    monkeypatch.setattr("app.plex.library.details",
+                        lambda keys: [{"rating_key": 1, "file_path": "/old/movies/A Film/A.mkv"}])
+    assert moves._reread(1, "/old/movies") is False
+
+
+def test_a_renumbered_item_stops_being_in_the_library(client, monkeypatch):
+    """A move makes Plex take the file in as a new thing with a new number,
+    and the old number stops existing: measured on a real move, it answered
+    404 every time. Saying nothing would leave the card naming the disk the
+    file left, for as long as six hours, beside a panel reading the new one.
+    """
+    from datetime import UTC, datetime
+
+    from app.db import session_scope
+    from app.models import MediaItem
+    from app.services.library_scan import in_library
+    from sqlalchemy import func, select
+
+    from app.models import SyncState
+    from app.services.library_scan import SCAN_KEY
+
+    with session_scope() as db:
+        # Before any scan every row counts as present, which is the right
+        # answer for a fresh install and the wrong one for this test.
+        db.add(SyncState(key=SCAN_KEY, value=datetime(2026, 1, 1).isoformat()))
+        db.add(MediaItem(rating_key=1, media_type="movie", title="A Film",
+                         file_path="/old/movies/A Film/A.mkv", file_size=1, section_id=1,
+                         library_seen_at=datetime(2026, 6, 1), file_checked_at=datetime.now(UTC)))
+
+    # Plex no longer has that number, which is what it does after a move.
+    monkeypatch.setattr("app.plex.library.details", lambda keys: [{"rating_key": 1}])
+    monkeypatch.setattr("app.plex.maintenance.section_of", lambda key: None)
+    monkeypatch.setattr(moves, "SETTLE_SECONDS", 0)
+    monkeypatch.setattr(moves, "TRIES_AFTER_LANDING", 2)
+
+    out = moves.settle(1, "/old/movies")
+    assert out["renumbered"] is True
+    with session_scope() as db:
+        still_here = db.execute(
+            select(func.count()).select_from(MediaItem).where(MediaItem.rating_key == 1, in_library())
+        ).scalar()
+    assert still_here == 0, "the old number is not in the library any more"
