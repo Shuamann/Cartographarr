@@ -107,6 +107,7 @@ def mover(monkeypatch):
 
     async def plan(service, rating_key, whole, to_path):
         return {"can_move": not state["blockers"], "blockers": list(state["blockers"]),
+                "settled": list(state.get("settled_reasons", [])),
                 "warnings": [], "from": ARRAY, "to": to_path, "bytes": 4_000_000_000}
 
     async def move(service, rating_key, whole, to_path):
@@ -162,7 +163,8 @@ def test_a_blocked_one_does_not_hold_up_the_rest(client, mover):
 
     async def plan(service, rating_key, whole, to_path):
         if rating_key == 5:
-            return {"can_move": False, "blockers": ["busy"], "warnings": [], "from": ARRAY, "to": to_path}
+            return {"can_move": False, "blockers": ["busy"], "settled": [], "warnings": [],
+                    "from": ARRAY, "to": to_path}
         return await real(service, rating_key, whole, to_path)
 
     moves.plan = plan
@@ -228,3 +230,48 @@ def test_plex_is_told_and_the_row_read_back_when_it_lands(client, mover):
     asyncio.run(moves._one(job["id"]))
     assert state["settled"] == [(5, ARRAY)], "told about the old folder as well as the new"
     assert one(job["id"])["status"] == "done"
+
+
+def test_a_reason_that_will_not_change_finishes_the_job(client, mover):
+    """A show sat in the queue for a day saying "waiting its turn, it is
+    already there", which is two answers that cannot both be true. Waiting is
+    right for somebody watching it or a download going for it, because those
+    end on their own. Being already there does not."""
+    asked, state = mover
+    state["settled_reasons"] = ["it is already there"]
+    state["blockers"] = ["it is already there"]
+    job = put(rating_key=5)
+    assert asyncio.run(moves._one(job["id"])) is True
+    after = one(job["id"])
+    assert after["status"] == "failed"
+    assert after["message"] == "it is already there"
+    assert asked == [], "nothing should have been asked of the service"
+
+
+def test_one_waiting_on_something_that_ends_keeps_its_place(client, mover):
+    asked, state = mover
+    state["blockers"] = ["it is being watched right now by somebody"]
+    job = put(rating_key=5)
+    assert asyncio.run(moves._one(job["id"])) is False
+    assert one(job["id"])["status"] == "queued"
+
+
+def test_nothing_waits_for_ever(client, mover):
+    """Whatever it is waiting for ends by itself or it does not, and after a
+    day it does not. A queue that looks busy for ever is how one sat for a day
+    without anybody noticing it was stuck."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import session_scope
+    from app.models import MoveJob
+
+    asked, state = mover
+    state["blockers"] = ["it is being watched right now by somebody"]
+    job = put(rating_key=5)
+    with session_scope() as db:
+        db.get(MoveJob, job["id"]).created_at = datetime.now(UTC) - timedelta(hours=30)
+    assert asyncio.run(moves._one(job["id"])) is True
+    after = one(job["id"])
+    assert after["status"] == "failed"
+    assert "gave up" in (after["message"] or "")
+    assert "watched" in (after["message"] or ""), "it still says what it was waiting for"

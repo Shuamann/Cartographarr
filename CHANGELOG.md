@@ -4,6 +4,16 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.124.2 - 2026-10-24
+
+### Fixed
+- A move that could never run waited for ever. One sat in the queue for a day saying "waiting its turn, it is
+  already there", which is two answers that cannot both be true. A reason that ends on its own, such as somebody
+  watching the title or a download going for it, is worth waiting for. Being already there is not, and neither is
+  a root folder the service does not have or one it cannot reach. Those finish the job and say so.
+- Nothing waits for ever either way. A job still held up after a day is given up on, and says both that it gave
+  up and what it was waiting for, because a queue that looks busy for ever is how one sat unnoticed for a day.
+
 ## 0.124.1 - 2026-10-18
 
 ### Fixed

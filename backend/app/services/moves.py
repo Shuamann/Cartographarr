@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import posixpath
+from datetime import UTC
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -216,14 +217,21 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
     bytes_moved = size_of(movie)
 
     stopping = await blockers(service, rating_key, movie)
+    # The ones that will not stop being true on their own. Everything in
+    # `stopping` so far ends by itself: somebody stops watching, a download
+    # finishes, a tidy finishes. These do not, and a queue that treats them
+    # the same waits for ever and says it is waiting its turn.
+    settled: list[str] = []
+    if not has_files(movie):
+        settled.append(f"{service.label} has no file for it, so there is nothing to move")
     worth_knowing: list[str] = []
     if target is None:
-        stopping.append(f"{service.label} has no root folder at {to_path}")
+        settled.append(f"{service.label} has no root folder at {to_path}")
     else:
         if not target["accessible"]:
-            stopping.append(f"{service.label} cannot reach {to_path}")
+            settled.append(f"{service.label} cannot reach {to_path}")
         if target["path"] == current:
-            stopping.append("it is already there")
+            settled.append("it is already there")
         free = target.get("free")
         if free is not None and bytes_moved and free < bytes_moved:
             stopping.append(
@@ -241,6 +249,7 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
                 "that reports the same free space as where it is now, so the two are probably one disk "
                 "and this would not free anything"
             )
+    stopping += [s for s in settled if s not in stopping]
     return {
         "rating_key": rating_key,
         "title": movie.get("title"),
@@ -259,6 +268,9 @@ async def plan(service: Any, rating_key: int, movie: dict[str, Any], to_path: st
         "free_at_destination": target.get("free") if target else None,
         "free_is_from": service.label,
         "blockers": stopping,
+        # The subset nothing is going to fix by waiting. A job held up by one
+        # of these is finished rather than queued again for ever.
+        "settled": settled,
         # Things to think about rather than reasons to refuse.
         "warnings": worth_knowing,
         "can_move": not stopping,
@@ -451,6 +463,29 @@ RETRY_AFTER = 60
 """Seconds before going round again when every queued job is waiting on
 something, such as somebody watching the title whose turn it is."""
 
+GIVE_UP_AFTER_HOURS = 24
+"""How long a job may sit waiting on something before it is given up on.
+
+Whatever it is waiting for ends by itself or it does not, and after a day it
+does not. Giving up says so; the alternative is a queue that looks busy for
+ever, which is how one sat for a day saying "waiting its turn"."""
+
+
+def _waited_too_long(job: dict[str, Any]) -> bool:
+    from datetime import datetime
+
+    made = job.get("created_at")
+    if not made:
+        return False
+    try:
+        when = datetime.fromisoformat(made)
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - when).total_seconds() > GIVE_UP_AFTER_HOURS * 3600
+
+
 FRUITLESS_ROUNDS = 5
 """Rounds where nothing could be started before the worker rests.
 
@@ -638,9 +673,27 @@ async def _one(job_id: int) -> bool:
         return True
 
     checked = await plan(service, job["rating_key"], whole, job["to"])
+    if checked["settled"]:
+        # Not a delay, an answer. Waiting changes nothing, so the job stops
+        # here rather than keeping its place and saying "waiting its turn"
+        # about something that is never going to happen.
+        await asyncio.to_thread(
+            _mark, job_id, status="failed", message="; ".join(checked["settled"]),
+            finished_at=datetime.now(UTC),
+        )
+        return True
     if not checked["can_move"]:
         # Still wanted, just not now. The reason is written down so the queue
         # says what it is waiting for rather than looking stuck.
+        if _waited_too_long(job):
+            await asyncio.to_thread(
+                _mark, job_id, status="failed", finished_at=datetime.now(UTC),
+                message=(
+                    f"Still waiting after {GIVE_UP_AFTER_HOURS} hours, so the queue gave up on it. "
+                    + "; ".join(checked["blockers"])
+                ),
+            )
+            return True
         await asyncio.to_thread(_mark, job_id, message="; ".join(checked["blockers"]))
         return False
 

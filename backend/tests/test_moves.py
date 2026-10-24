@@ -411,3 +411,49 @@ def test_a_renumbered_item_stops_being_in_the_library(client, monkeypatch):
             select(func.count()).select_from(MediaItem).where(MediaItem.rating_key == 1, in_library())
         ).scalar()
     assert still_here == 0, "the old number is not in the library any more"
+
+
+def test_already_there_is_an_answer_and_not_a_delay(service):
+    """It will never stop being true, so the queue must not keep its place
+    and say it is waiting its turn."""
+    answer = plan(service, to=ARRAY)
+    assert answer["can_move"] is False
+    assert "it is already there" in answer["settled"]
+
+
+def test_a_root_the_service_does_not_have_is_an_answer(service):
+    answer = plan(service, to="/somewhere/else")
+    assert answer["settled"], "no amount of waiting makes a root folder appear"
+
+
+def test_a_destination_it_cannot_reach_is_an_answer(service):
+    service.roots[2]["accessible"] = False
+    assert plan(service, to=NAS)["settled"]
+
+
+def test_nothing_to_move_is_an_answer(service):
+    assert plan(service, item=movie(hasFile=False, sizeOnDisk=0))["settled"]
+
+
+def test_somebody_watching_it_is_a_delay(service, monkeypatch):
+    """It ends on its own, so the job keeps its place."""
+    async def watching(key):
+        return ["it is being watched right now by somebody"]
+
+    monkeypatch.setattr(moves, "_being_watched", watching)
+    answer = plan(service)
+    assert answer["can_move"] is False
+    assert answer["settled"] == [], "waiting is the right thing to do with this one"
+
+
+def test_a_download_going_for_it_is_a_delay(service):
+    service.queue = [{"movieId": 7, "status": "completed", "trackedDownloadState": "downloading"}]
+    assert plan(service)["settled"] == []
+
+
+def test_every_reason_is_still_listed_whichever_kind_it_is(service):
+    """Somebody reading the row wants all of them, not the ones that happen
+    to be delays."""
+    answer = plan(service, to=ARRAY, item=movie(hasFile=False))
+    assert len(answer["blockers"]) >= 2
+    assert set(answer["settled"]) <= set(answer["blockers"])
