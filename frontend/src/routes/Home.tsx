@@ -5,6 +5,7 @@ import { useApi, type Activity } from "../lib/api";
 import { useNav } from "../lib/nav";
 import { tabLabel, type Tab } from "../lib/tabs";
 import SettingsLink, { SETTINGS_PAGES } from "../components/SettingsLink";
+import TabIcon, { iconForTab } from "../components/TabIcon";
 
 /* Home: where to go next.
  *
@@ -74,8 +75,13 @@ export default function HomeRoute({ onNavigate }: { onNavigate: (tab: Tab) => vo
           <nav className="home-nav" aria-label="Where to go">
             {destinations(nav.isAdmin).map(({ tab, note }) => (
               <button key={tab} className="home-nav-item" onClick={() => onNavigate(tab)}>
-                <span className="home-nav-label">{tabLabel(tab)}</span>
-                <span className="home-nav-note">{note}</span>
+                {/* The icon is its own column, so six entries line up down the
+                    page instead of each one starting wherever its word does. */}
+                <TabIcon name={iconForTab(tab)} />
+                <span className="home-nav-words">
+                  <span className="home-nav-label">{tabLabel(tab)}</span>
+                  <span className="home-nav-note">{note}</span>
+                </span>
                 {tab === "Issues" && d.open_issues > 0 && <span className="home-nav-count">{d.open_issues}</span>}
               </button>
             ))}

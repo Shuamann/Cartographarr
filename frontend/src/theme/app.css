@@ -4544,9 +4544,13 @@ label.locked .pill {
    rather than a box that appears from nowhere on hover. */
 .home-nav-item {
   position: relative;
+  /* An icon column and a words column, rather than a stack. Six entries then
+     line up down the page instead of each starting wherever its word does. */
   display: grid;
-  gap: 3px;
-  padding: 10px 46px 10px 16px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 0 12px;
+  padding: 10px 46px 10px 14px;
   border: 0;
   border-left: 2px solid var(--border);
   background: transparent;
@@ -4562,8 +4566,28 @@ label.locked .pill {
   background: linear-gradient(90deg, var(--accent-soft), transparent 78%);
 }
 
+.home-nav-words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.tab-icon {
+  color: var(--ink-3);
+  transition: color 120ms ease;
+}
+.home-nav-item:hover .tab-icon,
+.home-nav-item:focus-visible .tab-icon {
+  color: var(--accent);
+}
+/* Issues keeps its own colour whatever the row is doing. A reported problem
+   is the one thing on this page somebody has to notice without reading it. */
+.tab-icon-warn,
+.home-nav-item:hover .tab-icon-warn,
+.home-nav-item:focus-visible .tab-icon-warn {
+  color: var(--warn);
+}
 .home-nav-label {
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.1em;

@@ -4,6 +4,20 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.125.0 - 2026-10-29
+
+### Added
+- Each entry on the front page now carries an icon, so the page can be read by shape rather than by reading
+  every line of it. They are drawn in the app rather than taken from an icon set, as one stroked line at one
+  weight, so six of them stacked read as one set.
+- Issues gets a warning triangle in the warning colour, amber in both themes, beside the count of what is open.
+  It is the one thing on that page worth noticing without reading, and the only mark there that is not a plain
+  drawing of the page it opens.
+
+### Changed
+- The front page entries are laid out as an icon beside its words rather than as two stacked lines, and the
+  heading is a little smaller, which fits the six of them on the page without scrolling.
+
 ## 0.124.2 - 2026-10-24
 
 ### Fixed
