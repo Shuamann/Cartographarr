@@ -7,9 +7,8 @@
   variable as a field you can edit afterwards. See the README under "On Unraid".
 
   The image is pulled from GHCR, so the Docker tab checks for updates and
-  applies them the same way it does for every other container. The package
-  follows the repository's visibility: while the repository is private, the
-  server needs a token to pull it. See the README under "On Unraid".
+  applies them the same way it does for every other container. The package is
+  public, so no login is needed on the server. See the README under "On Unraid".
 -->
 <Container version="2">
   <Name>cartographarr</Name>

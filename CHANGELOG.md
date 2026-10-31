@@ -12,9 +12,10 @@ copy on GitHub to say what an update brings.
   clone, a deploy key and a terminal. All three of those lived under `/root`, which Unraid keeps in RAM, so a
   reboot took them and updating meant setting them up again.
 - Every version is tagged as well as `latest`, so a release can be pinned or rolled back by number.
-- The Unraid template points at `ghcr.io/shuamann/cartographarr:latest`, and the README says how to let the
-  server pull it while the repository is private: one token limited to reading packages, kept on the flash drive
-  and restored at boot, since the login is forgotten otherwise.
+- The Unraid template points at `ghcr.io/shuamann/cartographarr:latest`. The package is public while the
+  repository stays private, so the server needs no login: a `docker login` on Unraid lives under `/root`, which
+  is a RAM filesystem, so it is forgotten at the next reboot and update checks then fail with nothing on screen
+  to say why. The image carries the code and no keys, data or configuration.
 
 ## 0.125.0 - 2026-10-29
 

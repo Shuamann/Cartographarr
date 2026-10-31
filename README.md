@@ -79,36 +79,12 @@ The image is published to GHCR, so the Docker tab checks for updates and
 applies them the way it does for every other container. Nothing is built on
 the server and there is no clone to keep.
 
-While the repository is private the package is too, so Docker needs a token to
-pull it. Make a classic personal access token with only **read:packages** at
-github.com under Settings, Developer settings, then on the server:
-
-```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME
-```
-
-Unraid keeps `/root` in RAM, so that login is forgotten at the next reboot and
-the update check starts failing with no obvious reason. Put it on the flash
-drive and restore it at boot:
-
-```bash
-mkdir -p /boot/config/cartographarr && cp /root/.docker/config.json /boot/config/cartographarr/docker-config.json
-```
-
-Then add these two lines to `/boot/config/go`, above the line that starts the
-web interface:
-
-```bash
-mkdir -p /root/.docker
-cp /boot/config/cartographarr/docker-config.json /root/.docker/config.json
-```
-
-That file holds the token, base64 encoded rather than encrypted, on a drive
-that is readable by anything that can reach the flash share. A token limited
-to `read:packages` can do nothing but pull this image, which is the reason for
-limiting it. If you already sign in to another registry on this server, merge
-the two `auths` entries by hand instead of copying over the file, which would
-drop the other one.
+The package is public, so nothing needs a login and no credential has to be
+kept anywhere. That is deliberate rather than lazy: Unraid keeps `/root` on a
+RAM filesystem, so a `docker login` there is forgotten at the next reboot and
+the update check then starts failing with nothing on screen to say why.
+Nothing is baked into the image, so a public image gives away the code and no
+keys, data or configuration.
 
 **With the template**, so every path and port is a field in the Docker tab
 rather than a flag you have to remember:
