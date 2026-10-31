@@ -49,6 +49,12 @@ rather than the player name, because anyone can rename "Living Room TV".
 ## Install
 
 ```bash
+docker run -d --name cartographarr --restart unless-stopped -p 6277:6277   -v /path/to/appdata:/data -e TZ=Etc/UTC ghcr.io/shuamann/cartographarr:latest
+```
+
+Or from a clone, which builds it rather than pulling it:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -69,11 +75,45 @@ cycle with nothing new takes about a tenth of a second.
 Data lives in `/mnt/user/appdata/cartographarr` and the container runs as
 `99:100` to match.
 
-**With the template**, so every path and port is a field in the Docker tab
-rather than a flag you have to remember. Build the image once, then:
+The image is published to GHCR, so the Docker tab checks for updates and
+applies them the way it does for every other container. Nothing is built on
+the server and there is no clone to keep.
+
+While the repository is private the package is too, so Docker needs a token to
+pull it. Make a classic personal access token with only **read:packages** at
+github.com under Settings, Developer settings, then on the server:
 
 ```bash
-cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t cartographarr:latest .
+docker login ghcr.io -u YOUR_GITHUB_USERNAME
+```
+
+Unraid keeps `/root` in RAM, so that login is forgotten at the next reboot and
+the update check starts failing with no obvious reason. Put it on the flash
+drive and restore it at boot:
+
+```bash
+mkdir -p /boot/config/cartographarr && cp /root/.docker/config.json /boot/config/cartographarr/docker-config.json
+```
+
+Then add these two lines to `/boot/config/go`, above the line that starts the
+web interface:
+
+```bash
+mkdir -p /root/.docker
+cp /boot/config/cartographarr/docker-config.json /root/.docker/config.json
+```
+
+That file holds the token, base64 encoded rather than encrypted, on a drive
+that is readable by anything that can reach the flash share. A token limited
+to `read:packages` can do nothing but pull this image, which is the reason for
+limiting it. If you already sign in to another registry on this server, merge
+the two `auths` entries by hand instead of copying over the file, which would
+drop the other one.
+
+**With the template**, so every path and port is a field in the Docker tab
+rather than a flag you have to remember:
+
+```bash
 cp unraid/cartographarr.xml /boot/config/plugins/dockerMan/templates-user/
 ```
 
@@ -85,18 +125,31 @@ is for libraries kept somewhere else, another pool or a remote share mounted
 under `/mnt/remotes`. Leave both empty if you do not want to tidy files.
 
 The host side of each is a field, so **Edit** on the container is where mounts
-are changed afterwards, and Apply rebuilds it with the same settings. Leave the
-container side alone: `/media` and `/media2` are the names the app is given in
-Settings. To update: build the image again with
-the line above and press **Apply** on the container, or leave the template and
-run the one liner below instead.
+are changed afterwards, and Apply recreates it with the same settings. Leave
+the container side alone: `/media` and `/media2` are the names the app is given
+in Settings.
 
-**Without the template**, building from a clone and updating later with the
-same line:
+To update, the Docker tab says **Update Ready** once a new image is pushed, and
+**Apply** pulls it. Mounts and variables come from the template, so there is
+nothing to retype and nothing to remember. **Check for Updates** at the bottom
+of the tab asks now rather than waiting for the hourly check.
+
+**Without the template**, the same thing as one line, which also removes the
+image it replaces:
 
 ```bash
-cd ~/Cartographarr && git pull && docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t cartographarr:latest . && docker rm -f cartographarr && docker run -d --name cartographarr --restart unless-stopped -u 99:100 -p 6277:6277 -v /mnt/user/appdata/cartographarr:/data -e DATA_DIR=/data -e TZ=Etc/UTC cartographarr:latest
+docker pull ghcr.io/shuamann/cartographarr:latest && docker rm -f cartographarr && docker run -d --name cartographarr --restart unless-stopped -u 99:100 -p 6277:6277 -v /mnt/user/appdata/cartographarr:/data -e DATA_DIR=/data -e TZ=Etc/UTC ghcr.io/shuamann/cartographarr:latest && docker image prune -f
 ```
+
+Add your media and poster mounts to that line as well, or it recreates the
+container without them. Every `-v` the container has now is printed by:
+
+```bash
+docker inspect cartographarr --format '{{range .Mounts}}-v {{.Source}}:{{.Destination}} {{end}}'
+```
+
+Each published version is tagged as well as `latest`, so `:0.126.0` pins a
+known one and is how to go back if an update misbehaves.
 
 Set `TZ` to your own time zone. Rules that use a time of day go by it.
 

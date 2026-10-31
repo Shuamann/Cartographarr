@@ -4,6 +4,18 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.126.0 - 2026-10-30
+
+### Changed
+- The image is built by GitHub Actions and published to GHCR rather than built on the server. On Unraid the
+  Docker tab now says Update Ready and Apply pulls it, the same as every other container, instead of needing a
+  clone, a deploy key and a terminal. All three of those lived under `/root`, which Unraid keeps in RAM, so a
+  reboot took them and updating meant setting them up again.
+- Every version is tagged as well as `latest`, so a release can be pinned or rolled back by number.
+- The Unraid template points at `ghcr.io/shuamann/cartographarr:latest`, and the README says how to let the
+  server pull it while the repository is private: one token limited to reading packages, kept on the flash drive
+  and restored at boot, since the login is forgotten otherwise.
+
 ## 0.125.0 - 2026-10-29
 
 ### Added

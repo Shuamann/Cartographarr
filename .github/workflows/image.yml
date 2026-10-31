@@ -1,0 +1,70 @@
+# Build the image and push it to GHCR.
+#
+# This exists so the server can pull a built image rather than build one. A
+# locally built image has no registry to compare itself with, so Unraid's
+# Docker tab can never say an update is ready for it, and updating meant a
+# clone on the server, a deploy key for it, and a terminal. All three lived
+# under /root, which Unraid keeps in RAM, so a reboot took them.
+#
+# The package inherits the repository's visibility, so on a private repository
+# it is private and pulling it needs a token with read:packages.
+name: image
+
+on:
+  push:
+    branches: [main]
+    # A change to the docs or the backlog does not change the image.
+    paths-ignore:
+      - "**.md"
+      - "unraid/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # A second push while one is building: build the newer one, drop the older.
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag to pin to, so an update can be rolled back to a known version
+      # rather than to a commit sha nobody can read.
+      - id: version
+        run: |
+          version=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' backend/app/version.py)
+          test -n "$version" || { echo "no VERSION in backend/app/version.py"; exit 1; }
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercase by hand: the owner is spelled with a capital and a registry
+      # path may not be.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: GIT_COMMIT=${{ github.sha }}
+          tags: |
+            ghcr.io/shuamann/cartographarr:latest
+            ghcr.io/shuamann/cartographarr:${{ steps.version.outputs.value }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            org.opencontainers.image.source=https://github.com/Shuamann/Cartographarr
+          # Without this every build fetches sixty Python packages and builds
+          # the UI from nothing, which is six minutes for a one line change.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
