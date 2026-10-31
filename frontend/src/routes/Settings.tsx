@@ -1288,6 +1288,10 @@ function BrandingImages() {
   const branding = useBranding();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* An upload that worked looked exactly like one that did nothing: no Save
+     to press, no word back, and the preview is the only sign. Somebody went
+     looking for the missing Save button. */
+  const [saved, setSaved] = useState<string | null>(null);
   // Bumped after an upload so the browser refetches rather than showing the
   // old logo from cache.
   const [version, setVersion] = useState(0);
@@ -1305,6 +1309,8 @@ function BrandingImages() {
       }
       setVersion((v) => v + 1);
       branding.reload();
+      setSaved(kind);
+      window.setTimeout(() => setSaved((was) => (was === kind ? null : was)), 3000);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -1322,7 +1328,7 @@ function BrandingImages() {
     <section className="card-section">
       <Head
         what="Logos and icon"
-        note="Stored on the server rather than linked, so they keep working on their own. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB."
+        note="Each one is saved the moment you pick it, so there is no Save to press here. Stored on the server rather than linked, so they keep working on their own. PNG, JPEG, WebP, SVG, GIF or ICO, up to 4 MB."
         section
       />
       {error && <p className="note bad-note" role="alert">{error}</p>}
@@ -1367,6 +1373,7 @@ function BrandingImages() {
                     Remove
                   </button>
                 )}
+                {saved === mark.kind && <span className="note ok-note small">Saved</span>}
               </div>
             </div>
           );

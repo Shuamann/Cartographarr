@@ -135,7 +135,10 @@ export default function About() {
             </div>
             {u.commits_behind != null && (
               <div>
-                <dt>Commits behind</dt>
+                {/* Commits are not releases. Saying "behind" beside "up to
+                    date" read as a contradiction, since a documentation commit
+                    leaves nothing to pull. */}
+                <dt>{u.status === "update_available" ? "Commits behind" : "Commits since"}</dt>
                 <dd>{u.commits_behind.toLocaleString()}</dd>
               </div>
             )}
@@ -184,7 +187,8 @@ export default function About() {
             </>
           )}
           <p className="muted small">
-            Update the way it was installed: pull and rebuild the image, or pull the new image. The{" "}
+            On Unraid the Docker tab says Update Ready: press Apply. Otherwise pull the image and recreate the
+            container. The{" "}
             <a href={`${repo}#install`} target="_blank" rel="noreferrer">
               install guide
             </a>{" "}

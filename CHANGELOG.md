@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.126.1 - 2026-10-30
+
+### Fixed
+- The About page offered an update that did not exist. It counted commits on GitHub, which was right when the
+  image was built from a clone and every commit was something you could build, but the image is now built per
+  release and a documentation change does not rebuild it at all. One README commit was enough to raise the flag,
+  and the Docker tab then had nothing to pull. A release is what there is to install, so a release is what the
+  check compares. Commits are still read and listed as what has happened since, and a repository with no
+  changelog to read still falls back to counting them.
+- About said to pull and rebuild the image to update, which is no longer how it is installed. It now says to
+  press Apply on Unraid, or to pull the image and recreate the container.
+- "Commits behind" beside "up to date" read as a contradiction. It says "Commits since" when there is no update.
+- Uploading a logo said nothing back. There is no Save to press, by design, since the file is stored the moment
+  it is picked, but an upload that worked looked exactly like one that did nothing and somebody went hunting for
+  the missing button. It now says Saved, and the section says there is nothing to press.
+
 ## 0.126.0 - 2026-10-30
 
 ### Changed

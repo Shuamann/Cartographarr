@@ -110,17 +110,24 @@ async def fetch(repo: str, token: str = "", installed_commit: str | None = None)
     latest_version = remote_log[0]["version"] if remote_log else None
     mine = parse_version(VERSION)
     newer = [v for v in remote_log if (parse_version(v["version"]) or ()) > (mine or ())]
-    if compared:
-        available = bool(behind)
-    elif latest_version:
+    # A release is what there is to install. The image is built per release and
+    # a documentation commit does not rebuild it at all, so counting commits
+    # flagged an update that nothing could pull: the Docker tab had nothing new
+    # and Apply did nothing. Commits are still read and shown, as what has
+    # happened since, but they no longer decide the answer. Without a changelog
+    # to read there is nothing but commits to go on, and behind is better than
+    # silence.
+    if latest_version:
         available = bool(newer)
+    elif compared:
+        available = bool(behind)
     else:
         raise CheckFailed("GitHub has no CHANGELOG.md to compare with, and this build does not know its commit.")
 
     return {
         "status": "update_available" if available else "up_to_date",
         "message": None,
-        "compared_by": "commit" if compared else "version",
+        "compared_by": "version" if latest_version else "commit",
         "latest_version": latest_version,
         "latest_commit": latest_sha,
         "latest_date": ((head.get("commit") or {}).get("committer") or {}).get("date"),

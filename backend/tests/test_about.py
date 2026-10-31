@@ -135,3 +135,44 @@ def test_viewers_cannot_check(client):
     as_viewer(client, "all")
     assert client.get("/api/about").status_code == 403
     assert client.post("/api/about/check").status_code == 403
+
+
+def test_commits_that_are_not_a_release_are_not_an_update(client, monkeypatch):
+    """The About page said "Update available, 1 commit behind" pointing at a
+    commit that only changed the README. The image is built per release and
+    documentation does not rebuild it at all, so the Docker tab had nothing to
+    pull and Apply did nothing. A release is the thing anyone can install."""
+    from app import version
+
+    claim(client)
+    monkeypatch.setenv("GIT_COMMIT", "c" * 40)
+    version.commit.cache_clear()
+    client.put("/api/settings", json={"update_repository": "o/r"})
+    # Two commits ahead, and the newest release on GitHub is the one installed.
+    _fake_github(monkeypatch, behind=2, changelog="")
+
+    result = client.post("/api/about/check").json()
+    assert result["status"] == "up_to_date"
+    assert result["commits_behind"] == 2, "what has happened since is still worth showing"
+    assert result["compared_by"] == "version"
+    version.commit.cache_clear()
+
+
+def test_without_a_changelog_commits_still_decide(client, monkeypatch):
+    """A fork with no CHANGELOG.md has nothing but commits to go on, and
+    being told nothing at all is worse than being told it is behind."""
+    from app import version
+
+    claim(client)
+    monkeypatch.setenv("GIT_COMMIT", "d" * 40)
+    version.commit.cache_clear()
+    client.put("/api/settings", json={"update_repository": "o/r"})
+
+    seen = _fake_github(monkeypatch, behind=3)
+    monkeypatch.setattr("app.services.updates.parse_changelog", lambda text: [])
+
+    result = client.post("/api/about/check").json()
+    assert result["status"] == "update_available"
+    assert result["compared_by"] == "commit" and result["commits_behind"] == 3
+    assert seen, "GitHub was asked"
+    version.commit.cache_clear()
