@@ -395,11 +395,11 @@ const PAGES: Page[] = [
     sections: [
       {
         title: "Update checks",
-        note: "Twice a day Cartographarr asks GitHub for the newest version. Nothing about this server is sent. A private repository needs a token that can read it.",
-        keys: ["update_check_enabled", "update_repository", "update_github_token"],
+        note: "Twice a day Cartographarr asks the registry which versions are published, which is what decides whether an update is waiting. The repository is only read for the notes about what changed, and a private one needs a token. Nothing about this server is sent to either.",
+        keys: ["update_check_enabled", "update_image", "update_repository", "update_github_token"],
       },
     ],
-    keys: ["update_check_enabled", "update_repository", "update_github_token"],
+    keys: ["update_check_enabled", "update_image", "update_repository", "update_github_token"],
   },
 ];
 
@@ -496,6 +496,7 @@ const LABELS: Record<string, string> = {
   session_ttl_hours: "Stay signed in for",
   session_cookie_secure: "Only send the cookie over HTTPS",
   update_check_enabled: "Check for updates",
+  update_image: "Published image",
   update_repository: "GitHub repository",
   update_github_token: "GitHub token",
 };

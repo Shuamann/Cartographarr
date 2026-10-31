@@ -4,6 +4,22 @@ Newest first. Each version is a heading with its date, then what was added,
 changed and fixed. Settings, About reads this file, and compares it with the
 copy on GitHub to say what an update brings.
 
+## 0.127.0 - 2026-10-30
+
+### Changed
+- Update checks ask the registry which versions are published, and that is what decides whether an update is
+  waiting. A tag is an image somebody can pull; a release note is only a promise, and the two are written hours
+  apart. The repository is still read, for the changelog and the commits since this build, but it is the detail
+  now rather than the verdict.
+- A copy of this given to somebody else no longer sits on a permanent error. The repository behind it is
+  private, so their install could never read it and told them so on every check, while never telling them an
+  update existed. A registry answers anybody about a public image, so now it works for them with nothing to
+  configure.
+- **Published image** is a new setting beside the repository, for a fork pushing its own builds somewhere else.
+  Any registry that speaks the standard pull-token challenge will do, GHCR and Docker Hub included.
+- When both the registry and the repository fail, the check reports both reasons. One of them is usually a
+  setting with a typo in it, and naming only the first hid the other.
+
 ## 0.126.1 - 2026-10-30
 
 ### Fixed

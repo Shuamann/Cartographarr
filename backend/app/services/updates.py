@@ -1,13 +1,20 @@
 """Is a newer Cartographarr out?
 
-Asks GitHub's API about the repository in Settings: the newest commit on its
-default branch, the CHANGELOG.md there, and, when this build knows its own
-commit, how many commits it is behind. The answer is kept so the About page
-and the flag on Settings do not ask GitHub on every page load.
+Two questions, to two places. The registry is asked which versions are
+published, and that decides the answer, because a tag is an image somebody can
+pull where a release note is only a promise. GitHub is asked for the
+CHANGELOG.md and the commits since this build, which is the detail: what the
+update brings. A registry answers anybody about a public image, so an install
+that cannot read the repository, a fork or a copy given to a friend, still
+learns that an update is waiting instead of showing an error it cannot fix.
 
-Nothing about this install is sent: no settings, no counts, no identifiers.
-GitHub sees an address asking about a public repository, the same as a browser.
-While the repository is private it needs a token with read access.
+The answer is kept, so the About page and the flag on Settings do not ask on
+every page load.
+
+Nothing about this install is sent to either: no settings, no counts, no
+identifiers. They see an address asking about a public thing, the same as a
+browser would. While the repository is private, the notes need a token with
+read access; the verdict does not.
 """
 
 from __future__ import annotations
@@ -29,6 +36,7 @@ API = "https://api.github.com"
 STATE_KEY = "update_check"
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 MAX_COMMITS = 30
+VERSION_TAG = re.compile(r"^v?(\d+\.\d+\.\d+)$")
 
 
 class CheckFailed(Exception):
@@ -55,6 +63,57 @@ async def _get(gh: httpx.AsyncClient, path: str, repo: str, has_token: bool, **k
     if response.status_code >= 400:
         raise CheckFailed(_explain(response, repo, has_token))
     return response
+
+
+async def _registry_token(rg: httpx.AsyncClient, refused: httpx.Response, host: str, path: str) -> str:
+    """The anonymous pull token a registry hands anybody for a public image.
+
+    Registries answer an unauthenticated read with a 401 that says where to go
+    and what to ask for, so the challenge is read rather than guessed and this
+    works on GHCR and on Docker Hub without knowing anything about either.
+    """
+    told = dict(re.findall(r'(\w+)="([^"]*)"', refused.headers.get("www-authenticate", "")))
+    params = {"scope": told.get("scope") or f"repository:{path}:pull"}
+    if told.get("service"):
+        params["service"] = told["service"]
+    try:
+        answer = await rg.get(told.get("realm") or f"https://{host}/token", params=params)
+    except httpx.HTTPError as exc:
+        raise CheckFailed(f"Could not reach the registry: {redact(exc) or type(exc).__name__}") from exc
+    if answer.status_code >= 400:
+        raise CheckFailed("The registry would not hand out a token to read that image.")
+    body = answer.json()
+    return body.get("token") or body.get("access_token") or ""
+
+
+async def published(image: str) -> list[str]:
+    """Which versions exist as tags on the image, newest first."""
+    name = image.strip()
+    host, _, path = name.partition("/")
+    path = path.split(":")[0]
+    if not path or "." not in host:
+        raise CheckFailed("The image should look like ghcr.io/owner/name.")
+
+    url = f"https://{host}/v2/{path}/tags/list"
+    headers = {"User-Agent": f"Cartographarr/{VERSION}", "Accept": "application/json"}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as rg:
+        try:
+            response = await rg.get(url)
+            if response.status_code == 401:
+                token = await _registry_token(rg, response, host, path)
+                response = await rg.get(url, headers={"Authorization": f"Bearer {token}"})
+        except httpx.HTTPError as exc:
+            raise CheckFailed(f"Could not reach the registry: {redact(exc) or type(exc).__name__}") from exc
+        if response.status_code in (401, 403):
+            raise CheckFailed(f"The registry will not show the tags of {name}. Is the image public?")
+        if response.status_code == 404:
+            raise CheckFailed(f"The registry has no image called {name}.")
+        if response.status_code >= 400:
+            raise CheckFailed(f"The registry answered {response.status_code}.")
+        tags = (response.json() or {}).get("tags") or []
+
+    found = {m.group(1) for tag in tags if (m := VERSION_TAG.match(str(tag)))}
+    return sorted(found, key=lambda v: parse_version(v) or (), reverse=True)
 
 
 async def fetch(repo: str, token: str = "", installed_commit: str | None = None) -> dict[str, Any]:
@@ -174,11 +233,45 @@ async def check() -> dict[str, Any]:
     settings = current()
     installed = commit()
     base = {"checked_at": datetime.now(UTC).isoformat(), "installed_version": VERSION, "installed_commit": installed}
-    try:
-        result = {**base, **await fetch(settings.update_repository.strip(), settings.update_github_token.strip(), installed)}
-    except CheckFailed as exc:
+
+    # The registry decides, the repository explains. Anybody can read the tags
+    # of a public image, so an install that cannot see the repository still
+    # learns that an update exists, which is the difference between a copy of
+    # this that tells its owner nothing and one that tells them to press Apply.
+    newest: str | None = None
+    registry_failed: str | None = None
+    if settings.update_image.strip():
+        try:
+            tags = await published(settings.update_image.strip())
+            newest = tags[0] if tags else None
+        except CheckFailed as exc:
+            registry_failed = str(exc)
+
+    notes: dict[str, Any] = {}
+    notes_failed: str | None = None
+    if settings.update_repository.strip():
+        try:
+            notes = await fetch(settings.update_repository.strip(), settings.update_github_token.strip(), installed)
+        except CheckFailed as exc:
+            # Not an error anybody needs to see while the registry answers:
+            # the release notes are the detail, not the verdict.
+            notes_failed = str(exc)
+            log.info("release notes unavailable: %s", exc)
+
+    if newest is None and not notes:
         previous = await asyncio.to_thread(stored) or {}
-        result = {**previous, **base, "status": "error", "message": str(exc)}
+        # Both were asked and neither answered, so say both reasons: one of
+        # them is usually a setting with a typo in it.
+        why = "; ".join(filter(None, (registry_failed, notes_failed)))
+        result = {**previous, **base, "status": "error", "message": why or "Nothing to check against."}
+    else:
+        result = {**base, **notes, "message": None, "notes_error": notes_failed}
+        if newest is not None:
+            result["status"] = (
+                "update_available" if (parse_version(newest) or ()) > (parse_version(VERSION) or ()) else "up_to_date"
+            )
+            result["compared_by"] = "image"
+            result["latest_version"] = newest
     await asyncio.to_thread(_store, result)
     return result
 

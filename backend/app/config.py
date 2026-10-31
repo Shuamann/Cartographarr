@@ -93,8 +93,15 @@ class Settings(BaseSettings):
     """Ask GitHub twice a day whether a newer version is out. Nothing about
     this install is sent."""
 
+    update_image: str = "ghcr.io/shuamann/cartographarr"
+    """The published image. Its tags say which versions exist, and a registry
+    answers anybody about a public image, so this works on an install that
+    cannot read the repository. It is also the better question: a tag is an
+    image somebody can pull, where a release note is only a promise."""
+
     update_repository: str = "Shuamann/Cartographarr"
-    """Where updates come from, as owner/name."""
+    """Where the release notes come from, as owner/name. Only for what the
+    update brings: the image above decides whether there is one."""
 
     update_github_token: str = ""
     """Only needed while the repository is private: a token that can read it."""
