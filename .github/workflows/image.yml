@@ -17,6 +17,9 @@ on:
     paths-ignore:
       - "**.md"
       - "unraid/**"
+      # The tests are not copied into the image, so changing one cannot change
+      # it. Building anyway republishes the same version tag over itself.
+      - "backend/tests/**"
   workflow_dispatch:
 
 permissions:
