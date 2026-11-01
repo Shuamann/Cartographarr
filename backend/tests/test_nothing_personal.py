@@ -63,12 +63,12 @@ def test_no_routable_address_is_written_down():
 
 def test_the_check_would_notice_one():
     """A scan that matches nothing passes whatever the source says."""
-    # In pieces, so this file does not trip its own check.
-    was_real = str(ipaddress.ip_address(1234567890))
-    assert list(addresses_in(f'address="{was_real}"')) == [was_real]
-    real = ipaddress.ip_address(was_real)
+    # Built from a number, so no address is written in this file either.
+    real = ipaddress.ip_address(1234567890)
+    routable = str(real)
+    assert list(addresses_in(f'address="{routable}"')) == [routable]
     assert not (real.is_private or real.is_loopback or real.is_reserved)
-    assert was_real not in MADE_UP and not was_real.startswith(DOCUMENTATION)
+    assert routable not in MADE_UP and not routable.startswith(DOCUMENTATION)
     # A documentation address is one Python calls private, which is the line
     # above doing most of the work.
     assert ipaddress.ip_address("203.0.113.75").is_private
