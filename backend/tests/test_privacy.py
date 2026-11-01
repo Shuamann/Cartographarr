@@ -1,10 +1,3 @@
-"""Viewer privacy.
-
-A viewer in a private mode must not be able to reach other people's details
-through any endpoint, including by passing another user's id straight to
-the API. Admins always see everything.
-"""
-
 from tests.test_auth import claim
 
 PASSWORD = "a-long-enough-password"

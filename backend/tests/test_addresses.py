@@ -1,11 +1,3 @@
-"""The address list.
-
-A person, a device and an address are three ways of asking the same question,
-and only two of them had a list. The detail view for an address already existed
-and already worked; there was no way in to it, which is why clicking an address
-anywhere went to the map instead.
-"""
-
 import time
 
 from tests.test_auth import claim

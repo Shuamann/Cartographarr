@@ -1,16 +1,3 @@
-"""House style: the app asks its own questions, never the browser's.
-
-window.confirm, window.prompt and window.alert are the browser's dialogs, not
-this app's. They arrive in the wrong typeface in the wrong place, say
-"127.0.0.1:6277 says" above the question, cannot show a poster or a file size
-or put a warning in red, and on some browsers carry a "don't let this page ask
-again" tickbox that silently turns every later question into a no. There is a
-dialog in components/Ask.tsx that does all of it properly, so this exists to
-stop one creeping back in.
-
-Cheaper to enforce than to re-audit, the same way the em dash rule is.
-"""
-
 import pathlib
 import re
 

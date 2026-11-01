@@ -1,9 +1,3 @@
-"""Rule matching.
-
-This decides whether someone's stream gets killed, so the cases that matter
-most are the ones where it must NOT match.
-"""
-
 from app.models import Rule
 from app.services.enforcer import matches
 
@@ -106,8 +100,6 @@ def test_missing_session_field_does_not_match():
 
 
 def test_a_rule_can_act_on_who_is_filling_the_upload(client):
-    """A budget, not a blunt limit: the rule sees each person's share of the
-    server's upload, and the share in use altogether."""
     from app.services import enforcer, streams
     from tests.test_auth import claim
 

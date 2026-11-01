@@ -1,9 +1,3 @@
-"""Library health.
-
-Each list recommends work (re-encode, remux, delete a 4K copy, chase a
-request), so what gets listed, and why, is tested case by case.
-"""
-
 import json
 import time
 from datetime import UTC, datetime, timedelta
@@ -64,13 +58,7 @@ def seed():
 
 
 def test_problem_files(client):
-    """Asked of the service rather than through a route.
-
-    There was an endpoint in front of this that nothing in the interface
-    called; Files worth attention replaced it and reads the service directly.
-    The behaviour is worth keeping, so the test moved down to where it lives
-    rather than keeping a route alive to be tested through.
-    """
+    """Asked of the service rather than through a route."""
     from app.db import session_scope
     from app.services import library
 
@@ -106,8 +94,7 @@ def test_messy_files(client):
 
 
 def test_a_file_that_was_converted_for_viewers_counts_as_awkward(client):
-    """Reading the tracks says AAC 5.1 is ordinary. What happened says half
-    the sticks in the house could not play it."""
+    """Reading the tracks says AAC 5.1 is ordinary."""
     from app.db import session_scope
     from app.models import MediaItem, StreamSession
 
@@ -199,8 +186,6 @@ def test_library_is_admin_only(client):
 
 
 def test_many_requests_do_not_freeze_the_app(client, monkeypatch):
-    """Matching once ran two queries per request on the event loop, and a few
-    thousand requests froze every page. Now bulk, in a thread, and cached."""
     import time as clock
 
     from app.integrations.seerr import seerr
@@ -251,9 +236,6 @@ def test_playback_summary_for_a_user_and_a_device(client):
 
 
 def test_a_stall_recorded_without_its_title_is_named_from_the_library(client):
-    """The seed's stall on key 3 was recorded with no title, the way a stall
-    caught before the session knew what it was playing is. The library knows
-    the file, so the profile says which film it was rather than a number."""
     claim(client)
     seed()
     stalled = client.get("/api/users/2/playback").json()["stalled_titles"]
@@ -283,8 +265,6 @@ def test_health_summary(client):
 
 
 def test_the_issue_cache_notices_a_file_being_read_again(client):
-    """The cache is keyed on when the file was last scanned, so a file that is
-    read again (an upgrade, a replacement) is worked out afresh."""
     from datetime import UTC, datetime
 
     from app.services import library

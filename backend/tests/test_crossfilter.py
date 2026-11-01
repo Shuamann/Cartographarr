@@ -1,10 +1,3 @@
-"""Narrowing one list by the other two.
-
-A person, a device and an address are three ways of asking the same question,
-so the useful question is usually a combination: which addresses has this
-person played from, who has used this device, which devices were seen here.
-"""
-
 import time
 
 from tests.test_auth import claim
@@ -66,8 +59,6 @@ def test_devices_narrowed_by_person_and_address(client):
 
 
 def test_several_of_one_kind_are_an_either_or(client):
-    """Two addresses means either of them, not both at once, or picking a
-    second one could only ever narrow to nothing."""
     claim(client)
     seed()
     rows = client.get("/api/devices?ip_address=198.51.100.1&ip_address=198.51.100.2").json()

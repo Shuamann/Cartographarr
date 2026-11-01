@@ -1,15 +1,3 @@
-"""A copy of the database, taken while it is in use.
-
-Everything the app works out lives in one file and nowhere else, so these are
-about the two ways a backup can be worthless: one that cannot be opened, and
-one that was never taken.
-
-A plain file copy would be the first kind. SQLite runs here in WAL mode, so the
-newest writes live in a sidecar and a copy can catch the pair mid-transaction.
-`VACUUM INTO` is the supported way, and the test that matters is that the
-result opens and has the rows in it.
-"""
-
 import sqlite3
 
 from app.db import session_scope
@@ -104,8 +92,6 @@ def test_something_that_is_not_a_snapshot_is_left_alone(client):
 
 
 def test_the_server_says_what_time_it_thinks_it_is(client):
-    """Nothing showed this, so a wrong TZ shifted every time-of-day rule and
-    the backup hour silently and for ever."""
     from tests.test_auth import claim
 
     claim(client)

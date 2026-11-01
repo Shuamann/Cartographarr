@@ -1,10 +1,3 @@
-"""On a phone's home screen the app opens as an app, under its own mark.
-
-Without a manifest, Add to Home Screen saves a bookmark with the browser's bars
-still round it. Read before anybody signs in, because the phone asks for it
-from the sign-in page.
-"""
-
 import io
 import pathlib
 

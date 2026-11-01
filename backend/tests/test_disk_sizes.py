@@ -1,15 +1,3 @@
-"""Being told how big a disk really is, where it will not say.
-
-A twenty terabyte NAS reported sixty one terabytes free, and the host agreed,
-because the share told it so. The usual cause is a user share answering for
-the whole array rather than for itself. Nothing read through statvfs can see
-past that: the number is wrong before it arrives.
-
-So it can be told. The stated capacity replaces the total, and what is in use
-is then counted from the files this app can actually see there, which is a
-different kind of answer and is said to be one.
-"""
-
 from app.services import space
 
 TB = 1_000_000_000_000
@@ -21,8 +9,6 @@ def test_a_size_is_read_in_whatever_unit_reads_naturally():
 
 
 def test_a_typo_costs_the_override_and_not_the_page():
-    """Guessing at what somebody meant by a size is how a disk ends up
-    reported as a thousand times too big."""
     found = space.stated_sizes("/mnt/a = 20 TB\n/mnt/bad = notasize\nno equals here\n= 5TB\n/mnt/b =")
     assert found == {"/mnt/a": 20 * TB}
 
@@ -48,9 +34,6 @@ def test_nothing_written_down_at_all_changes_nothing():
 
 
 def test_the_page_is_told_which_kind_of_answer_it_is_looking_at(client, monkeypatch):
-    """A figure worked out from the files this app knows about is not the same
-    as a figure read off the disk, and presenting it as one would be the app
-    being confidently wrong about somebody's array."""
     import shutil
     from types import SimpleNamespace
 
@@ -82,14 +65,6 @@ def test_the_page_is_told_which_kind_of_answer_it_is_looking_at(client, monkeypa
 
 
 def test_a_warning_on_a_stated_disk_says_where_the_figure_came_from(client):
-    """A stated capacity means the room left is worked out from the files this
-    app knows about, and anything else on the share is invisible to it. The
-    figure therefore errs towards saying there is more room than there is,
-    which is the dangerous direction for a warning about a disk filling. It is
-    still better than the share's own answer, which is the whole reason the
-    setting exists, so the message says which it is rather than the warning
-    being withheld.
-    """
     from app.services import room
 
     room.forget()

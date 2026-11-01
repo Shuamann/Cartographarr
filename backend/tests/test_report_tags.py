@@ -1,14 +1,3 @@
-"""Grouping by what a title is, not only by what its file is.
-
-Genre, director, writer, collection and country are lists, so they live in
-their own table and are reached by a join. The whole point is grouping by one
-of them: a column holding "Animation, Anime, Fantasy" answers nothing.
-
-A title in three genres becomes three rows under the join, so it counts in all
-three. That is right for counting plays and wrong for counting bytes, which is
-why the dimension says so rather than leaving somebody to find out.
-"""
-
 from tests.test_auth import claim
 
 
@@ -41,8 +30,7 @@ def test_a_title_counts_in_every_genre_it_is_in(client):
 
 
 def test_grouping_by_director_uses_the_director_rows_and_not_the_genre_ones(client):
-    """One join, for the one kind being grouped by. Without the kind on the
-    join every tag of every sort would come back as a row."""
+    """One join, for the one kind being grouped by."""
     claim(client)
     seed()
     r = client.get("/api/reports/run?source=library&measure=items&group=director").json()
@@ -58,8 +46,6 @@ def test_a_single_valued_one_needs_no_join_at_all(client):
 
 
 def test_a_genre_can_be_split_by_something_else(client):
-    """The split is the whole reason the reports engine is worth joining to
-    rather than putting this on a page of its own."""
     claim(client)
     seed()
     r = client.get("/api/reports/run?source=library&measure=items&group=genre&then=studio").json()
@@ -69,8 +55,6 @@ def test_a_genre_can_be_split_by_something_else(client):
 
 
 def test_two_tag_groupings_at_once_are_refused_rather_than_crossed(client):
-    """Genre against director is two joins to the same table and a cross
-    product nobody asked for."""
     claim(client)
     seed()
     r = client.get("/api/reports/run?source=library&measure=items&group=genre&then=director").json()
@@ -78,8 +62,7 @@ def test_two_tag_groupings_at_once_are_refused_rather_than_crossed(client):
 
 
 def test_the_dimension_warns_that_bytes_are_counted_more_than_once(client):
-    """Counting plays by genre is right. Counting size by genre adds a film
-    into each of its genres, and somebody reading a total needs telling."""
+    """Counting plays by genre is right."""
     from app.services.reports import DIMENSION
 
     assert "counting bytes" in (DIMENSION["genre"].hint or "")

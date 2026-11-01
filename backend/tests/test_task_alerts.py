@@ -1,15 +1,3 @@
-"""A job that has stopped working says so.
-
-This is the one thing the app could not previously tell anyone. A background
-job that breaks does not announce itself: the app simply stops having the right
-answer, and the only sign is a page nobody has reason to open. On the server
-this was written against, the update check had failed every half hour for the
-life of the install and nothing had ever said a word about it.
-
-The shape that matters is "once, then quiet": a job broken for a week is one
-message, not three hundred.
-"""
-
 import asyncio
 
 import pytest

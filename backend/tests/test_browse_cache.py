@@ -1,12 +1,3 @@
-"""The library list caches what each file says about itself. It must not lie.
-
-Half the cost of that page was working out the same answers again for thirty
-thousand files that had not changed. Caching them is only safe if a file that
-*has* changed stops matching, so these are all about that: tidy it, rescan it,
-move it, rename its store, and the page has to show the new answer rather than
-yesterday's.
-"""
-
 import json
 
 from app.db import session_scope
@@ -61,8 +52,7 @@ def test_a_second_visit_agrees_with_the_first(client):
 
 
 def test_a_tidied_file_shows_its_new_size(client):
-    """A tidy writes a smaller file and clears file_checked_at. Both change the
-    key, so neither alone has to be relied on."""
+    """A tidy writes a smaller file and clears file_checked_at."""
     with session_scope() as db:
         db.add(Library(section_id=1, name="Films"))
         add(db, 1)
@@ -126,8 +116,7 @@ def test_a_rescan_that_changes_the_tracks_shows_the_new_languages(client):
 
 
 def test_renaming_a_store_renames_it_everywhere(client):
-    """The store label is not on the file, so the file's own key cannot see it
-    change. The whole cache is stamped with the labels instead."""
+    """The store label is not on the file, so the file's own key cannot see it change."""
     with session_scope() as db:
         db.add(Library(section_id=1, name="Films"))
         add(db, 1)
@@ -143,8 +132,6 @@ def test_renaming_a_store_renames_it_everywhere(client):
 
 
 def test_changing_how_much_of_a_path_names_a_store_is_seen(client):
-    """library_store_depth is a setting, and the same question of a different
-    setting is a different answer."""
     from app.settings_store import trial
 
     with session_scope() as db:

@@ -1,13 +1,3 @@
-"""Who the server is shared with, read from Plex.
-
-The id is the whole difficulty. Plex offers two lists of accounts and they are
-not the same numbers: the share list uses the Plex account id, which is what
-history, every ban and every privacy scope key on, while systemAccounts
-numbers accounts against the server and calls the owner 1. Measured against a
-real server: every one of the share list's 34 ids was already in the users
-table, against 13 of systemAccounts' 47 that are in no id space this app uses.
-"""
-
 import json
 from types import SimpleNamespace
 
@@ -57,15 +47,11 @@ def test_somebody_with_no_display_name_is_called_by_their_username():
 
 
 def test_nobody_read_from_plex_is_marked_as_dropped_by_tautulli():
-    """It is Tautulli's word for someone it has removed from its own list.
-    Nothing read from Plex has ever been in that list, so saying it is true
-    would put a warning beside every person on a Plex install."""
+    """It is Tautulli's word for someone it has removed from its own list."""
     assert people._row(a_user())["deleted_in_tautulli"] is False
 
 
 def test_the_libraries_are_the_ones_shared_on_this_server(monkeypatch):
-    """Somebody shared with on two servers has different access on each, and
-    plexapi lists whichever it lists first."""
     guest = a_user(servers=[a_share("server-b", 90), a_share("server-a", 1, 2)])
     monkeypatch.setattr("app.plex.server.server", lambda: a_plex([guest]))
     rows = people.read()
@@ -73,8 +59,7 @@ def test_the_libraries_are_the_ones_shared_on_this_server(monkeypatch):
 
 
 def test_a_share_that_will_not_say_still_leaves_the_person_listed(monkeypatch):
-    """Access review is a bonus on top of knowing who exists. Losing the whole
-    person because their section list would not load is the wrong trade."""
+    """Access review is a bonus on top of knowing who exists."""
 
     def angry():
         raise RuntimeError("Plex said no")
@@ -101,8 +86,7 @@ def test_the_sections_become_the_libraries_table(monkeypatch):
 
 
 def test_somebody_removed_from_the_share_keeps_their_history(client, monkeypatch):
-    """Two people on the real server are in the users table and not on the
-    share list any more. A row vanishing would orphan four years of plays."""
+    """Two people on the real server are in the users table and not on the share list any more."""
     import asyncio
 
     from app.db import session_scope

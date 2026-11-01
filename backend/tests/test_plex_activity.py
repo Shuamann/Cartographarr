@@ -1,12 +1,3 @@
-"""Live activity read from Plex instead of from Tautulli.
-
-The shape has to match Tautulli's field for field, because the tracker, the
-rules, the ban list, the map and the stream cards all read that shape. The one
-word that matters most is the transcode decision: every rule anybody has
-written matches on it, and Plex answers per stream where this app wants one
-answer for the session.
-"""
-
 from types import SimpleNamespace
 
 from app.plex import activity
@@ -64,11 +55,6 @@ def test_nothing_being_converted_is_a_direct_play():
 
 
 def test_audio_alone_being_converted_is_still_a_transcode():
-    """The case that caught this out against a real stream: video copied,
-    audio converted from eac3 to aac. Tautulli calls that a transcode, every
-    rule written here matches on that word, and reading the video decision
-    alone would have called it a copy and quietly stopped those rules firing.
-    """
     ts = SimpleNamespace(videoDecision="copy", audioDecision="transcode",
                          subtitleDecision=None, container="mp4", speed=1.0, throttled=True,
                          videoCodec="hevc", audioCodec="aac")
@@ -84,8 +70,7 @@ def test_a_remux_is_a_copy_and_not_a_transcode():
 
 
 def test_the_shape_matches_what_tautulli_returns():
-    """Everything below this reads Tautulli's field names. A missing one is a
-    blank on a card rather than an error, which is worse."""
+    """Everything below this reads Tautulli's field names."""
     from app.routers import live as live_router
 
     s = activity._session(a_session())
@@ -94,10 +79,7 @@ def test_the_shape_matches_what_tautulli_returns():
 
 
 def test_the_detail_only_plex_reports():
-    """Plex says whether hardware was asked for and, separately, whether it
-    was used. Asked for and not granted is the case somebody wants explained,
-    and a server doing no hardware transcoding looked exactly like one that
-    was never asked."""
+    """Plex says whether hardware was asked for and, separately, whether it was used."""
     ts = SimpleNamespace(
         videoDecision="transcode", audioDecision="copy", subtitleDecision=None,
         container="mp4", speed=0.0, throttled=True, videoCodec="h264", audioCodec="eac3",
@@ -112,8 +94,6 @@ def test_the_detail_only_plex_reports():
 
 
 def test_the_track_actually_being_played_is_the_one_recorded():
-    """A file with several audio tracks has one that is selected, and that is
-    the one the viewer is hearing."""
     streams = [
         SimpleNamespace(streamType=2, codec="ac3", language="German", channels=6, selected=False),
         SimpleNamespace(streamType=2, codec="aac", language="English", channels=2, selected=True),

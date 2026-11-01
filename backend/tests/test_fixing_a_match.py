@@ -1,19 +1,3 @@
-"""Fixing a wrong Plex match from inside the app.
-
-A film Plex matched to the wrong entry carries the wrong external ids, so
-Radarr has nothing under them, and two items matched to the same entry are the
-"Two entries for one title" list. Both were named by the app and fixable only
-in Plex Web.
-
-The shape these fakes copy was measured against a real server rather than
-taken from the plexapi docstring: `manual=1` is what turns one candidate into
-twenty, a candidate carries no agent and no score, its year is a string and is
-missing from a fifth of them, and an episode's own match list comes back empty
-because the match lives on its show.
-
-Every test here was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -70,12 +54,7 @@ class Item:
 
 
 class Plex:
-    """A server that answers about one item and records what it was asked.
-
-    `take` is what the real one does on a PUT to /match: the item's own guid
-    becomes the chosen one, and the external ids are whatever the new match
-    turns out to have, which is the whole point of reading the item back.
-    """
+    """A server that answers about one item and records what it was asked."""
 
     def __init__(self, item, candidates, after_ids=("imdb://tt1", "tmdb://2", "tvdb://3")):
         self.item = item
@@ -124,10 +103,6 @@ def install(monkeypatch, plex):
 
 
 def test_the_list_is_asked_for_manually_or_plex_answers_with_the_match_it_made(client, monkeypatch):
-    """Measured: /matches on its own comes back with one candidate, the match
-    Plex already made, and nothing else. A list of one that is the thing you
-    are trying to change reads as "there is nothing else this could be", which
-    is the opposite of the truth. `manual=1` is the whole difference."""
     item = a_film()
     plex = install(monkeypatch, Plex(item, [WINDSOR, DELACORTE, BARE]))
     answer = rematch.candidates(1)
@@ -136,10 +111,7 @@ def test_the_list_is_asked_for_manually_or_plex_answers_with_the_match_it_made(c
 
 
 def test_a_candidate_keeps_what_plex_said_and_a_missing_year_is_not_invented(client, monkeypatch):
-    """The year arrives as a string and is absent from a fifth of them.
-    Read as a number it has to be converted, and absent it has to stay absent:
-    a year filled in from the film this is matched to now would be the one
-    thing somebody is checking, agreeing with itself."""
+    """The year arrives as a string and is absent from a fifth of them."""
     item = a_film()
     install(monkeypatch, Plex(item, [WINDSOR, BARE]))
     windsor, bare = rematch.candidates(1)["candidates"]
@@ -150,10 +122,6 @@ def test_a_candidate_keeps_what_plex_said_and_a_missing_year_is_not_invented(cli
 
 
 def test_which_one_is_current_is_known_by_its_guid_and_not_by_its_place(client, monkeypatch):
-    """The current match came first on every item tried against a real server,
-    and nothing promises it. Marked by position, a list that came back in
-    another order would show the wrong row as the one in use, which is the one
-    fact somebody needs before changing anything."""
     item = a_film(guid="plex://movie/delacorte")
     install(monkeypatch, Plex(item, [WINDSOR, DELACORTE]))
     answer = rematch.candidates(1)
@@ -162,10 +130,7 @@ def test_which_one_is_current_is_known_by_its_guid_and_not_by_its_place(client, 
 
 
 def test_the_agent_is_the_librarys_because_a_candidate_has_none(client, monkeypatch):
-    """plexapi's SearchResult offers an agent and a score. Against a real
-    server both are None on every row of every item tried: the agent belongs
-    to the library, so it is reported once for the list rather than claimed
-    per candidate."""
+    """plexapi's SearchResult offers an agent and a score."""
     item = a_film()
     install(monkeypatch, Plex(item, [WINDSOR]))
     answer = rematch.candidates(1)
@@ -174,9 +139,7 @@ def test_the_agent_is_the_librarys_because_a_candidate_has_none(client, monkeypa
 
 
 def test_nothing_found_is_an_empty_list_rather_than_a_failure(client, monkeypatch):
-    """An agent that matched nothing is an answer. Raised as an error it would
-    draw as a red box about the app being broken, and the honest thing to say
-    is that Plex has nothing to offer for this one."""
+    """An agent that matched nothing is an answer."""
     item = a_film()
     install(monkeypatch, Plex(item, []))
     answer = rematch.candidates(1)
@@ -185,11 +148,6 @@ def test_nothing_found_is_an_empty_list_rather_than_a_failure(client, monkeypatc
 
 
 def test_an_episode_is_offered_its_shows_match(client, monkeypatch):
-    """Measured: an episode's own /matches comes back size=0, and plexapi puts
-    the mixin on Movie, Show, Artist and Album only. The ids the Sonarr lookup
-    uses for an episode are the show's as well, so asking about the episode
-    has to answer about the show or it is a dead end that looks like "Plex has
-    nothing for this"."""
     from app.models import MediaItem
 
     with session_scope() as db:
@@ -215,10 +173,7 @@ def test_an_item_this_app_has_never_scanned_says_so(client, monkeypatch):
 
 
 def test_a_guid_plex_did_not_offer_is_refused_and_nothing_is_written(client, monkeypatch):
-    """The guid has to be one from this item's own list. That is what makes
-    the name sent to Plex the name Plex gave rather than a string handed in,
-    and it catches the real case: a list read, somebody else changing the
-    match, and the stale choice applied on top."""
+    """The guid has to be one from this item's own list."""
     item = a_film()
     plex = install(monkeypatch, Plex(item, [WINDSOR, DELACORTE]))
     with pytest.raises(LookupError):
@@ -235,12 +190,7 @@ def test_the_name_plex_is_given_is_plexs_own(client, monkeypatch):
 
 
 def test_an_id_the_new_match_does_not_have_is_cleared_rather_than_left(client, monkeypatch):
-    """The reason the row is written here at all. The ids in media_items came
-    from the old match, and the pass that fills them in later keeps only the
-    values it has: left to it, a film re-matched to an entry with no TMDB id
-    would keep the old film's TMDB id for ever, which is the wrong id that
-    sent somebody looking in Radarr in the first place. A missing id is
-    honest. A wrong one is the whole problem."""
+    """The reason the row is written here at all."""
     from app.models import MediaItem
 
     item = a_film()
@@ -255,10 +205,6 @@ def test_an_id_the_new_match_does_not_have_is_cleared_rather_than_left(client, m
 
 
 def test_the_file_is_read_again_because_its_metadata_is_the_old_matchs(client, monkeypatch):
-    """Everything else on the row came from the film it used to be: the
-    summary, the artwork, what it is said to be. Clearing file_checked_at is
-    how the rest of the app says "go and read this again", and the detail pass
-    picks it up within the minute."""
     from datetime import UTC, datetime
 
     from app.models import MediaItem
@@ -273,12 +219,7 @@ def test_the_file_is_read_again_because_its_metadata_is_the_old_matchs(client, m
 
 
 def test_the_episodes_under_a_re_matched_show_lose_their_ids_too(client, monkeypatch):
-    """A show re-matched changes every episode's guids with it. Reading
-    hundreds of them here would be the library scan again, so they are emptied
-    and left to the detail pass, which reads an episode whose file_checked_at
-    is clear within the minute. For that minute they say they have no id,
-    which is true, where keeping the old ones would be a wrong id that Sonarr
-    looks up and does not find."""
+    """A show re-matched changes every episode's guids with it."""
     from datetime import UTC, datetime
 
     from app.models import MediaItem
@@ -303,10 +244,6 @@ def test_the_episodes_under_a_re_matched_show_lose_their_ids_too(client, monkeyp
 
 
 def test_ids_that_have_not_arrived_are_reported_rather_than_assumed(client, monkeypatch):
-    """A match is applied the moment the PUT returns, and the external ids
-    come from the agent's own fetch after it. Waiting for ever is not an
-    option and neither is claiming they arrived: nothing re-reads a show row
-    on a schedule, so "they are not here yet" is what has to be said."""
     item = a_film()
     monkeypatch.setattr(rematch, "SETTLE_WAITS", (0, 0))
     install(monkeypatch, Plex(item, [WINDSOR, DELACORTE], after_ids=()))
@@ -328,9 +265,7 @@ def test_the_candidates_are_admin_only_and_read_nothing_into_plex(client, monkey
 
 
 def test_applying_one_is_written_to_the_log_naming_what_it_became(client, monkeypatch):
-    """The other Plex writes are in the log and this one changes what a title
-    is. Without the entry, a library where two films swapped names has nothing
-    to say who did it or when."""
+    """The other Plex writes are in the log and this one changes what a title is."""
     from app.models import AuditLog
 
     claim(client)
@@ -345,8 +280,7 @@ def test_applying_one_is_written_to_the_log_naming_what_it_became(client, monkey
 
 
 def test_a_choice_plex_has_moved_on_from_comes_back_as_a_conflict(client, monkeypatch):
-    """Not a 500. The list was read, something changed underneath it, and the
-    answer is to read it again rather than a red box about the server."""
+    """Not a 500."""
     claim(client)
     item = a_film()
     install(monkeypatch, Plex(item, [WINDSOR]))

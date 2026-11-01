@@ -1,7 +1,3 @@
-"""Every route refuses someone who is not signed in, and admin routes refuse
-viewers. Enumerated from the app, so a new route is checked without anyone
-remembering to add it here."""
-
 import re
 
 from tests.test_auth import claim
@@ -31,8 +27,7 @@ PUBLIC = {
 
 
 def _routes(app):
-    """From the OpenAPI schema, which lists every route in every included
-    router. app.routes does not: newer FastAPI groups included routers."""
+    """From the OpenAPI schema, which lists every route in every included router."""
     for path, methods in app.openapi()["paths"].items():
         for method in methods:
             if method.upper() not in ("HEAD", "OPTIONS"):

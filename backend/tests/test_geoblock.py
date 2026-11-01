@@ -101,8 +101,7 @@ def test_viewers_cannot_see_or_change_the_list(client):
 
 
 def test_a_country_can_act_differently_over_a_vpn(client):
-    """An address in a country says where somebody is. A VPN exit there says
-    where their provider is, which is a weaker claim and can be treated as one."""
+    """An address in a country says where somebody is."""
     import json
 
     from app.services import enforcer

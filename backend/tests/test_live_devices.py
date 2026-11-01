@@ -1,11 +1,3 @@
-"""A device that is streaming has a page, whether or not it has finished a play.
-
-The device inventory is rebuilt from history by a GROUP BY, and history only
-gets a play once Tautulli has finished recording it. So the player name on the
-dashboard, which links straight to the device, answered "No such device" for
-anything playing for the first time.
-"""
-
 from tests.test_auth import claim
 
 
@@ -39,8 +31,7 @@ def test_a_device_streaming_for_the_first_time_can_be_opened(client):
 
 
 def test_the_first_device_ever_seen_is_not_flagged_as_new(client):
-    """On a fresh install everything is unknown, and flagging the lot is noise.
-    refresh_devices makes the same call for the same reason."""
+    """On a fresh install everything is unknown, and flagging the lot is noise."""
     from app.db import session_scope
     from app.models import Device
     from app.services import tracker
@@ -83,8 +74,6 @@ def test_a_stream_that_keeps_playing_is_written_once(client):
 
 
 def test_what_history_knows_is_not_overwritten(client):
-    """The GROUP BY over all of history is the authority for the earliest
-    sighting and the play count; a live sighting only knows about now."""
     from app.db import session_scope
     from app.models import Device
     from app.services import tracker
@@ -119,11 +108,6 @@ def test_a_session_without_a_user_is_skipped(client):
 
 
 def test_a_ban_made_mid_stream_knows_who_and_what_it_banned(client):
-    """Banning never needed the device to exist: the endpoint falls back to a
-    slice of the machine id. But the fallback is a meaningless string and a
-    ban attached to nobody, and a ban with no user does not count against that
-    person anywhere the app counts bans per person.
-    """
     from app.db import session_scope
     from app.models import BannedDevice
     from app.services import tracker
@@ -143,14 +127,7 @@ def test_a_ban_made_mid_stream_knows_who_and_what_it_banned(client):
 
 
 def test_the_ban_list_answers_to_the_ban_list_switch(client):
-    """Both halves of it, devices and addresses.
-
-    The address rule is given a negative id so its cooldown stays stable, and
-    record_only only checked for a negative id before deciding something was
-    the country list. So a banned address took the country list's record only
-    setting, and with the country list flagging rather than stopping, which is
-    where it sensibly starts, a banned address never stopped a stream.
-    """
+    """Both halves of it, devices and addresses."""
     from app.services import enforcer
     from app.settings_store import save
 
@@ -191,13 +168,7 @@ def a_ban_rule(which="device"):
 
 
 def test_a_ban_acts_on_a_fresh_install(client):
-    """Out of the box, with nothing configured, a ban stops the stream.
-
-    ban_record_only starts unset, and unset used to fall through to
-    enforce_dry_run, which starts true. So on a default install every ban only
-    recorded what it would have done and every banned device kept playing,
-    which is the feature silently not working rather than a safe default.
-    """
+    """Out of the box, with nothing configured, a ban stops the stream."""
     from app.services import enforcer
 
     claim(client)

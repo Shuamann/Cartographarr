@@ -1,10 +1,3 @@
-"""Auth.
-
-The cases that matter are the refusals: unauthenticated requests, a viewer
-reaching for admin actions, and a spoofed proxy header from an untrusted
-address. Getting those wrong exposes every user's IP and viewing history.
-"""
-
 def claim(client, username="admin", password="a-long-enough-password"):
     return client.post(
         "/api/auth/claim", json={"username": username, "password": password}

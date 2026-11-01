@@ -1,10 +1,3 @@
-"""Poster art: kept on disk, and never holding the database while it waits.
-
-The second part is why this file exists. A poster wall asks for a hundred at
-once; each one held a database session while Tautulli answered, out of a pool
-of fifteen, so every other page waited behind the pictures.
-"""
-
 import inspect
 
 from app.routers import data as data_router
@@ -12,12 +5,9 @@ from tests.test_auth import claim
 
 
 def test_the_image_route_takes_no_database_session():
-    """A session is a connection out of a small pool. This route talks to
-    Tautulli, so it opens one only after the answer is back."""
+    """A session is a connection out of a small pool."""
     taken = inspect.signature(data_router.media_image).parameters
     # Naming any of these would have FastAPI hand the route a session, which
-    # it would then hold across a call to Tautulli. Query parameters it takes
-    # besides those are its own business.
     assert not {"db", "session", "Db"} & set(taken), (
         "the image route must not hold a session while it fetches"
     )
@@ -32,9 +22,6 @@ def test_live_activity_takes_no_session_either():
 
 
 def test_the_dashboard_does_not_hold_one_either():
-    """It awaits Tautulli before counting anything, so a session taken as a
-    dependency would be held for the whole round trip, once per open browser.
-    The counts open their own inside the worker thread."""
     from app.routers import live
 
     assert "db" not in inspect.signature(live.dashboard).parameters
@@ -59,10 +46,7 @@ def test_a_kept_poster_is_served_from_disk(client, tmp_path, monkeypatch):
 
 
 def test_fetching_posters_is_bounded():
-    """A wall of them should not become a flood Tautulli answers slowly for
-    everybody. The exact number is a judgement, so this pins the bound rather
-    than the figure: narrow enough to be polite, wide enough that opening a
-    show does not leave its seasons queued behind the shows."""
+    """A wall of them should not become a flood Tautulli answers slowly for everybody."""
     assert 4 <= data_router.POSTER_FETCHES._value <= 12
 
 
@@ -83,8 +67,7 @@ def test_an_unwritable_cache_costs_the_cache_not_the_picture(tmp_path):
 
 
 def test_posters_are_asked_for_as_jpeg():
-    """Left alone Tautulli returns PNG, and a 200x300 poster is 120 KB instead
-    of 21 KB. The spelling matters: `jpeg` is accepted and ignored."""
+    """Left alone Tautulli returns PNG, and a 200x300 poster is 120 KB instead of 21 KB."""
     from app.routers import data
 
     assert data.POSTER_FORMAT == "jpg"
@@ -144,8 +127,7 @@ def _plex_only(monkeypatch, picture: bytes) -> _Upstream:
 
 
 def test_every_small_poster_is_one_file_fetched_once(client, monkeypatch):
-    """A report, a row and a list ask at 46, 92 and 120 wide. One fetch, one
-    file, and the browser scales it."""
+    """A report, a row and a list ask at 46, 92 and 120 wide."""
     import io
 
     from PIL import Image
@@ -196,9 +178,7 @@ def test_switched_off_nothing_is_kept_or_read(client, monkeypatch):
 
 
 def test_the_folder_is_a_setting_and_a_missing_one_is_not_made(client, tmp_path, monkeypatch):
-    """A folder that does not exist is, in a container, a path nobody mapped.
-    Making it would keep posters inside the container, gone on the next
-    update, so the data directory is used and Settings says why."""
+    """A folder that does not exist is, in a container, a path nobody mapped."""
     from app.services import posters
 
     claim(client)
@@ -259,8 +239,7 @@ def test_only_an_admin_sees_or_clears_the_cache(client):
 
 
 def test_posters_for_what_left_the_library_are_forgotten(client):
-    """After a scan, a poster whose title the listing no longer had goes. The
-    show and season above an episode that is still here stay."""
+    """After a scan, a poster whose title the listing no longer had goes."""
     from datetime import UTC, datetime, timedelta
 
     from app.db import session_scope

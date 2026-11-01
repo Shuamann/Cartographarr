@@ -1,14 +1,3 @@
-"""Banning an address rather than a device.
-
-A device ban follows one machine. It is the right tool until the machine comes
-back under a new identifier, or until the thing worth stopping is the household
-rather than one box in it. Then the connection is what you have.
-
-The cases that matter are the ones where it must not match: a ban on one
-address must not take out the neighbour, and a range must mean exactly the
-range that was typed.
-"""
-
 import json
 from datetime import UTC, datetime, timedelta
 

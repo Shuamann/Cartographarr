@@ -6,11 +6,7 @@ import pytest
 
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
-    """A fresh app against an empty database, so tests start with no accounts.
-
-    Its own directory per test: on Windows the previous test's engine still
-    holds the file open, so reusing one path fails to delete it.
-    """
+    """A fresh app against an empty database, so tests start with no accounts."""
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TAUTULLI_URL", "http://tautulli.invalid:8181")
     monkeypatch.setenv("TAUTULLI_API_KEY", "test")
@@ -22,9 +18,6 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("GEOIP_AUTO_UPDATE", "false")
     monkeypatch.setenv("ENFORCE_ENABLED", "false")
     # No scheduler and no capability probe. Starting both, and watching the
-    # probe time out against a host that does not exist, was most of what a
-    # test spent its time on: about four hundred milliseconds each, across
-    # five hundred tests.
     monkeypatch.setenv("RUN_BACKGROUND_JOBS", os.environ.get("TEST_BACKGROUND_JOBS", "false"))
 
     # Imported inside the fixture: the engine binds to DATA_DIR at import time.
@@ -33,11 +26,6 @@ def client(monkeypatch, tmp_path):
 
     importlib.reload(app.config)
     # A developer's .env sits next to the code and pydantic reads it, so tests
-    # inherited whatever that machine had: a real Tautulli on the LAN, real
-    # Radarr and Seerr addresses, real keys. Besides the risk of touching
-    # something real, every test then waited out the local Tautulli probe
-    # against a host the test run cannot reach, which was three seconds each.
-    # Tests get the environment this fixture sets and nothing else.
     app.config.Settings.model_config["env_file"] = None
     importlib.reload(app.db)
     importlib.reload(app.settings_store)
@@ -52,8 +40,6 @@ def client(monkeypatch, tmp_path):
 
     importlib.reload(app.audit)
     # Filters build their conditions from the model classes, so they must see
-    # this test's reloaded models, or a filtered query names two copies of the
-    # same table.
     importlib.reload(app.filters)
     import app.privacy
 
@@ -100,11 +86,6 @@ def client(monkeypatch, tmp_path):
 
 @pytest.fixture()
 def scheduled_client(monkeypatch, tmp_path, request):
-    """The app with its scheduler running, for the few tests about scheduling.
-
-    Everything else takes the client fixture, which leaves the background work
-    off: starting a scheduler and watching a capability probe time out against
-    a host that does not exist was most of what a test spent its time on.
-    """
+    """The app with its scheduler running, for the few tests about scheduling."""
     monkeypatch.setenv("TEST_BACKGROUND_JOBS", "true")
     yield request.getfixturevalue("client")

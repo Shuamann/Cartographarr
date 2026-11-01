@@ -140,10 +140,6 @@ def test_viewers_cannot_check(client):
 
 
 def test_commits_that_are_not_a_release_are_not_an_update(client, monkeypatch):
-    """The About page said "Update available, 1 commit behind" pointing at a
-    commit that only changed the README. The image is built per release and
-    documentation does not rebuild it at all, so the Docker tab had nothing to
-    pull and Apply did nothing. A release is the thing anyone can install."""
     from app import version
 
     claim(client)
@@ -161,8 +157,6 @@ def test_commits_that_are_not_a_release_are_not_an_update(client, monkeypatch):
 
 
 def test_without_a_changelog_commits_still_decide(client, monkeypatch):
-    """A fork with no CHANGELOG.md has nothing but commits to go on, and
-    being told nothing at all is worse than being told it is behind."""
     from app import version
 
     claim(client)
@@ -181,8 +175,6 @@ def test_without_a_changelog_commits_still_decide(client, monkeypatch):
 
 
 def _fake_registry(monkeypatch, tags=("0.1.0", "9.9.9", "latest", "sha-abc"), challenge=True, status=200):
-    """A registry that makes anyone asking about a public image do the token
-    dance first, the way GHCR and Docker Hub both do."""
     handed = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -206,9 +198,7 @@ def _fake_registry(monkeypatch, tags=("0.1.0", "9.9.9", "latest", "sha-abc"), ch
 
 
 def test_the_registry_decides_even_when_the_repository_cannot_be_read(client, monkeypatch):
-    """Somebody given the image has no access to a private repository. Before
-    this they got "GitHub can't find Shuamann/Cartographarr" on their settings
-    page for ever and were never told an update existed."""
+    """Somebody given the image has no access to a private repository."""
     from app import version
 
     claim(client)
@@ -228,9 +218,7 @@ def test_the_registry_decides_even_when_the_repository_cannot_be_read(client, mo
 
 
 def test_the_published_image_outranks_a_release_note(client, monkeypatch):
-    """A changelog entry is written before the image that carries it is built.
-    Saying an update is ready while the Docker tab has nothing to pull is the
-    exact thing this check was changed to stop doing."""
+    """A changelog entry is written before the image that carries it is built."""
     from app import version
     from app.services import updates
 
@@ -264,8 +252,7 @@ def test_a_registry_that_will_not_answer_falls_back_to_the_notes(client, monkeyp
 
 
 def test_tags_that_are_not_versions_are_ignored(client, monkeypatch):
-    """`latest` moves, and a sha tag is not a version. Sorting tags as text
-    would also make 0.9.0 newer than 0.10.0."""
+    """`latest` moves, and a sha tag is not a version."""
     import asyncio
 
     from app.services import updates

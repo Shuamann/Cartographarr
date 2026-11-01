@@ -1,10 +1,3 @@
-"""What somebody started and did not finish.
-
-Not a Plex question, which was worth checking before building anything: the
-history already carries how far into a thing each play got, and twenty nine
-people on the server this was written against have something part finished.
-"""
-
 import time
 
 from tests.test_auth import claim
@@ -43,9 +36,7 @@ def test_something_half_watched_is_listed(client):
 
 
 def test_barely_started_and_all_but_finished_are_both_left_out(client):
-    """A play that got two per cent in is somebody opening the wrong thing.
-    Credits and a stinger are the difference between 85 and 100, and calling
-    those unfinished would put every watched episode on the list."""
+    """A play that got two per cent in is somebody opening the wrong thing."""
     from app.db import session_scope
 
     claim(client)
@@ -68,8 +59,7 @@ def test_going_back_to_the_start_does_not_unwatch_it(client):
 
 
 def test_a_show_is_one_row_however_many_episodes_are_part_watched(client):
-    """Somebody four episodes into a season is partway through one programme.
-    Listing it four times is a list about the data rather than about them."""
+    """Somebody four episodes into a season is partway through one programme."""
     from app.db import session_scope
 
     claim(client)
@@ -115,8 +105,6 @@ def test_it_is_only_about_the_person_asked_for(client):
 
 
 def test_a_row_carries_what_it_needs_to_be_drawn_like_any_other_title(client):
-    """The show, the episode's number and own name, and the show's year rather
-    than the year the episode aired: the row says which show before it is read."""
     from app.db import session_scope
     from app.models import History, MediaItem
 
@@ -141,8 +129,6 @@ def test_a_row_carries_what_it_needs_to_be_drawn_like_any_other_title(client):
 
 
 def test_most_watched_carries_a_year_for_films_and_shows(client):
-    """A film's year from its plays; a show's from the library, never from an
-    episode, whose year is the year it aired."""
     from app.db import session_scope
     from app.models import History, MediaItem, User
 

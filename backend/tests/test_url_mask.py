@@ -1,6 +1,3 @@
-"""URLs with credentials: masked to show, restored on save, one line editable
-without retyping the rest."""
-
 from app.url_mask import MASK, mask, mask_url, restore
 from tests.test_auth import claim
 

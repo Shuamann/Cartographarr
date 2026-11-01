@@ -1,15 +1,3 @@
-"""New devices and shared signals: saying so, and clearing the backlog.
-
-These are the two things the app exists to notice and the two it never
-mentioned. Both sat on a page until somebody went and looked, and on the server
-this was written against twenty eight devices had been waiting since 2023 and
-not one signal had ever been reviewed.
-
-Which is the other half of it. An alert is only worth anything if the normal
-state is nought, and there was no way to reach nought from a backlog of twenty
-eight except by clicking twenty eight times.
-"""
-
 import asyncio
 from datetime import UTC, datetime
 
@@ -40,9 +28,7 @@ def tell(devices: int, signals: int) -> None:
 
 
 def a_flag(status: str, n: int = 0) -> TravelFlag:
-    """A signal with the columns it cannot be without. The pair of history
-    rows it was worked out from is the whole point of one, so they are not
-    nullable and a test cannot skip them."""
+    """A signal with the columns it cannot be without."""
     return TravelFlag(
         user_id=1,
         from_history_id=100 + n,

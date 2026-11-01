@@ -1,11 +1,3 @@
-"""Tests run against the settings the fixture provides, never a developer's.
-
-A .env file sits next to the code and pydantic reads it, so without this the
-suite inherited whatever that machine had: real addresses, real keys, and a
-three second wait per test probing a LAN Tautulli it could not reach.
-"""
-
-
 def test_no_real_service_leaks_in_from_a_local_env_file(client):
     from app.settings_store import current, locked_keys
     from tests.test_auth import claim

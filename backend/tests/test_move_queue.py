@@ -1,15 +1,3 @@
-"""Queueing moves, one title at a time.
-
-A move is the disk reading and writing a whole file, so two at once is each of
-them taking twice as long. The queue exists so somebody can pick fifty titles
-off a full array in one sitting and walk away, which is the only way moving is
-any use at that scale.
-
-The awkward parts are what happens when a job's turn comes and it cannot move
-yet, and what happens when the app is restarted with a move in flight. Each
-test below was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -40,9 +28,7 @@ def one(job_id):
 
 
 def test_a_title_is_queued_once_however_often_it_is_asked_for(client):
-    """Pressing twice is somebody pressing twice, not a second move. The first
-    one is still going to happen, and two jobs for one title would have the
-    second one fail as "it is already there" after the first succeeded."""
+    """Pressing twice is somebody pressing twice, not a second move."""
     first = put(rating_key=5)
     second = put(rating_key=5)
     assert first["id"] == second["id"]
@@ -62,8 +48,7 @@ def test_a_queued_one_can_be_taken_out(client):
 
 
 def test_one_already_moving_is_left_to_the_service(client):
-    """The service is doing it. Stopping halfway is how a file ends up in
-    neither place."""
+    """The service is doing it."""
     job = put(rating_key=5)
     moves._mark(job["id"], status="moving")
     assert moves.cancel(job["id"]) is False
@@ -140,8 +125,6 @@ def test_a_job_whose_turn_comes_is_asked_for_and_finishes(client, mover):
 
 
 def test_one_that_cannot_move_yet_stays_queued_and_says_why(client, mover):
-    """Failing it would throw away a move somebody still wants, and stopping
-    the queue would mean a list left overnight did nothing."""
     asked, state = mover
     state["blockers"] = ["it is being watched right now by somebody"]
     job = put(rating_key=5)
@@ -153,8 +136,7 @@ def test_one_that_cannot_move_yet_stays_queued_and_says_why(client, mover):
 
 
 def test_a_blocked_one_does_not_hold_up_the_rest(client, mover):
-    """The whole point of a queue somebody walks away from is that it drains.
-    Stopping at the first title that is busy would leave fifty behind it."""
+    """The whole point of a queue somebody walks away from is that it drains."""
     asked, state = mover
     blocked = put(rating_key=5)
     movable = put(rating_key=6)
@@ -197,9 +179,7 @@ def test_a_service_that_has_forgotten_the_title_fails_that_one(client, mover):
 
 
 def test_landing_needs_the_file_and_not_just_the_record(client):
-    """The service records the new folder before the copy is finished. Taking
-    that as done starts the next move while the disk is still busy with this
-    one, which is the whole thing one at a time exists to avoid."""
+    """The service records the new folder before the copy is finished."""
     record_only = {"rootFolderPath": NAS, "hasFile": True, "movieFile": {"path": ARRAY + "/A/A.mkv"}}
     both = {"rootFolderPath": NAS, "hasFile": True, "movieFile": {"path": NAS + "/A/A.mkv"}}
     assert moves.has_landed(record_only, NAS) is False
@@ -207,9 +187,7 @@ def test_landing_needs_the_file_and_not_just_the_record(client):
 
 
 def test_a_title_with_no_file_has_not_landed(client):
-    """The path alone is not enough. The service can hold a folder under the
-    destination with nothing in it, and calling that landed would mark a move
-    done that never copied anything."""
+    """The path alone is not enough."""
     assert moves.has_landed(
         {"rootFolderPath": NAS, "hasFile": False, "movieFile": {"path": NAS + "/A/A.mkv"}}, NAS
     ) is False
@@ -222,9 +200,6 @@ def test_a_trailing_slash_is_not_a_different_folder(client):
 
 
 def test_plex_is_told_and_the_row_read_back_when_it_lands(client, mover):
-    """The move is only finished once this app and Plex agree with the service
-    about where the file is. Without this the card went on naming the old disk
-    for as long as six hours, beside a panel reading the new one."""
     asked, state = mover
     job = put(rating_key=5)
     asyncio.run(moves._one(job["id"]))
@@ -233,10 +208,6 @@ def test_plex_is_told_and_the_row_read_back_when_it_lands(client, mover):
 
 
 def test_a_reason_that_will_not_change_finishes_the_job(client, mover):
-    """A show sat in the queue for a day saying "waiting its turn, it is
-    already there", which is two answers that cannot both be true. Waiting is
-    right for somebody watching it or a download going for it, because those
-    end on their own. Being already there does not."""
     asked, state = mover
     state["settled_reasons"] = ["it is already there"]
     state["blockers"] = ["it is already there"]
@@ -257,9 +228,7 @@ def test_one_waiting_on_something_that_ends_keeps_its_place(client, mover):
 
 
 def test_nothing_waits_for_ever(client, mover):
-    """Whatever it is waiting for ends by itself or it does not, and after a
-    day it does not. A queue that looks busy for ever is how one sat for a day
-    without anybody noticing it was stuck."""
+    """Whatever it is waiting for ends by itself or it does not, and after a day it does not."""
     from datetime import UTC, datetime, timedelta
 
     from app.db import session_scope

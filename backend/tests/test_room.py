@@ -1,15 +1,3 @@
-"""Telling somebody before a disk fills.
-
-A media server fills up. It is the one thing that goes wrong on every one of
-them eventually, it gives plenty of warning, and nothing here was watching for
-it: the Storage page says how much room is left and somebody has to go and
-look.
-
-The shape is the alert for a job that has stopped: one message when a disk
-crosses a line, nothing more about that disk until it gets worse or recovers.
-A warning sent every hour is a warning nobody reads.
-"""
-
 import pytest
 
 from app.services import room
@@ -64,8 +52,6 @@ def test_two_disks_are_told_apart():
 
 
 def test_a_disk_nothing_can_read_is_skipped_rather_than_counted_as_full():
-    """An unreadable mount with no free space reported is not a disk at zero,
-    and treating it as one would cry wolf on every restart."""
     assert room.check([{"path": "/x", "free": None, "total": None}], 10, 3) == []
     assert room.check([{"path": "/y", "free": 0, "total": 0}], 10, 3) == []
 

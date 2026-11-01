@@ -1,16 +1,3 @@
-"""Artwork comes from Plex where there is a Plex to ask.
-
-Tautulli's image proxy calls Plex's own resizer to do the work, so going
-through it is a hop for nothing. It is also a hop that costs: asked for the
-same 300 by 450 poster against a real server, Plex answers with a 300 by 450
-JPEG of 37 kB and Tautulli answers with a PNG of 215 kB, having ignored the
-format it was asked for. On a page of thirty six posters that is half a
-megabyte against nearly eight.
-
-Tautulli stays as the thing to try when Plex will not answer. A server asleep
-or moved should cost a slower poster, not a broken page.
-"""
-
 import pathlib
 import re
 

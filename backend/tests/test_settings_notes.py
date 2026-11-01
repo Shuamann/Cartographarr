@@ -1,14 +1,3 @@
-"""Settings explanations stay behind their information icon.
-
-Every section on every settings page has a paragraph saying what it is for.
-Read once they are useful; left on screen they are the bulk of the page and the
-controls are the reason anybody opened it. They are drawn by Head, which puts
-an icon beside the heading and remembers whether that one is open.
-
-The way this comes undone is somebody adding a section and rendering its note
-themselves, which looks right next to the others until the page fills up again.
-"""
-
 import pathlib
 import re
 
@@ -41,12 +30,7 @@ def test_head_folds_the_note_and_remembers():
 
 
 def test_head_is_keyed_by_its_heading():
-    """React keeps one instance per position, not per heading.
-
-    Without a key, the page heading's Head survives moving to another settings
-    page, and a note opened on one page comes up open on the next under a
-    different title.
-    """
+    """React keeps one instance per position, not per heading."""
     text = SETTINGS.read_text(encoding="utf-8")
     for call in re.findall(r"<Head\b[^>]*", text, re.S):
         # A heading written out in full always renders in its own place. One

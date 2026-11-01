@@ -1,7 +1,3 @@
-"""First-run state. A fresh install must boot without credentials rather than
-crash-looping, so these branches matter more than they look.
-"""
-
 from app.config import Settings
 from app import settings_store as ss
 

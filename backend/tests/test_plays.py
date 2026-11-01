@@ -1,6 +1,3 @@
-"""Plays and sessions are both counted: a play paused and resumed, or carried
-to another device, is one play made of several sessions."""
-
 from tests.test_auth import claim
 
 NOW = 1789570000

@@ -1,10 +1,3 @@
-"""The weekly digest.
-
-It is a message somebody reads once a week and acts on, so what matters is
-that the numbers are the week's and not all time, that a quiet week is short
-rather than a page of zeroes, and that it never fires on the wrong day.
-"""
-
 import time
 from datetime import UTC, datetime, timedelta
 

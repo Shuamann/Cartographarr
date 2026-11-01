@@ -95,8 +95,6 @@ def test_viewers_cannot_see_storage(client):
 
 
 def seed_weeks():
-    """Two weeks of watching from one mount: a quiet one, then a bad one where
-    a single stream rebuffered all evening."""
     from app.db import session_scope
     from app.models import History, MediaItem, StreamEvent
 

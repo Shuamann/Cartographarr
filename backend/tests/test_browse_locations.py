@@ -1,14 +1,3 @@
-"""Browsing by where a file lives, and seeing past the first page.
-
-Two things the browse list could not do. It had no way to ask "what is still
-on the disk that is full", which is the question somebody moving things off an
-array actually has, even though every row already knew which store it sat on.
-And it answered with the first sixty rows and said so, with no way to ask for
-the rest, which on a library of four thousand films is most of it hidden.
-
-Each test here was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 from app.db import session_scope
@@ -62,9 +51,7 @@ def test_ticking_one_location_keeps_only_what_is_there(client):
 
 
 def test_narrowing_does_not_remove_the_other_options(client):
-    """Tick one location and the others vanishing is a filter nobody can use
-    twice. The list of places is worked out before any row is dropped for
-    being in the wrong one."""
+    """Tick one location and the others vanishing is a filter nobody can use twice."""
     library_of_two_disks()
     everything = browse()
     narrowed = browse(stores=[everything["stores"][0]])
@@ -72,8 +59,7 @@ def test_narrowing_does_not_remove_the_other_options(client):
 
 
 def test_two_locations_at_once(client):
-    """The question is usually what is still on these two disks, which a
-    dropdown cannot ask."""
+    """The question is usually what is still on these two disks, which a dropdown cannot ask."""
     library_of_two_disks()
     both = browse(stores=browse()["stores"][:2])
     apart = sum(browse(stores=[s])["total"] for s in browse()["stores"][:2])
@@ -86,8 +72,7 @@ def test_ticking_nothing_is_the_same_as_ticking_everything(client):
 
 
 def test_an_empty_name_is_not_a_location(client):
-    """A blank slipping into the list would match nothing and quietly empty
-    the page."""
+    """A blank slipping into the list would match nothing and quietly empty the page."""
     library_of_two_disks()
     assert browse(stores=["", None])["total"] == browse()["total"]
 
@@ -107,8 +92,7 @@ def test_the_total_is_everything_rather_than_the_page(client):
 
 
 def test_asking_past_the_end_gives_nothing_rather_than_the_last_page(client):
-    """A slice with an offset past the end has to be empty. Falling back to
-    the start would loop forever as somebody pressed for more."""
+    """A slice with an offset past the end has to be empty."""
     library_of_two_disks()
     assert browse(limit=2, offset=99)["items"] == []
 
@@ -139,10 +123,6 @@ def shows(**kw):
 
 
 def test_the_shows_list_offers_the_places_shows_live(client):
-    """Browsing television, the ticks were whatever the last film list had
-    offered, because this endpoint had never heard of a store. The television
-    archives could not be reached at all: the only places on offer were ones
-    films live in."""
     tv()
     # A store is named by the first part of its path, as deep as the setting
     # says, so these are the two disks rather than the two folders.
@@ -150,8 +130,6 @@ def test_the_shows_list_offers_the_places_shows_live(client):
 
 
 def test_a_show_is_listed_if_any_of_it_is_in_the_ticked_place(client):
-    """The point of ticking is to find what to move off a disk, and a show
-    with one episode left on it is still something on it."""
     tv()
     assert {s["rating_key"] for s in shows(stores=["/nas"])["items"]} == {200, 300}
 
@@ -168,8 +146,6 @@ def test_narrowing_shows_keeps_the_other_places_on_offer(client):
 
 
 def test_every_show_carries_an_episode_to_look_it_up_by(client):
-    """A show mostly has no row of its own, so anything that finds it in
-    Radarr or Sonarr goes through an episode, which resolves to the series."""
     tv()
     assert all(s["episode_key"] is not None for s in shows()["items"])
 
@@ -187,9 +163,6 @@ def mixed_library():
 
 
 def test_a_library_is_only_offered_where_it_holds_that_kind(client):
-    """Every library on the server was offered whatever was being browsed, so
-    looking at films offered TV/Series and Music, and picking one asked for
-    films in a library that has none of them."""
     mixed_library()
     films = {s["name"] for s in browse()["sections"]}
     with session_scope() as db:
@@ -200,8 +173,6 @@ def test_a_library_is_only_offered_where_it_holds_that_kind(client):
 
 
 def test_picking_a_library_does_not_remove_the_others(client):
-    """The same rule the places follow: a filter whose options disappear as
-    you use it is a filter nobody can use twice."""
     mixed_library()
     with session_scope() as db:
         everything = library.browse(db, 90, media_type="episode")["sections"]
@@ -210,9 +181,6 @@ def test_picking_a_library_does_not_remove_the_others(client):
 
 
 def test_the_shows_list_carries_its_own_sorts_and_libraries(client):
-    """They were drawn from the file list, which browsing shows does not use,
-    so Sort by sat empty and did nothing until somebody changed Kind and
-    changed it back."""
     mixed_library()
     answer = shows()
     assert [s["key"] for s in answer["sorts"]] == ["size", "plays", "quiet", "title"]
@@ -227,8 +195,6 @@ def test_shows_can_be_put_in_order_of_size(client):
 
 
 def test_a_way_of_sorting_files_falls_back_rather_than_going_blank(client):
-    """A show has no bitrate, so asking for that order has to land somewhere
-    rather than leaving the control showing nothing."""
     mixed_library()
     answer = shows(sort="bitrate")
     assert answer["sort"] == "title"

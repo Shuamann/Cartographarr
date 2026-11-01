@@ -1,9 +1,3 @@
-"""User and device profiles.
-
-The user profile shipped referring to a history column that does not exist,
-so every click on a user failed and nothing on the page said so.
-"""
-
 from tests.test_auth import claim
 
 
@@ -60,8 +54,7 @@ def test_activity_keeps_its_own_kind(client):
 
 
 def test_episode_links_point_at_the_show(client):
-    """Plex gives an episode its own TMDB id. A show link built from it opens
-    some other show, or Not Found, so episodes link using the show's ids."""
+    """Plex gives an episode its own TMDB id."""
     from app.db import session_scope
     from app.models import MediaItem
 

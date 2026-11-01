@@ -1,15 +1,3 @@
-"""Banning as something a rule can do.
-
-A rule could stop a stream and could not stop it coming back, so the same
-device could be caught and stopped every evening for ever while the only way to
-end it was to go and ban it by hand. Both halves were first class features that
-could not see each other.
-
-The cases that matter are the ones where it must not act: a stream with no
-device, one already banned, and the shape of what it writes, since a rule
-acting on its own writes to a list a person reads later.
-"""
-
 import asyncio
 from datetime import UTC, datetime
 
@@ -125,8 +113,7 @@ def test_both_are_offered_as_rule_actions(client):
 
 
 def test_the_length_is_a_list_rather_than_a_box(client):
-    """Typing a number of hours into a text area is not a question anybody
-    should be asked."""
+    """Typing a number of hours into a text area is not a question anybody should be asked."""
     spec = next(a for a in [{"name": a.name, "param_schema": a.param_schema} for a in registry.all_actions()] if a["name"] == "ban_device")
     options = spec["param_schema"]["hours"]["options"]
     assert [o["value"] for o in options] == ["1", "24", "168", "720", "0"]

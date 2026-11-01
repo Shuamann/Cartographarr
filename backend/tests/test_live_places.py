@@ -1,7 +1,3 @@
-"""A live stream from an address history has never seen still belongs on the
-map. The sync only geocodes addresses with finished plays, so the activity
-endpoint looks the rest up itself."""
-
 from tests.test_auth import claim
 
 

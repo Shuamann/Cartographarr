@@ -1,6 +1,3 @@
-"""The home page: links worked out from what is set up, who sees each one, and
-anything open that needs the person looking."""
-
 from tests.test_auth import claim
 from tests.test_privacy import as_viewer
 

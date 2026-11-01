@@ -1,17 +1,3 @@
-"""Finding a title in Radarr or Sonarr, and saying so when it is not there.
-
-"Not in Radarr" about a film plainly sitting in Radarr. The lookup asked
-/api/v3/movie?tmdbId= and nothing else, so the message was true and useless.
-
-Found on a real library: Plex had matched a Hamlet (2024) to a filmed stage
-production at Theatre Royal Windsor, 117 minutes, while Radarr held the Public
-Theater one from the Delacorte, 154 minutes, under a different id. Two
-different films of the same play in the same year is exactly the case nothing
-here could tell apart, and the flat denial gave nobody a thread to pull.
-
-Each test below was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -54,8 +40,6 @@ def test_a_film_is_found_by_the_id_plex_matched_it_to(radarr):
 
 
 def test_imdb_is_tried_when_the_other_id_finds_nothing(radarr):
-    """The two disagree more often than either is simply absent, and either
-    agreeing is enough to find the film."""
     asked, holds = radarr
     holds[("imdbId", DELACORTE_IMDB)] = {"id": 7, "title": "Hamlet"}
     assert asyncio.run(arr.radarr.find(WINDSOR, DELACORTE_IMDB))["id"] == 7
@@ -75,25 +59,20 @@ def test_no_second_id_means_no_second_request(radarr):
 
 
 def test_the_message_names_what_it_looked_for():
-    """The whole point. Seeing that the id belongs to a different film is a
-    glance; working out why the app is wrong about a film sitting in front of
-    you is an evening."""
+    """The whole point."""
     said = str(arr.radarr._missing(WINDSOR, DELACORTE_IMDB))
     assert WINDSOR in said and DELACORTE_IMDB in said
     assert "TMDB id" in said and "IMDb id" in said
 
 
 def test_the_message_does_not_claim_the_film_is_absent():
-    """It is usually there. What is absent is anything under that id, and the
-    difference is the whole of the answer."""
+    """It is usually there."""
     said = str(arr.radarr._missing(WINDSOR, DELACORTE_IMDB)).lower()
     assert "not in radarr" not in said
     assert "another id" in said or "different title" in said
 
 
 def test_a_service_with_one_id_names_only_that_one():
-    """Sonarr's series endpoint filters on tvdbId alone, so naming an IMDb id
-    it never looked for would send somebody checking the wrong thing."""
     said = str(arr.sonarr._missing("369973", "tt20598076"))
     assert "TVDB id 369973" in said
     assert "tt20598076" not in said

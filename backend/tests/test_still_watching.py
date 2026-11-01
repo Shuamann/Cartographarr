@@ -1,14 +1,3 @@
-"""Do not suggest deleting the next episode of something somebody is watching.
-
-An episode nobody has played, in a show somebody is partway through, is not an
-abandoned file. It is the next episode. On this library 1,751 of the 8,911 big
-never played episodes belong to a show watched in the last sixty days, and 38
-of the 702 files the cleanup list actually suggested were exactly that.
-
-They are counted and said rather than silently dropped: a list that quietly
-shrinks is a list nobody can reason about.
-"""
-
 import time
 
 from tests.test_auth import claim
@@ -55,9 +44,6 @@ def test_the_next_episode_of_something_being_watched_is_left_out(client, monkeyp
 
 
 def test_a_show_nobody_has_touched_in_months_is_still_suggested(client, monkeypatch):
-    """Long enough to cover somebody who watches an episode a week and takes a
-    month off, short enough that a show abandoned last year is not protected
-    for ever."""
     from app.services import library_scan
 
     claim(client)
@@ -69,8 +55,6 @@ def test_a_show_nobody_has_touched_in_months_is_still_suggested(client, monkeypa
 
 
 def test_a_film_is_never_spared_by_this(client, monkeypatch):
-    """It has no show to be partway through, and sparing one would be the rule
-    quietly doing something else."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import cleanup, library_scan
@@ -100,9 +84,7 @@ def test_it_says_how_many_it_left_out(client, monkeypatch):
 
 
 def test_something_added_last_week_is_not_a_file_nobody_wants(client, monkeypatch):
-    """It has not been ignored. It has been added. On this library 1,102 of
-    the big never played files arrived in the last month, and offering them up
-    for the room is arguing with whoever put them there a fortnight ago."""
+    """It has not been ignored."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import cleanup, library_scan
@@ -123,8 +105,6 @@ def test_something_added_last_week_is_not_a_file_nobody_wants(client, monkeypatc
 
 
 def test_a_file_with_no_added_date_is_judged_as_before(client, monkeypatch):
-    """Anything scanned before the date was being stored has none, and
-    treating a missing date as new would empty the list."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import cleanup, library_scan
@@ -139,8 +119,6 @@ def test_a_file_with_no_added_date_is_judged_as_before(client, monkeypatch):
 
 
 def test_an_old_file_nobody_played_in_years_is_not_spared_by_the_settling_rule(client, monkeypatch):
-    """The grace period is about never having been played, not about a file
-    somebody watched once in 2021."""
     from app.db import session_scope
     from app.models import History, MediaItem
     from app.services import cleanup, library_scan

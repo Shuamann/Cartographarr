@@ -1,9 +1,3 @@
-"""Stream records, upload samples and the likely cause of a stall.
-
-Each of these ends up in a report someone acts on (re-encode a file, blame a
-device, buy more upload), so the reasoning is tested case by case.
-"""
-
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -146,8 +140,6 @@ def test_stall_causes(client):
 
 
 def test_upload_alert_is_sent_from_the_sweep_thread(client, monkeypatch):
-    """The sweep records samples in a worker thread with no event loop; the
-    notification must still go out."""
     import threading
 
     from app.integrations.notify import apprise_notifier
@@ -197,10 +189,7 @@ def test_upload_capacity_comes_from_plex_unless_set(client, monkeypatch):
 
 
 def test_a_negative_transcode_speed_is_not_recorded():
-    """Plex reports this as a multiple of real time, and sometimes reports
-    nonsense. One session on the server this was written against is recorded at
-    -302.8, which went into the minimum and stayed there, making a stream that
-    was fine look like one the server could not keep up with."""
+    """Plex reports this as a multiple of real time, and sometimes reports nonsense."""
     assert streams._plausible_speed(-302.8) is None
     assert streams._plausible_speed(0.0) is None
     assert streams._plausible_speed(None) is None
@@ -221,13 +210,7 @@ def test_a_real_speed_survives():
 
 
 def test_tautullis_empty_hardware_answer_is_not_a_boolean():
-    """Tautulli sends these keys with an empty string when it has nothing.
-
-    The columns are booleans, so an empty string is refused and the whole
-    insert fails, which silently lost every live session on a server reading
-    from Tautulli. It is also not a no: Tautulli not saying whether hardware
-    was asked for is different from it saying hardware was not asked for.
-    """
+    """Tautulli sends these keys with an empty string when it has nothing."""
     assert streams._said("") is None
     assert streams._said(None) is None
     assert streams._said("0") is False

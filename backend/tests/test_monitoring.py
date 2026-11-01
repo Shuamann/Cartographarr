@@ -1,6 +1,3 @@
-"""Metrics and the dashboard summary: off without a token, refused with a
-wrong one, and never carrying anything that names a person."""
-
 from tests.test_auth import claim
 
 

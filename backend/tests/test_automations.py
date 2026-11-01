@@ -1,10 +1,3 @@
-"""Rules about things nobody is watching.
-
-A stream rule gets its chance while the stream is playing. These run on a
-sweep, so the questions that matter are: do they only see their own kind of
-subject, do they stop repeating themselves, and do they stop when told.
-"""
-
 import asyncio
 import json
 from datetime import UTC, datetime
@@ -261,8 +254,6 @@ def test_a_rule_closes_the_reports_about_a_file_it_replaced(client):
 
 
 def test_an_automatic_grab_leaves_anything_it_would_have_to_ask_about():
-    """The one action that spends bandwidth only takes a release that fixes
-    something and that Radarr would import on its own."""
     from app.actions.registry import pick_release
 
     assert pick_release([]) is None

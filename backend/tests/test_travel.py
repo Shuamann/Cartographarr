@@ -1,11 +1,3 @@
-"""Impossible travel.
-
-This decides whether someone gets accused of sharing their password, so the
-cases that matter most are the ones that must NOT flag. GeoLite2 states an
-error of anywhere from 5 km to 1000 km, and a naive distance check would flag
-half a library.
-"""
-
 from app.services.travel import CONCURRENT_WINDOW_SECONDS, haversine_km
 
 
@@ -31,8 +23,6 @@ def test_haversine_is_symmetric():
 
 def test_concurrent_window_is_generous_enough_to_matter():
     # The window exists because two plays seconds apart are simultaneous, not
-    # a journey. Without it the speed divides by almost nothing and reports
-    # figures like a million kilometres an hour.
     assert CONCURRENT_WINDOW_SECONDS >= 60
 
 

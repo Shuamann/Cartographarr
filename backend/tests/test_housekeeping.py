@@ -1,11 +1,3 @@
-"""Tables that used to grow forever.
-
-Four of them had no pruning at all while two others already did, so the
-pattern existed and these were simply never given it. Nothing here is urgent
-at the volumes this app sees; it is the kind of thing noticed two years late,
-which is why it is written down while it is still cheap.
-"""
-
 from datetime import UTC, datetime, timedelta
 
 from tests.test_auth import claim
@@ -39,8 +31,6 @@ def test_old_streams_go_and_recent_ones_stay(client):
 
 
 def test_the_logs_keep_to_their_own_setting(client):
-    """A record of what was done is a different thing from a record of what
-    was watched, and worth keeping longer than it is worth reporting on."""
     from app.db import session_scope
     from app.models import AuditLog, EnforcementLog
     from app.services import housekeeping
@@ -64,8 +54,6 @@ def test_the_logs_keep_to_their_own_setting(client):
 
 
 def test_zero_keeps_everything(client):
-    """Somebody who wants it all should be able to say so, and a setting left
-    at nothing must not read as throw it all away."""
     from app.db import session_scope
     from app.models import AuditLog, StreamSession
     from app.services import housekeeping
@@ -84,8 +72,6 @@ def test_zero_keeps_everything(client):
 
 
 def test_pruning_runs_as_part_of_the_sync(client):
-    """It is housekeeping, so it belongs where the other housekeeping already
-    runs rather than in a job of its own that somebody has to know about."""
     import pathlib
 
     source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "services" / "sync.py").read_text(encoding="utf-8")

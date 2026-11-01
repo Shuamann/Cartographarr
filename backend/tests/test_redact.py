@@ -1,9 +1,3 @@
-"""Credentials never reach a page, the Log or the container log.
-
-Tautulli takes its key in the query string, so its errors carry it. This was
-found returning the key to any signed-in viewer when a poster failed to load.
-"""
-
 import asyncio
 import logging
 

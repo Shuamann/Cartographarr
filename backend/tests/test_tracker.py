@@ -1,10 +1,3 @@
-"""Timing streams across polls, and the conditions built on it.
-
-A rule acting on "buffering for 20 seconds" stops or reports on a real
-person's stream, so the counts must not drift: a stall is counted once, its
-length comes from the polls, and it is saved when it ends.
-"""
-
 import json
 
 from app.services import conditions as c
@@ -99,8 +92,7 @@ def test_real_window_counts_from_history_and_events(client):
 
 
 def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
-    """A condition like "more than 3 plays in the last 24 hours" stays true for
-    hours. The rule must record a stream once, not every cooldown."""
+    """A condition like "more than 3 plays in the last 24 hours" stays true for hours."""
     import asyncio
     from types import SimpleNamespace
 
@@ -124,9 +116,6 @@ def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
 
     monkeypatch.setattr(enforcer, "is_configured", lambda: True)
     # Spelled out rather than taken from the real settings, so this test says
-    # what the sweep is being told. The alert fields are off: this is about
-    # a rule logging once, and a stand in with a field missing crashes the
-    # sweep rather than failing the thing under test.
     monkeypatch.setattr(enforcer, "current", lambda: SimpleNamespace(
         enforce_enabled=True, enforce_cooldown_seconds=0,
         server_alerts=False, server_alert_minutes=0,
@@ -160,8 +149,6 @@ def test_a_rule_that_only_records_logs_once_per_stream(client, monkeypatch):
 
 
 def test_seeks_video_ends_and_blips_are_not_stalls(client):
-    """Plex says buffering when someone skips ahead and as an episode ends;
-    only real stalls count."""
     from app.db import session_scope
     from app.models import StreamEvent
 

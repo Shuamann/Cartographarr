@@ -1,10 +1,3 @@
-"""Tidying a file's tracks: what it would do, and the command it builds.
-
-The command is the part worth pinning down. It runs against somebody's only
-copy of a film, so every one of these checks is about what must survive:
-the picture, the original audio, and anything the plan did not mention.
-"""
-
 import json
 from types import SimpleNamespace
 
@@ -207,8 +200,6 @@ MANY = [
 
 
 def test_the_preferred_language_goes_first(monkeypatch):
-    """Players take the first track, which is how a film ends up in Japanese
-    for a household that does not read subtitles."""
     settings(monkeypatch, preferred_audio_language="eng")
     argv = mediafix.build(MANY, ["default_audio"], "in.mkv", "out.mkv")
     assert mapped(argv) == ["0:0", "0:2", "0:1", "0:3", "0:4", "0:5", "0:6"]
@@ -237,8 +228,6 @@ def test_spare_dubs_go_but_a_file_is_never_left_silent(monkeypatch):
 
 
 def test_the_added_track_is_numbered_after_the_ones_that_survived(monkeypatch):
-    """Dropping a dub moves the output positions, and the encoder flags are
-    written against those, not against what the file used to have."""
     settings(monkeypatch, keep_audio_languages="eng")
     argv = mediafix.build(MANY, ["keep_audio_languages", "no_compatible_audio"], "in.mkv", "out.mkv")
     # One audio track survives, so the added one is output audio 1.
@@ -261,8 +250,6 @@ def test_the_language_steps_are_offered_only_when_settings_say_so(monkeypatch):
 
 
 def test_a_rule_can_ask_for_the_tidying(client, monkeypatch):
-    """The action is the same work as the button, driven by the rules engine,
-    so it answers to the cap and the record only switch like anything else."""
     import asyncio
 
     from app.actions import registry
@@ -302,9 +289,6 @@ def test_a_rule_can_ask_for_the_tidying(client, monkeypatch):
 # ---- choosing tracks on the file itself --------------------------------------
 
 def test_a_choice_made_on_the_file_keeps_exactly_what_was_ticked():
-    """Seven subtitle tracks in seven languages are not duplicates and not
-    picture-only, so no rule offers to touch them. Somebody looking at the
-    list can still say which three they want."""
     argv = mediafix.build(MANY, [mediafix.CHOSEN], "in.mkv", "out.mkv",
                           {"audio": [0, 1], "subtitles": [0]})
     # Audio 0 and 1 of three, subtitle 0 of three.

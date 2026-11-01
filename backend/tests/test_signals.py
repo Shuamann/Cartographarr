@@ -1,10 +1,3 @@
-"""Sharing signals: the detail view, and what Reviewed and Ignore each do.
-
-Reviewed closes one signal. Ignore records that a person moving between two
-places is expected, and closes matching signals past and future. The cases
-that matter are that Ignore does not swallow anything else.
-"""
-
 from tests.test_auth import claim
 
 
@@ -96,11 +89,7 @@ def test_new_signals_matching_an_ignore_are_recorded_as_ignored(client):
 
 
 def test_a_play_left_paused_is_not_two_places_at_once(client):
-    """A phone paused in one city, and the TV used 115 km away hours later.
-
-    The phone's session stays open for days, so measuring from when it closed
-    made this look like one account in two places at once. What matters is
-    when anyone was last watching it."""
+    """A phone paused in one city, and the TV used 115 km away hours later."""
     from app.db import session_scope
     from app.models import History, IpLocation, TravelFlag
     from app.services import travel
@@ -166,8 +155,7 @@ def flags_for(user_id=11):
 
 
 def test_one_phone_changing_network_is_not_two_people(client):
-    """A phone that leaves mobile data for the wifi at home is recorded
-    against two addresses. It is still one phone."""
+    """A phone that leaves mobile data for the wifi at home is recorded against two addresses."""
     from app.db import session_scope
     from app.models import History
 
@@ -198,8 +186,7 @@ def test_the_same_thing_picked_up_on_another_device_is_not_two_people(client):
 
 
 def test_two_people_watching_the_same_film_at_once_is_still_a_signal(client):
-    """The excuse only covers a viewing continuing. Two copies of the same
-    film running side by side for an hour is the thing this is looking for."""
+    """The excuse only covers a viewing continuing."""
     from app.db import session_scope
     from app.models import History
 
@@ -230,9 +217,6 @@ def test_a_different_title_elsewhere_is_still_a_signal(client):
 
 
 def test_a_network_that_keeps_moving_is_pointed_out(client):
-    """A phone's address belongs to its carrier's nearest gateway, which can
-    be a different city every evening. The signal says so rather than leaving
-    somebody to work it out."""
     from app.db import session_scope
     from app.models import History, IpLocation, TravelFlag, User
 

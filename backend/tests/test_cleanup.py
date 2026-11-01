@@ -119,10 +119,6 @@ def test_one_list_asked_three_ways(client):
     assert room["reclaimable"] > 0
 
     # Every row carries the same things, whichever question found it, and
-    # nothing beyond what the row on screen draws. The three queries behind
-    # this each select more than a row needs for their own sorting, and
-    # passing that straight on was four hundred and twenty kilobytes of JSON
-    # to draw fifty seven.
     for view in (trouble, messy, room):
         row = view["items"][0]
         assert {"rating_key", "title", "kind", "why", "store", "finding", "findings_count"} <= set(row)

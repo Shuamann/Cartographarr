@@ -1,9 +1,3 @@
-"""The four colours a person may set, and what is refused.
-
-They end up inside a style the browser applies, so the shape is checked here
-rather than trusted from the page that sent it.
-"""
-
 import json
 
 import pytest

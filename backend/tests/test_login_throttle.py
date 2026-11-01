@@ -1,6 +1,3 @@
-"""Failed sign-ins are counted per caller, which behind a proxy means the
-forwarded address rather than the proxy everyone shares."""
-
 from tests.test_auth import claim
 
 PASSWORD = "correct horse battery staple"

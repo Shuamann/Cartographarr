@@ -1,15 +1,3 @@
-"""A grab that says up front it does not want to be asked again.
-
-Radarr holds an import when it will not take a release by itself, usually
-because it does not rate it an upgrade on what is already there. The app
-already reads the manual import candidates at that point and offers Confirm,
-so nobody has to open Radarr; what it could not do was decide in advance. You
-picked a release, waited for the download, came back and clicked the thing you
-already knew you wanted.
-
-Each test here was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -87,9 +75,6 @@ def row():
 
 
 def test_without_it_a_held_import_waits_to_be_asked(client, radarr):
-    """The behaviour that was there before, and still the default: confirming
-    overrides the service's judgement about a file, which is not something to
-    do to somebody by surprise."""
     put(auto_confirm=False)
     asyncio.run(replacements.poll())
     assert row()["status"] == "ready"
@@ -104,9 +89,7 @@ def test_with_it_the_held_import_happens_at_once(client, radarr):
 
 
 def test_it_imports_the_same_file_confirming_by_hand_would(client, radarr):
-    """A release folder carries samples, subtitles and artwork beside the
-    film. Two code paths choosing differently is how one of them quietly
-    starts importing a two megabyte sample."""
+    """A release folder carries samples, subtitles and artwork beside the film."""
     radarr.files = [
         {"path": "/d/sample.mkv", "size": 2_000_000, "quality": {}, "languages": []},
         {"path": "/d/Film.mkv", "size": 5_000_000_000, "quality": {}, "languages": []},
@@ -117,9 +100,6 @@ def test_it_imports_the_same_file_confirming_by_hand_would(client, radarr):
 
 
 def test_nothing_to_import_waits_after_all_rather_than_failing(client, radarr):
-    """A download the service can find no file in is not an error, it is a
-    thing to go and look at. Silently marking it imported would be the worst
-    of the three answers."""
     radarr.files = []
     put(auto_confirm=True)
     asyncio.run(replacements.poll())
@@ -130,16 +110,13 @@ def test_nothing_to_import_waits_after_all_rather_than_failing(client, radarr):
 
 
 def test_it_is_recorded_against_whoever_asked_for_it(client, radarr):
-    """An import nobody appears to have confirmed is an import somebody will
-    come looking for an explanation of."""
     put(auto_confirm=True)
     asyncio.run(replacements.poll())
     assert row()["resolved_by"] == "someone"
 
 
 def test_it_fires_once_rather_than_on_every_poll(client, radarr):
-    """The poll runs on a timer. Importing again each time it comes round
-    would ask the service to import the same download over and over."""
+    """The poll runs on a timer."""
     put(auto_confirm=True)
     asyncio.run(replacements.poll())
     asyncio.run(replacements.poll())
@@ -148,16 +125,12 @@ def test_it_fires_once_rather_than_on_every_poll(client, radarr):
 
 
 def test_the_candidate_is_still_written_down(client, radarr):
-    """What was imported has to be recorded whichever way it was confirmed, or
-    the row cannot say afterwards what it took."""
     put(auto_confirm=True)
     asyncio.run(replacements.poll())
     assert row()["candidate"].get("files")
 
 
 def test_picking_the_file_is_one_function_for_both_paths():
-    """Confirming by hand and confirming because it was asked for in advance
-    must not drift into choosing differently."""
     candidate = json.dumps({"files": [{"path": "a", "size": 1}, {"path": "b", "size": 9}]})
     assert replacements.importable(candidate)["path"] == "b"
     assert replacements.importable(json.dumps({"files": []})) is None

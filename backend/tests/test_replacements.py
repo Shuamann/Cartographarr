@@ -1,10 +1,3 @@
-"""Replacing a file through Radarr or Sonarr, with a fake Radarr.
-
-Nothing here reaches a real Radarr. What is tested is ours: reading release
-names, comparing them with the current file, and following a replacement from
-queued to downloaded, held, then confirmed or denied.
-"""
-
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
@@ -54,8 +47,6 @@ class FakeRadarr:
         return True
 
     # alt_id is the second id tried where the service filters on one, so a
-    # stand in has to take it or every call through here raises instead of
-    # answering, which is how it was noticed.
     async def find(self, external_id, alt_id=None):
         return {"id": 7, "title": "Film"}
 
@@ -213,10 +204,6 @@ def test_live_shows_the_queue_entry(client, monkeypatch):
 
 
 def test_what_it_fixes_comes_first_then_the_profile_score():
-    """Two numbers, not one blended one: how much of this file's trouble a
-    release would fix, then what the service thinks of it against the
-    profile. Blending them would mean deciding what a fixed soundtrack is
-    worth in custom format points, which nothing says."""
     from app.services.replacements import compare_releases
 
     current = {"findings": [{"key": "no_compatible_audio"}]}

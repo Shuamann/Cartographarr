@@ -1,7 +1,3 @@
-"""Coercion checks. Tautulli types everything loosely, so this is where the
-bugs are. The upsert itself is SQLAlchemy's problem, not ours.
-"""
-
 from app.services.sync import _bool, _int, _map_history, _split_guids
 
 
@@ -96,8 +92,6 @@ def test_file_details_from_metadata():
 
 
 def test_metadata_upsert_accepts_a_tombstone_beside_a_full_row(client):
-    """A deleted item's tombstone has far fewer columns than a real row, and
-    both arrive in one batch."""
     from datetime import UTC, datetime
 
     from app.db import session_scope
@@ -151,8 +145,6 @@ def test_user_sync_keeps_shared_libraries(client):
 
 
 def test_history_is_synced_one_row_per_session(client):
-    """Merged plays keep only the last device, so a play carried from a phone
-    to a TV lost where it started. Every session is its own row."""
     import asyncio
 
     from sqlalchemy import select
@@ -189,9 +181,7 @@ def test_history_is_synced_one_row_per_session(client):
 
 
 def test_history_window_reaches_back_past_the_watermark(client):
-    """A play that starts before midnight and stops after it is written with
-    yesterday's date. Asking only for rows since the newest start time loses
-    it, so the window opens days earlier than the watermark."""
+    """A play that starts before midnight and stops after it is written with yesterday's date."""
     import asyncio
     from datetime import UTC, datetime
 

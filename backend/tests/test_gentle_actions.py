@@ -1,6 +1,3 @@
-"""Gentler ways to act: bans that end, warning before stopping, telling the
-viewer, and noticing somewhere new. Plus keeping URL credentials masked."""
-
 from datetime import UTC, datetime, timedelta
 
 from tests.test_auth import claim

@@ -1,11 +1,3 @@
-"""Filtering the Log.
-
-Three hundred entries on one timeline and the only control was which of the
-two tables to read. The thing that needs watching is the outcome: it is worked
-out from three columns, in both the page and the endpoint, and filtering by
-"stopped" has to select exactly the rows that read "stopped".
-"""
-
 import pathlib
 import re
 from datetime import UTC, datetime, timedelta
@@ -103,8 +95,6 @@ def test_the_options_only_offer_what_exists(client):
 
 
 def test_the_page_and_the_endpoint_agree_on_what_an_outcome_is(client):
-    """Two copies of the same judgement, which have to stay in step or a
-    filter selects rows that do not show what was asked for."""
     from app.routers.live import LOG_OUTCOMES
 
     page = (ROOT / "frontend/src/components/EnforcementLog.tsx").read_text(encoding="utf-8")

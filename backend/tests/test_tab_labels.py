@@ -1,11 +1,3 @@
-"""A tab is shown by its label, not by its id.
-
-The People tab is called Endpoints on screen while its id stays People, so
-every link and bookmark keeps working. That only holds if nothing renders the
-id directly, which is what happened the first time: the nav was changed and the
-Home tiles went on saying People.
-"""
-
 import pathlib
 import re
 

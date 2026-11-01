@@ -1,10 +1,3 @@
-"""Sign in with Plex, with plex.tv faked.
-
-Who gets in is the part that matters: a linked account, a matching one, a
-new viewer only when allowed and only for someone the server is shared with,
-never an admin by default, and nothing without the browser that started it.
-"""
-
 from tests.test_auth import claim
 
 PASSWORD = "a-long-enough-password"

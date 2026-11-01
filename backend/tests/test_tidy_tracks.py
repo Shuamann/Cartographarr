@@ -1,16 +1,3 @@
-"""A track somebody ticked is a track that survives.
-
-The tidy panel lets a person look at the actual track list and choose what to
-keep. The settings filters are a guess made in advance, for files nobody has
-looked at. When the two disagree the person looking at the file wins, and
-winning has to mean the filter does not run at all, not that the choice is
-applied first and undone afterwards.
-
-It was the second of those, which is worse than not offering the choice: the
-file is rewritten without a track somebody explicitly said to keep, and
-nothing says so.
-"""
-
 from app.services import mediafix
 from app.settings_store import trial
 
@@ -30,8 +17,7 @@ def kept(argv):
 
 
 def test_a_ticked_subtitle_survives_a_setting_that_would_drop_it():
-    """Somebody ticks the French subtitle on a server set to keep English.
-    They are looking at the file; the setting is not."""
+    """Somebody ticks the French subtitle on a server set to keep English."""
     with trial(ENGLISH_ONLY):
         argv = mediafix.build(
             STREAMS, [mediafix.CHOSEN, "keep_subtitle_languages"], "s.mkv", "t.mkv",
@@ -51,8 +37,6 @@ def test_a_ticked_audio_track_survives_the_same_way():
 
 
 def test_the_track_chosen_to_play_first_is_the_one_that_plays_first():
-    """The same fault on the other control: the explicit choice was applied
-    and then the preferred language re-sorted the list behind it."""
     with trial(ENGLISH_ONLY):
         argv = mediafix.build(
             STREAMS, [mediafix.CHOSEN, "default_audio"], "s.mkv", "t.mkv",
@@ -63,16 +47,14 @@ def test_the_track_chosen_to_play_first_is_the_one_that_plays_first():
 
 
 def test_the_settings_still_apply_when_nobody_has_chosen_anything():
-    """The filters are not broken, only outranked. A file nobody has looked at
-    is exactly what they are for."""
+    """The filters are not broken, only outranked."""
     with trial(ENGLISH_ONLY):
         argv = mediafix.build(STREAMS, ["keep_subtitle_languages", "keep_audio_languages"], "s.mkv", "t.mkv", {})
     assert kept(argv) == ["0:0", "0:1", "0:3"], "English audio and English subtitle only"
 
 
 def test_choosing_subtitles_does_not_stop_the_audio_setting_applying():
-    """Per kind, not all or nothing. Picking subtitles by hand says nothing
-    about whether the audio setting should run."""
+    """Per kind, not all or nothing."""
     with trial(ENGLISH_ONLY):
         argv = mediafix.build(
             STREAMS, [mediafix.CHOSEN, "keep_subtitle_languages", "keep_audio_languages"], "s.mkv", "t.mkv",
@@ -83,8 +65,6 @@ def test_choosing_subtitles_does_not_stop_the_audio_setting_applying():
 
 
 def test_a_choice_that_would_leave_the_file_silent_is_refused():
-    """A rule that silences a film is worse than a spare dub, and that holds
-    whoever made the rule."""
     with trial(ENGLISH_ONLY):
         argv = mediafix.build(STREAMS, [mediafix.CHOSEN], "s.mkv", "t.mkv", {"audio": []})
     assert any(m in kept(argv) for m in ("0:1", "0:2"))
@@ -108,10 +88,7 @@ def an_item(subs, audio=None, container="mkv"):
 
 
 def test_a_step_says_which_tracks_it_would_drop():
-    """The panel showed a step reading "drop 79" above a list reading "keeping
-    90 of 90". Both were true and nobody can hold that. The positions come
-    from the code that decides rather than being worked out again in the
-    browser, which would be two sources of truth for one answer."""
+    """The panel showed a step reading "drop 79" above a list reading "keeping 90 of 90"."""
     subs = [
         {"codec": "subrip", "language": "eng", "location": "embedded"},
         {"codec": "subrip", "language": "fra", "location": "embedded"},
@@ -148,17 +125,12 @@ def test_the_audio_language_step_names_its_own_tracks():
 
 
 def test_a_step_that_drops_nothing_says_nothing():
-    """Adding a track is not dropping one, and a panel that greys something
-    out for it would be lying."""
     found = mediafix.plan(an_item([]))
     for step in found["steps"]:
         assert not step.get("drops_subtitles") and not step.get("drops_audio"), step["key"]
 
 
 def test_the_panel_can_tell_two_tracks_of_one_language_apart():
-    """The case that made the picker unusable: two rows both reading PGS eng
-    and no way to choose between them. All of this has been stored since
-    0.90.0 and the picker was never given it."""
     subs = [
         {"codec": "pgs", "language": "eng", "location": "embedded", "forced": True, "title": "Forced"},
         {"codec": "pgs", "language": "eng", "location": "embedded", "sdh": True, "default": True},

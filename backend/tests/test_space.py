@@ -1,11 +1,3 @@
-"""Library space: what it holds, what it gained, and what is left.
-
-The three are different questions with different answers. What it holds is a
-sum. What it gained can only come from having written yesterday down, so it is
-nothing rather than zero until there is history. What is left belongs to the
-disk, not the library, so two libraries on one share share one answer.
-"""
-
 from datetime import date, datetime, timedelta
 
 from tests.test_auth import claim

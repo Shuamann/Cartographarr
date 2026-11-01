@@ -1,12 +1,3 @@
-"""Plays written down from Plex as they finish, for an install with no Tautulli.
-
-Without these, an install on Plex alone had an empty History, an empty map and
-an empty Endpoints for ever, while it watched every stream go by. The counting
-has to agree with the Tautulli sync's, or every figure in the app moves the day
-somebody connects Tautulli: one row per Plex session, nothing too short to be a
-play, and never the same play twice.
-"""
-
 import asyncio
 
 from app.services import recorded, tracker
@@ -53,8 +44,7 @@ def plays():
 
 
 def test_a_finished_stream_becomes_one_play(client, monkeypatch):
-    """Paused in the middle is still one play, and the pause is not counted
-    as watching. The worst decision seen while it played is the one kept."""
+    """Paused in the middle is still one play, and the pause is not counted as watching."""
     from app.db import session_scope
     from app.models import User
 
@@ -89,8 +79,6 @@ def test_a_stream_opened_and_closed_is_not_a_play(client, monkeypatch):
 
 
 def test_two_sessions_are_two_plays(client, monkeypatch):
-    """Stopped and started again is a new session in Plex, and a new row in
-    the Tautulli sync too, which asks for one row per session."""
     no_tautulli(monkeypatch)
     claim(client)
     tracker.reset()
@@ -104,8 +92,7 @@ def test_two_sessions_are_two_plays(client, monkeypatch):
 
 
 def test_nothing_is_written_here_while_tautulli_writes_it(client):
-    """With Tautulli connected the sync records these plays. Writing them here
-    as well would count every one twice."""
+    """With Tautulli connected the sync records these plays."""
     claim(client)
     tracker.reset()
     tracker.observe([live()], now=T0)
@@ -115,9 +102,6 @@ def test_nothing_is_written_here_while_tautulli_writes_it(client):
 
 
 def test_tautulli_connected_later_replaces_the_plays_it_also_has(client, monkeypatch):
-    """An install that ran on Plex alone, then connected a Tautulli that had
-    been watching all along. The same play, from both, is one play, and
-    Tautulli's is the one kept: it carries more."""
     from app.db import session_scope
     from app.services import sync
 
@@ -143,8 +127,6 @@ def test_tautulli_connected_later_replaces_the_plays_it_also_has(client, monkeyp
 
 
 def test_the_sync_builds_devices_and_history_from_recorded_plays(client, monkeypatch):
-    """With no Tautulli the sync has nothing to read, but the devices, places
-    and sharing signals are built from plays, and those are here now."""
     from app import main
     from app.db import session_scope
     from app.models import Device

@@ -1,11 +1,3 @@
-"""What this server's remote viewers can actually take.
-
-The problem bitrate out of the box is a round number that knows nothing about
-any particular house. These check that the number offered instead is read from
-what has been recorded, and that nothing is offered when the recordings do not
-support one.
-"""
-
 from datetime import UTC, datetime, timedelta
 
 from tests.test_auth import claim

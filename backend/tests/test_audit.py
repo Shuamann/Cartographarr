@@ -1,10 +1,3 @@
-"""The audit log.
-
-What matters is what it refuses to keep: a secret typed into Settings must
-never end up readable in the log, which admins can browse and which outlives
-the setting itself.
-"""
-
 import json
 
 from tests.test_auth import claim

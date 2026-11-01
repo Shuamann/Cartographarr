@@ -1,12 +1,3 @@
-"""The library read from Plex instead of from Tautulli.
-
-The rows have to match the Tautulli scan's field for field, because the upsert,
-the size history and every list built on media_items read that shape. The two
-things Plex adds are the reason to switch: the file path, which the on-disk
-check and tidying need, and the external ids, which deep links and request
-matching need for titles nobody has played yet.
-"""
-
 import asyncio
 import json
 import xml.etree.ElementTree as ElementTree
@@ -56,8 +47,6 @@ def an_episode(**over):
 
 
 def test_the_row_has_every_field_the_tautulli_scan_writes():
-    """A field quietly missing would be a blank on a page rather than an
-    error, so the keys are compared rather than trusted."""
     row = library.row(a_film(), 1)
     assert TAUTULLI_KEYS <= set(row)
 
@@ -96,17 +85,14 @@ def test_an_episode_without_its_show_named_borrows_the_show_it_was_listed_under(
 
 
 def test_shows_seasons_and_tracks_are_not_stored_as_files():
-    """Only films and episodes are files. A show or a season stored as a row
-    would count in a library's size and turn up in lists of files."""
+    """Only films and episodes are files."""
     for kind in ("show", "season", "track", "artist", "photo", None):
         assert library.row(a_film(type=kind), 1) is None, kind
     assert library.row(a_film(ratingKey=None), 1) is None
 
 
 def test_an_item_with_no_media_or_no_parts_is_stored_without_file_details():
-    """Kept rather than skipped. The scan's sighting is what counts an item as
-    still in the library, so skipping one with no file listed would mark a
-    title as gone that Plex still has."""
+    """Kept rather than skipped."""
     for bare in (a_film(media=[]), a_film(media=None), a_film(media=[a_media(parts=[])])):
         row = library.row(bare, 1)
         assert row["rating_key"] == 4101 and row["title"] == "Paul"
@@ -125,12 +111,7 @@ def test_a_missing_id_leaves_only_that_one_empty():
 
 
 def test_a_blank_on_a_listed_item_does_not_fetch_it_again():
-    """plexapi reloads a listed item from the server whenever something read
-    from it is empty. A film with no year and no ids is common, and across a
-    library that would be thousands of quiet requests. A real plexapi object,
-    with a stand-in server that writes down anything asked of it, proves none
-    is made. The stand-in fails loudly as well, but that alone would prove
-    nothing: reading with getattr and a default swallows the failure."""
+    """plexapi reloads a listed item from the server whenever something read from it is empty."""
     from plexapi.video import Movie
 
     asked = []
@@ -179,9 +160,7 @@ def test_every_library_is_read_and_large_ones_are_paged():
 
 
 def test_the_setting_sends_the_scan_to_plex_and_the_rows_are_stored(client, monkeypatch):
-    """The setting was offered and read by nothing. This is the wire: with Plex
-    chosen the scan never asks Tautulli, and what Plex said ends up stored, ids
-    and paths included, with the day's library size written down as before."""
+    """The setting was offered and read by nothing."""
     from app import settings_store
     from app.db import session_scope
     from app.models import LibrarySize, MediaItem
@@ -210,10 +189,6 @@ def test_the_setting_sends_the_scan_to_plex_and_the_rows_are_stored(client, monk
 
 
 def test_a_request_is_never_matched_to_an_episode_by_tmdb_id(client):
-    """An episode's TMDB id is TMDB's id for the episode, a different number
-    space from the film or show a request names. With every episode in the
-    library carrying one, a film whose key changed could otherwise be matched
-    to an unrelated episode that happens to share the number."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services.library import match_requests
@@ -230,12 +205,6 @@ def test_a_request_is_never_matched_to_an_episode_by_tmdb_id(client):
     assert match_requests([request])["missing"][0]["title"] == "Paul"
 
 # ---- the tracks in a file ----------------------------------------------------
-#
-# Plex has no way to put these in a listing: asked for a section with
-# includeStreams=1 against a real server it returns the items and not one
-# Stream element. It does take a comma separated list of rating keys, which
-# Tautulli's API has no form for at all, so the same work is one request per
-# hundred files here against one request per file through Tautulli.
 
 
 DETAIL_KEYS = {
@@ -272,8 +241,6 @@ def with_tracks(**over):
 
 
 def test_a_detail_row_has_every_field_the_tautulli_one_writes():
-    """The same reasoning as the scan's row: a field quietly missing shows as a
-    blank on a page rather than as an error."""
     assert DETAIL_KEYS <= set(library.detail_row(with_tracks()))
 
 
@@ -286,10 +253,7 @@ def test_the_audio_tracks_come_back_in_order_with_what_is_kept_about_them():
 
 
 def test_everything_else_plex_says_about_a_track_is_kept_too():
-    """Tautulli passes on four things about a track. Plex says more, and the
-    rest was being thrown away: which track a player picks by default, what
-    the channels actually are rather than how many, and the track's own name.
-    """
+    """Tautulli passes on four things about a track."""
     streams = [
         a_stream(2, codec="eac3", channels=6, languageCode="eng", bitrate=768,
                  audioChannelLayout="5.1(side)", samplingRate=48000, profile="lc",
@@ -310,10 +274,7 @@ def test_everything_else_plex_says_about_a_track_is_kept_too():
 
 
 def test_what_plex_did_not_say_is_left_out_rather_than_written_down_as_no():
-    """Plex leaves these out instead of sending a no, and leaving them out
-    keeps that meaning. It is also the difference between a library of thirty
-    thousand files storing what is true about its tracks and storing tens of
-    megabytes of falses."""
+    """Plex leaves these out instead of sending a no, and leaving them out keeps that meaning."""
     row = library.detail_row(with_tracks())
     plain = json.loads(row["subtitle_tracks"])[1]
     assert set(plain) == {"codec", "language", "forced", "location"}
@@ -322,9 +283,7 @@ def test_what_plex_did_not_say_is_left_out_rather_than_written_down_as_no():
 
 
 def test_a_subtitle_beside_the_file_is_external_and_one_inside_it_is_not():
-    """Plex does not say which it is. A subtitle stored beside the file is
-    fetched by its own key and one inside the file has none, which was checked
-    against 1,100 tracks Tautulli had already described, with no exceptions."""
+    """Plex does not say which it is."""
     row = library.detail_row(with_tracks())
     assert json.loads(row["subtitle_tracks"]) == [
         {"codec": "srt", "language": "eng", "forced": False, "location": "external"},
@@ -333,10 +292,7 @@ def test_a_subtitle_beside_the_file_is_external_and_one_inside_it_is_not():
 
 
 def test_the_dynamic_range_is_said_the_way_four_years_of_rows_say_it():
-    """SDR, HDR10, Dolby Vision and Dolby Vision/HDR10 are Tautulli's words.
-    Rules and reports people have already written match on them, so this is
-    not the place to improve the vocabulary. Each was read off real files.
-    """
+    """SDR, HDR10, Dolby Vision and Dolby Vision/HDR10 are Tautulli's words."""
     sdr = a_stream(1, bitDepth=8)
     assert library._range(sdr) == "SDR"
     assert library._range(a_stream(1, colorTrc="smpte2084", bitDepth=10)) == "HDR10"
@@ -347,8 +303,7 @@ def test_the_dynamic_range_is_said_the_way_four_years_of_rows_say_it():
 
 
 def test_bt709_is_not_hdr():
-    """It is a transfer characteristic like any other and most files carry it.
-    Treating anything named as HDR would have called the whole library HDR."""
+    """It is a transfer characteristic like any other and most files carry it."""
     assert library._range(a_stream(1, colorTrc="bt709", bitDepth=8)) == "SDR"
 
 
@@ -379,10 +334,7 @@ class FakeServer:
 
 
 def test_the_keys_go_up_in_batches_rather_than_one_at_a_time(monkeypatch):
-    """The whole reason for reading these from Plex. One request per file is
-    what it costs through Tautulli, and that is 31,250 requests on this
-    library against 313.
-    """
+    """The whole reason for reading these from Plex."""
     items = [with_tracks(ratingKey=k) for k in range(1, 251)]
     fake = FakeServer(items)
     monkeypatch.setattr("app.plex.server.server", lambda: fake)
@@ -393,8 +345,6 @@ def test_the_keys_go_up_in_batches_rather_than_one_at_a_time(monkeypatch):
 
 
 def test_a_key_plex_no_longer_knows_gets_an_empty_row(monkeypatch):
-    """Without one, history keeps referencing a deleted item and the unread
-    filter asks about it again on every single run."""
     fake = FakeServer([with_tracks(ratingKey=1)])
     monkeypatch.setattr("app.plex.server.server", lambda: fake)
     rows = library.details([1, 2])
@@ -420,9 +370,7 @@ def test_a_batch_that_fails_does_not_take_the_rest_with_it(monkeypatch):
 
 
 def test_the_setting_sends_the_file_details_to_plex_too(client, monkeypatch):
-    """The scan knowing which source to use was only half of it. Reading the
-    tracks still went through Tautulli whatever the setting said, one request
-    per file, and that is the slow half of the whole job."""
+    """The scan knowing which source to use was only half of it."""
     from app import settings_store
     from app.db import session_scope
     from app.models import MediaItem

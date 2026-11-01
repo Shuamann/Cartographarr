@@ -1,20 +1,3 @@
-"""Moving a title from one library source to another.
-
-An array fills up and the answer is to move things off it. Radarr and Sonarr
-each move the files and update their own record in one operation, which nothing
-outside them can do correctly, so the app asks for that rather than moving
-anything itself.
-
-The shapes here were measured against a real Radarr 6.4.4 before any of it was
-written: root folders carry id, path, accessible and freeSpace and nothing
-else; a movie carries hasFile, sizeOnDisk, rootFolderPath and path, and its
-`status` is the release status, which says nothing about the file; and a queue
-row's useful field is trackedDownloadState, where a real queue had two rows
-whose status was "completed" and whose state was "importBlocked".
-
-Each test was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -88,9 +71,7 @@ def test_a_move_to_another_disk_is_allowed(service):
 
 
 def test_a_title_being_watched_is_not_moved(service, monkeypatch):
-    """Moving the files out from under a stream breaks it. The server is asked
-    rather than the stream table, because the table is one poll old and the
-    question is about the next few minutes."""
+    """Moving the files out from under a stream breaks it."""
     async def watching(key):
         return ["it is being watched right now by somebody"]
 
@@ -101,8 +82,6 @@ def test_a_title_being_watched_is_not_moved(service, monkeypatch):
 
 
 def test_not_knowing_what_is_playing_stops_it_too(service, monkeypatch):
-    """Not knowing is not the same as nobody watching, and a move is never
-    urgent enough to guess."""
     async def cannot(key):
         return ["this app cannot see what is playing right now (no server)"]
 
@@ -111,8 +90,7 @@ def test_not_knowing_what_is_playing_stops_it_too(service, monkeypatch):
 
 
 def test_a_download_in_the_queue_stops_it(service):
-    """Moving the folder while the service is importing into it is a race
-    nobody wins."""
+    """Moving the folder while the service is importing into it is a race nobody wins."""
     service.queue = [{"movieId": 7, "status": "completed", "trackedDownloadState": "importBlocked"}]
     answer = plan(service)
     assert answer["can_move"] is False
@@ -120,22 +98,18 @@ def test_a_download_in_the_queue_stops_it(service):
 
 
 def test_a_download_for_a_different_title_does_not_stop_it(service):
-    """Keyed on the title's own id. Stopping on anything in the queue would
-    stop every move whenever anything at all was downloading."""
+    """Keyed on the title's own id."""
     service.queue = [{"movieId": 999, "status": "downloading", "trackedDownloadState": "downloading"}]
     assert plan(service)["can_move"] is True
 
 
 def test_the_queue_is_described_as_a_person_would(service):
-    """A real queue had rows whose status was "completed" and whose state was
-    "importBlocked", and "Radarr is completed a download" is not a sentence."""
     service.queue = [{"movieId": 7, "status": "completed", "trackedDownloadState": "downloading"}]
     assert "Radarr is downloading something for it" in plan(service)["blockers"]
 
 
 def test_this_app_tidying_it_stops_it(service, monkeypatch):
-    """Tidying rewrites the file where it stands. Moving it at the same moment
-    is two things writing one file."""
+    """Tidying rewrites the file where it stands."""
     monkeypatch.setattr(moves, "_busy_here", lambda key: ["this app is tidying it, which rewrites the file"])
     assert plan(service)["can_move"] is False
 
@@ -166,26 +140,18 @@ def test_an_unknown_destination_is_refused(service):
 
 
 def test_moving_within_one_disk_warns_rather_than_refuses(service):
-    """Two roots on one disk report the same free space, and moving between
-    them frees nothing on the disk somebody is trying to empty. A warning, not
-    a refusal: moving a title between libraries on one disk is a reasonable
-    thing to want, and identical figures are a hint rather than proof."""
     answer = plan(service, to=ARRAY_TOO)
     assert answer["can_move"] is True
     assert any("one disk" in w for w in answer["warnings"])
 
 
 def test_every_reason_is_given_at_once(service, monkeypatch):
-    """Somebody deciding whether to wait wants to know everything they are
-    waiting for, not the first thing that happened to be checked."""
     service.queue = [{"movieId": 7, "status": "completed", "trackedDownloadState": "importing"}]
     monkeypatch.setattr(moves, "_busy_here", lambda key: ["this app is tidying it"])
     assert len(plan(service, item=movie(hasFile=False))["blockers"]) >= 3
 
 
 def test_the_move_checks_again_before_asking(service, monkeypatch):
-    """A plan somebody read for two minutes is a plan about the past, and the
-    things it checks are exactly the ones that start without warning."""
     asked: list = []
 
     async def watching(key):
@@ -199,9 +165,7 @@ def test_the_move_checks_again_before_asking(service, monkeypatch):
 
 
 def test_a_show_measures_itself_where_the_service_keeps_it():
-    """A film carries sizeOnDisk at the top; a series keeps it under
-    statistics. Reading only the top one measured every show as nought bytes,
-    which skips the check that the destination has room for it."""
+    """A film carries sizeOnDisk at the top; a series keeps it under statistics."""
     series = {"statistics": {"sizeOnDisk": 50_000_000_000, "episodeFileCount": 40}}
     assert moves.size_of(series) == 50_000_000_000
     assert moves.size_of({"sizeOnDisk": 4_000_000_000}) == 4_000_000_000
@@ -209,8 +173,6 @@ def test_a_show_measures_itself_where_the_service_keeps_it():
 
 
 def test_a_show_says_it_has_files_the_way_a_series_does():
-    """A series never says hasFile, so asking only for that made every show
-    look like it had nothing to move and refused the move outright."""
     assert moves.has_files({"statistics": {"episodeFileCount": 40}}) is True
     assert moves.has_files({"statistics": {"episodeFileCount": 0, "sizeOnDisk": 0}}) is False
     assert moves.has_files({"hasFile": True}) is True
@@ -218,9 +180,6 @@ def test_a_show_says_it_has_files_the_way_a_series_does():
 
 
 def test_a_show_can_be_seen_to_land():
-    """Without this a show move sat until the eight hour ceiling gave up on
-    it, while the files had in fact arrived: nothing could ever see a series
-    as landed, because the test asked for a field a series does not have."""
     landed = {"rootFolderPath": "/nas/tv", "path": "/nas/tv/A Show",
               "statistics": {"episodeFileCount": 40, "sizeOnDisk": 5}}
     assert moves.has_landed(landed, "/nas/tv") is True
@@ -229,20 +188,11 @@ def test_a_show_can_be_seen_to_land():
 
 
 def test_a_series_is_known_from_a_film():
-    """Said out loud wherever a move is shown, because one path per series
-    means asking about an episode moves the show and a season cannot go
-    anywhere on its own."""
     assert moves.is_a_show({"statistics": {"sizeOnDisk": 1}}) is True
     assert moves.is_a_show({"sizeOnDisk": 1, "movieFile": {"path": "/a"}}) is False
 
 
 def test_the_new_folder_is_sent_and_not_only_the_new_root(service, monkeypatch):
-    """The service decides whether there is anything to move by comparing the
-    path it is sent with the one it holds. Sending a new rootFolderPath and
-    leaving path alone is asking it to move a title to where it already is: it
-    answers 202, writes nothing in its own history, and nothing moves. A real
-    move asked for that way looked like it had worked and had not happened.
-    """
     sent = {}
 
     class Reply:
@@ -273,8 +223,7 @@ def test_the_new_folder_is_sent_and_not_only_the_new_root(service, monkeypatch):
 
 
 def test_the_folder_name_is_kept(service, monkeypatch):
-    """Only the disk changes. Rebuilding the folder name from the title would
-    rename somebody's library as a side effect of moving it."""
+    """Only the disk changes."""
     sent = {}
 
     class Reply:
@@ -303,10 +252,7 @@ def test_the_folder_name_is_kept(service, monkeypatch):
 
 
 def test_plex_is_not_told_while_the_files_are_still_copying(service, monkeypatch):
-    """A 22 GB copy takes minutes. Telling Plex the moment the service
-    accepted the request meant a scan that ran before a byte had moved, found
-    the file in neither folder, and left Plex and this app both saying it was
-    somewhere it is not."""
+    """A 22 GB copy takes minutes."""
     told = []
 
     class Reply:
@@ -334,9 +280,6 @@ def test_plex_is_not_told_while_the_files_are_still_copying(service, monkeypatch
 
 
 def test_the_row_is_read_back_rather_than_guessed(client, monkeypatch):
-    """Plex and the service see the same disks through different mounts, so
-    the path the service reports is not one this container could open.
-    Writing it into the row would record a path nothing can find."""
     from app.db import session_scope
     from app.models import MediaItem
 
@@ -360,9 +303,7 @@ def test_the_row_is_read_back_rather_than_guessed(client, monkeypatch):
 
 
 def test_plex_still_saying_the_old_folder_is_not_an_answer(client, monkeypatch):
-    """Its scan has not finished. Writing that down is recording an answer
-    that was never true, and saying so is the difference between waiting and
-    believing."""
+    """Its scan has not finished."""
     from app.db import session_scope
     from app.models import MediaItem
 
@@ -375,11 +316,6 @@ def test_plex_still_saying_the_old_folder_is_not_an_answer(client, monkeypatch):
 
 
 def test_a_renumbered_item_stops_being_in_the_library(client, monkeypatch):
-    """A move makes Plex take the file in as a new thing with a new number,
-    and the old number stops existing: measured on a real move, it answered
-    404 every time. Saying nothing would leave the card naming the disk the
-    file left, for as long as six hours, beside a panel reading the new one.
-    """
     from datetime import UTC, datetime
 
     from app.db import session_scope
@@ -414,8 +350,6 @@ def test_a_renumbered_item_stops_being_in_the_library(client, monkeypatch):
 
 
 def test_already_there_is_an_answer_and_not_a_delay(service):
-    """It will never stop being true, so the queue must not keep its place
-    and say it is waiting its turn."""
     answer = plan(service, to=ARRAY)
     assert answer["can_move"] is False
     assert "it is already there" in answer["settled"]
@@ -452,8 +386,7 @@ def test_a_download_going_for_it_is_a_delay(service):
 
 
 def test_every_reason_is_still_listed_whichever_kind_it_is(service):
-    """Somebody reading the row wants all of them, not the ones that happen
-    to be delays."""
+    """Somebody reading the row wants all of them, not the ones that happen to be delays."""
     answer = plan(service, to=ARRAY, item=movie(hasFile=False))
     assert len(answer["blockers"]) >= 2
     assert set(answer["settled"]) <= set(answer["blockers"])

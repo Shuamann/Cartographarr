@@ -1,10 +1,3 @@
-"""Responses are compressed on the way out.
-
-JSON takes it better than almost anything, being mostly repeated key names:
-this server's largest response is 420 KB uncompressed and 24 KB gzipped. The
-front end is served from the same app, so the bundle gains too.
-"""
-
 from tests.test_auth import claim
 
 

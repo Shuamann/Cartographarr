@@ -1,9 +1,3 @@
-"""Condition trees.
-
-Rules stop people's streams, so most of these check that something does NOT
-match: an unknown value, a negated group, an empty group.
-"""
-
 from datetime import datetime
 
 import pytest

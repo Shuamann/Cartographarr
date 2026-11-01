@@ -1,12 +1,3 @@
-"""Every destination on the front page has an icon.
-
-The icons are keyed on the tab rather than on its label, because the label has
-changed once already: what the code calls Endpoints has been shown as People.
-A page added to the front page without an entry in that map would fall back to
-the dashboard mark, so six entries would read as five and a repeat, and
-nothing would fail.
-"""
-
 import pathlib
 import re
 
@@ -40,9 +31,6 @@ def test_every_destination_has_an_icon():
 
 
 def test_issues_is_the_warning_one():
-    """It is the one thing on that page somebody has to notice without reading
-    it, so it is a triangle in the warning colour rather than a line drawing
-    of the page it opens."""
     if not ICONS.exists():
         return
     source = ICONS.read_text(encoding="utf-8")
@@ -51,9 +39,6 @@ def test_issues_is_the_warning_one():
 
 
 def test_the_warning_colour_is_a_token_that_exists():
-    """`--bg-2` was invented once and defined nowhere, and the thing that
-    asked for it simply had no colour. A warning that does not show is worse
-    than one drawn in the wrong shade."""
     css = (FRONTEND / "theme" / "app.css").read_text(encoding="utf-8")
     tokens = (FRONTEND / "theme" / "tokens.css").read_text(encoding="utf-8")
     assert ".tab-icon-warn" in css, "the warning icon has lost its rule"
@@ -63,9 +48,6 @@ def test_the_warning_colour_is_a_token_that_exists():
 
 
 def test_the_icons_are_one_set():
-    """Six marks at six weights read as six borrowed logos rather than a set,
-    which is the whole reason these are drawn here instead of taken from
-    somewhere."""
     if not ICONS.exists():
         return
     source = ICONS.read_text(encoding="utf-8")

@@ -1,6 +1,3 @@
-"""The whole library, watched or not: listed quickly, tracks read after, and
-files that change or leave Plex handled."""
-
 import asyncio
 from datetime import UTC, datetime
 

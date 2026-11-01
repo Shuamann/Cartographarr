@@ -1,13 +1,3 @@
-"""Finding a library under a mounted root, rather than being told where it is.
-
-Plex reports a path from the server's point of view, `/movies/A Film/a.mkv`,
-and the container sees whatever was mounted into it. Rather than one mount per
-library and a pair typed in for each, the app is given the directory they all
-sit in and works the rest out by looking. These are the shapes that looking has
-to cope with: the library under the root, the root that is itself the library,
-two roots, and a path that is nowhere at all.
-"""
-
 from app.services import mediafix
 from app.settings_store import trial
 from tests.test_auth import claim
@@ -166,11 +156,7 @@ def test_the_search_reaches_a_library_one_level_further_down(tmp_path):
 
 
 def test_a_library_really_absent_stops_being_searched_for(tmp_path, monkeypatch):
-    """A walk per file would be a walk per row on a page listing two hundred.
-
-    A few goes, because the first file tried may be the one deleted this
-    morning, and then it leaves the roots alone.
-    """
+    """A walk per file would be a walk per row on a page listing two hundred."""
     root = make(tmp_path, "Films/A Film/a.mkv")
     import os
 

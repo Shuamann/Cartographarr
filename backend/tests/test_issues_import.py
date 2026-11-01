@@ -1,12 +1,3 @@
-"""Bringing in what Seerr holds, so that turning Seerr off loses nothing.
-
-A report is somebody saying something is wrong. The import has to put it
-against the right file when it can, keep it when it cannot, never bring the
-same one in twice, and never lose one because Seerr forgot it. And it has to
-say what it did in parts, because a single number cannot tell "nothing new"
-from "nothing matched".
-"""
-
 import asyncio
 
 from tests.test_auth import claim
@@ -65,8 +56,6 @@ def test_the_answer_says_what_was_new_and_what_was_already_here(client, monkeypa
 
 
 def test_a_film_plex_renumbered_is_found_by_its_ids(client, monkeypatch):
-    """The rating key Seerr kept no longer exists here, but the library carries
-    the TMDB and IMDb ids of every title, played or not."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import issues as service
@@ -84,9 +73,6 @@ def test_a_film_plex_renumbered_is_found_by_its_ids(client, monkeypatch):
 
 
 def test_a_show_is_found_by_its_own_id_and_then_by_its_name(client, monkeypatch):
-    """An episode carries its own ids, not the show's, so a show is found
-    through a show row where there is one, and otherwise by the name Seerr
-    gives it with the season and episode numbers."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import issues as service
@@ -111,8 +97,6 @@ def test_a_show_is_found_by_its_own_id_and_then_by_its_name(client, monkeypatch)
 
 
 def test_a_name_that_fits_two_shows_is_not_a_match(client, monkeypatch):
-    """A guess at a file is worse than no file: the report would sit against
-    somebody else's show and its evidence would be wrong."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import issues as service
@@ -131,8 +115,7 @@ def test_a_name_that_fits_two_shows_is_not_a_match(client, monkeypatch):
 
 
 def test_a_report_with_no_file_is_kept_and_named(client, monkeypatch):
-    """Somebody telling you something is wrong. Losing it because the title
-    moved is the wrong trade, so it is kept, under the name Seerr knows."""
+    """Somebody telling you something is wrong."""
     from app.services import issues as service
 
     claim(client)
@@ -165,9 +148,7 @@ def test_comments_come_across_with_who_said_them_and_when(client, monkeypatch):
 
 
 def test_seerr_answering_with_nothing_loses_nothing(client, monkeypatch):
-    """A Seerr reinstalled at the same address answers with an empty list. That
-    used to delete every report it had ever given. Now each is kept and marked,
-    and a change to one goes nowhere near a Seerr that no longer has it."""
+    """A Seerr reinstalled at the same address answers with an empty list."""
     from app.services import issues as service
 
     claim(client)

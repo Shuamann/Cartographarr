@@ -1,13 +1,3 @@
-"""What tidying leaves behind: the file, its name, and what the app then knows.
-
-Every other test in test_mediafix.py checks the command. These check the two
-things that happen after it runs and that only matter once a real file has gone
-through: which file exists at the end, and whether anything was told.
-
-The whole suite used `in.mkv` and `out.mkv`, so the branch that renames a file
-and deletes the original had never been exercised at all.
-"""
-
 import json
 import os
 from types import SimpleNamespace
@@ -31,10 +21,6 @@ def item(**over):
 
 
 # ---- the name the result is written under -----------------------------------
-#
-# The container is the file's own unless repackaging was one of the steps. The
-# suffix of the temporary file is what decides it, since that is what ffmpeg
-# reads to choose a muxer, so this is really a test of that decision.
 
 
 def suffix_for(source: str, steps: list[str]) -> str:
@@ -43,8 +29,6 @@ def suffix_for(source: str, steps: list[str]) -> str:
 
 
 def test_an_mp4_tidied_for_its_subtitles_stays_an_mp4():
-    """The case that used to delete the file: mp4 is a modern container, the
-    plan never offers to repackage it, and tidying it rewrote it as mkv."""
     assert suffix_for("/movies/A Film/a.mp4", ["subtitle_clutter"]) == ".mp4"
 
 

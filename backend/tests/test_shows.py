@@ -1,11 +1,3 @@
-"""Television browsed as show, season, episode.
-
-The scan stores films and episodes and nothing between: a show and a season
-have no file and take up no room, so there is no row for either. But every
-episode carries the keys and the numbers that say where it belongs, so both
-levels are a GROUP BY rather than something to go and fetch.
-"""
-
 import time
 
 from tests.test_auth import claim
@@ -123,9 +115,6 @@ def a_request(key, who="shua", tmdb=None):
 
 
 def test_requests_with_no_file_are_their_own_list(client, monkeypatch):
-    """Seerr saying a request arrived, and the library having no such file, is
-    a different problem from nobody having watched it. Side by side they read
-    as the same thing, and the second is the more actionable one."""
     from app.db import session_scope
     from app.models import MediaItem
 
@@ -161,8 +150,7 @@ def test_two_people_asking_for_one_film_is_one_row(client, monkeypatch):
 
 
 def test_a_title_whose_key_changed_is_still_named(client, monkeypatch):
-    """Plex can give the same film a new key. Seerr remembers the old one, and
-    the id finds it anyway, so the row reads as a film rather than a number."""
+    """Plex can give the same film a new key."""
     from app.db import session_scope
     from app.models import MediaItem
 
@@ -181,8 +169,7 @@ def test_a_title_whose_key_changed_is_still_named(client, monkeypatch):
 
 
 def test_a_request_carries_somewhere_to_go(client, monkeypatch):
-    """A row named a film and offered nothing to do about it. A missing id
-    means no button rather than one that goes nowhere."""
+    """A row named a film and offered nothing to do about it."""
     from app.db import session_scope
     from app.models import MediaItem
 

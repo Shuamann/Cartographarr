@@ -1,16 +1,3 @@
-"""Tidying more than one file.
-
-The feature only ever worked one file at a time, opened by hand, and the list
-of files it is for runs to two hundred. That is two hundred openings, which is
-why it has never been used on more than a handful.
-
-Each file is queued as its own job with its own steps, worked out from that
-file: one with styled subtitles and one with twenty duplicates do not want the
-same thing done to them. Its own job also means the queue says which file it
-is on, any of them can be stopped, and a failure on the fourth does not take
-the rest with it.
-"""
-
 import json
 
 from tests.test_auth import claim
@@ -37,8 +24,6 @@ def ready(monkeypatch, rows):
 
 
 def test_a_dry_run_queues_nothing_and_says_what_it_would_do(client, monkeypatch):
-    """The question has to be answered with what will actually happen to which
-    files, not with a number."""
     from app.db import session_scope
     from app.models import MediaJob
 
@@ -95,8 +80,6 @@ def test_a_file_with_nothing_worth_doing_is_named_rather_than_counted_in(client,
 
 
 def test_one_job_each_rather_than_one_job_for_the_lot(client, monkeypatch):
-    """So the queue says which file it is on, any of them can be stopped, and
-    a failure on the fourth does not take the rest with it."""
     from app.db import session_scope
     from app.models import MediaJob
 
@@ -134,15 +117,12 @@ def test_a_file_the_container_cannot_reach_is_reported_and_the_rest_carry_on(cli
 
 
 def test_only_the_lists_this_makes_sense_for(client):
-    """The room list is about deleting files, not tidying them, and tidying
-    everything on it would be the opposite of what somebody meant."""
     claim(client)
     assert client.post("/api/library/tidy/many", json={"kind": "room"}).status_code == 400
 
 
 def test_it_is_capped(client, monkeypatch):
-    """This rewrites whole films. A mistake at four hundred files is a
-    different kind of mistake from one at ten."""
+    """This rewrites whole films."""
     from app.services import cleanup, mediafix
 
     claim(client)

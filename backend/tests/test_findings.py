@@ -1,6 +1,3 @@
-"""What is wrong with a file and how to fix it, and handing it to Radarr or
-Sonarr. The Radarr and Sonarr APIs are faked; nothing real is searched."""
-
 import json
 
 from tests.test_auth import claim
@@ -125,8 +122,6 @@ def test_search_and_tag_go_to_the_right_app(client, monkeypatch):
 
 
 def test_reasons_for_older_plays_are_read_from_tautulli(client, monkeypatch):
-    """Plays from before live recording have no reasons; Tautulli's per-play
-    stream details supply them."""
     import time
 
     from app.db import session_scope
@@ -158,8 +153,6 @@ def test_reasons_for_older_plays_are_read_from_tautulli(client, monkeypatch):
 
 
 def test_a_stream_that_kept_stalling_is_explained_as_one():
-    """The commonest stall shape needs its own words, or every file it touches
-    reads as "no pattern yet"."""
     from app.services.findings import explain
 
     file = {"title": "A Film", "media_type": "movie", "file_bitrate": 9000, "plays": 4, "remote_plays": 4,

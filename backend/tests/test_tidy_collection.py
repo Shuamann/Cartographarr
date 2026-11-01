@@ -1,20 +1,3 @@
-"""Tidying a whole collection.
-
-The bulk tidy only ever took the name of an attention list: a list of files
-that share one fault. A collection is the other way round. It is a list of
-titles somebody wrote down because they belong together, and the faults in it
-are whatever each file happens to have, which is exactly what this already
-copes with, since every file's steps are worked out from that file.
-
-Two things are easy to get wrong here and both have their own test. Plex files
-a collection against a film or a show and never against an episode, so a
-collection on a show reaches nothing at all unless the lookup goes through the
-grandparent. And the cap exists because this rewrites whole films: the largest
-collection on a real library holds 1,727 titles against the next one's 42, so
-a collection over the cap has to say so rather than quietly becoming its first
-two hundred.
-"""
-
 from __future__ import annotations
 
 import json
@@ -65,14 +48,7 @@ def ready(monkeypatch):
 
 
 def test_a_collection_on_a_show_reaches_that_shows_episodes(client, monkeypatch):
-    """Plex files a collection against the show, not against each episode.
-
-    Written because the obvious lookup, media_tags joined on the file's own
-    rating key, answers nothing for a collection of shows: the tag names the
-    show's key and no episode carries it. The collection would come back
-    empty, which reads as an empty collection rather than as a question asked
-    at the wrong level.
-    """
+    """Plex files a collection against the show, not against each episode."""
     claim(client)
     with session_scope() as db:
         episode(db, 11, show=10, season=100, title="Pilot")
@@ -87,8 +63,6 @@ def test_a_collection_on_a_show_reaches_that_shows_episodes(client, monkeypatch)
 
 
 def test_a_seasons_own_tag_also_reaches_its_episodes(client, monkeypatch):
-    """The same lookup through the parent, for the rarer case where Plex has
-    filed the collection against a season."""
     claim(client)
     with session_scope() as db:
         episode(db, 11, show=10, season=100, title="Pilot")
@@ -102,15 +76,7 @@ def test_a_seasons_own_tag_also_reaches_its_episodes(client, monkeypatch):
 
 
 def test_a_collection_over_the_cap_is_refused_by_name_rather_than_cut_down(client, monkeypatch):
-    """The cap exists because this rewrites whole films.
-
-    An attention list is ordered worst first, so taking its first two hundred
-    is taking the two hundred worth doing. A collection is ordered by nothing
-    of the sort, so the same silent cut would mean somebody asking to tidy a
-    box set got an arbitrary slice of it and no word that the rest was left.
-    Written because that is exactly what reusing the list path would do: the
-    limit there is clamped, never checked.
-    """
+    """The cap exists because this rewrites whole films."""
     from app.models import MediaJob
     from app.routers.library import MANY_CAP
 
@@ -131,9 +97,7 @@ def test_a_collection_over_the_cap_is_refused_by_name_rather_than_cut_down(clien
 
 
 def test_a_collection_at_the_cap_is_still_done(client, monkeypatch):
-    """The refusal is for more than the cap, not for the cap itself. An
-    off-by-one here turns a collection somebody can tidy into one they
-    cannot, with nothing in the message to say which."""
+    """The refusal is for more than the cap, not for the cap itself."""
     from app.routers.library import MANY_CAP
 
     claim(client)
@@ -149,12 +113,7 @@ def test_a_collection_at_the_cap_is_still_done(client, monkeypatch):
 
 
 def test_each_file_in_the_collection_still_gets_its_own_steps(client, monkeypatch):
-    """What makes a collection a sensible thing to hand this at all.
-
-    A collection has no fault in common, so one rule applied to all of it
-    would be wrong for most of it. Written to hold the collection path to the
-    same promise the list path makes.
-    """
+    """What makes a collection a sensible thing to hand this at all."""
     claim(client)
     with session_scope() as db:
         film(db, 1, "Styled", STYLED)
@@ -169,8 +128,6 @@ def test_each_file_in_the_collection_still_gets_its_own_steps(client, monkeypatc
 
 
 def test_the_dry_run_answers_first_and_totals_the_whole_lot(client, monkeypatch):
-    """Same contract as the list path: nothing queued, and what the lot would
-    come to in bytes, so the question is a decision rather than a count."""
     from app.models import MediaJob
 
     claim(client)
@@ -205,8 +162,7 @@ def test_it_really_queues_one_job_each(client, monkeypatch):
 
 
 def test_a_name_nobody_has_is_said_so(client, monkeypatch):
-    """Rather than answering zero files, which reads as a collection that
-    happens to be tidy."""
+    """Rather than answering zero files, which reads as a collection that happens to be tidy."""
     claim(client)
     ready(monkeypatch)
 
@@ -216,9 +172,6 @@ def test_a_name_nobody_has_is_said_so(client, monkeypatch):
 
 
 def test_the_name_is_matched_ignoring_case(client, monkeypatch):
-    """The kept collections setting matches ignoring case, and a name typed
-    into a rule, or picked from a list built at a different time, should not
-    miss for a capital letter."""
     claim(client)
     with session_scope() as db:
         film(db, 1, "One")
@@ -231,9 +184,7 @@ def test_the_name_is_matched_ignoring_case(client, monkeypatch):
 
 
 def test_naming_a_collection_wins_over_the_list_kind(client, monkeypatch):
-    """`kind` has a default, so an unasked question cannot be told from a
-    deliberate one. Written because reading both would mean a request about a
-    collection silently tidying the messy list instead."""
+    """`kind` has a default, so an unasked question cannot be told from a deliberate one."""
     from app.services import cleanup
 
     claim(client)

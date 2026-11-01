@@ -1,9 +1,3 @@
-"""The ban list.
-
-It stops streams, so what matters is that it catches the banned device and
-nothing else, and that it goes through the same path as every other rule.
-"""
-
 import json
 
 from tests.test_auth import claim
@@ -113,8 +107,6 @@ def test_record_only_is_per_rule_and_new_rules_start_recording_only(client):
     assert enforcer.record_only(Rule(id=99, name="old", record_only=None)) is True
 
     # The ban list acts out of the box, unlike a rule. Somebody opened a
-    # dialog, named one device, typed a reason and chose how long; reading that
-    # as "record it and let the stream carry on" is the feature not working.
     assert client.get("/api/bans/settings").json()["record_only"] is False
     assert client.put("/api/bans/settings", json={"record_only": True}).json()["record_only"] is True
     assert client.put("/api/bans/settings", json={"record_only": False}).json()["record_only"] is False
@@ -146,15 +138,7 @@ def test_ban_reason_is_logged_and_can_be_changed(client):
 
 
 def test_a_ban_still_acts_when_rules_are_switched_off(client, monkeypatch):
-    """Run rules governs the rules somebody wrote, not the ban list.
-
-    The ban list is enforced by the same sweep that runs the rules, and the
-    switch used to return before that sweep had even assembled it. So turning
-    off one noisy rule quietly stopped every ban on the server, with nothing
-    anywhere saying so. It is the shape of fault this app has already been
-    bitten by: a safety default that cannot be told apart from a broken
-    feature.
-    """
+    """Run rules governs the rules somebody wrote, not the ban list."""
     import asyncio
 
     from app.db import session_scope
@@ -182,8 +166,6 @@ def test_a_ban_still_acts_when_rules_are_switched_off(client, monkeypatch):
 
 
 def test_a_rule_does_not_act_when_rules_are_switched_off(client, monkeypatch):
-    """The other half of the same switch, so this cannot be read as having
-    quietly turned rules back on."""
     import asyncio
     import json as _json
 

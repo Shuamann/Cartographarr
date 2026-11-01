@@ -1,10 +1,3 @@
-"""Reports.
-
-The numbers have to be right (a split must not change a row's total, and
-averages must not be summed), every preset has to run, and a viewer must not
-be able to use a report to see what privacy hides elsewhere.
-"""
-
 from datetime import UTC, datetime
 
 from tests.test_auth import claim
@@ -192,8 +185,6 @@ def test_file_details_streams_and_server_load(client):
 
 
 def test_reports_can_be_charted(client):
-    """A pile of reports should answer what went wrong, about what, and
-    whether anyone dealt with it."""
     from datetime import UTC, datetime, timedelta
 
     from app.db import session_scope
@@ -217,8 +208,7 @@ def test_reports_can_be_charted(client):
     by_title = client.get("/api/reports/run?source=issues&measure=reports&group=title&range=30").json()
     assert [row["label"] for row in by_title["rows"]] == ["Film"]
 def test_the_library_itself_can_be_reported_on(client):
-    """Space, counts and what has never been played, from the files rather
-    than the plays."""
+    """Space, counts and what has never been played, from the files rather than the plays."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import reports

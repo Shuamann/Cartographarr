@@ -1,13 +1,3 @@
-"""Every setting on the Settings page has a name written for a person.
-
-A setting with no entry in the label map is drawn under its own key, so the
-page reads "server_alert_minutes" where everything beside it reads "Warn when
-free space is under". It looks like a bug in the page rather than a line
-somebody forgot, and it is invisible until the page is opened and looked at,
-which is how it happened: two settings shipped that way and were caught in a
-screenshot.
-"""
-
 import pathlib
 import re
 
@@ -15,9 +5,6 @@ SETTINGS = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "r
 
 DRAWN_THEMSELVES = {
     # These two are listed in their section so the page knows they belong to
-    # it, and are then drawn by their own components, which carry their own
-    # headings and never ask the label map for anything. A colour wheel and a
-    # theme editor are not a text box with a name beside it.
     "accent_color",
     "theme_colors",
 }
@@ -32,10 +19,7 @@ def listed_keys(source: str) -> list[str]:
 
 
 def labelled(source: str) -> set[str]:
-    """Every key the label map names. Taken from the whole file rather than
-    from one object, because a key labelled anywhere is a key the page can
-    draw a name for, and pinning this to one variable name would break the
-    moment it was renamed."""
+    """Every key the label map names."""
     return set(re.findall(r'^\s{2}([a-z0-9_]+):\s*"', source, re.M))
 
 
@@ -68,7 +52,5 @@ const NAMES: Record<string, string> = {
 
 
 def test_the_check_does_not_mistake_a_nested_object_for_a_label():
-    """The units map holds objects, not names, and counting those as labels
-    would pass a setting that has a unit and no name."""
     source = '  server_alert_minutes: { unit: "minutes", min: 0, max: 1440, step: 1 },'
     assert labelled(source) == set()

@@ -1,6 +1,3 @@
-"""Reported issues: read from Seerr, landed on the right file, and shown with
-the evidence this app already holds."""
-
 import asyncio
 from datetime import UTC, datetime, timedelta
 
@@ -90,9 +87,7 @@ def test_an_episode_report_lands_on_the_episode_with_its_evidence(client, monkey
 
 
 def test_a_row_says_whose_problem_it_looks_like(client, monkeypatch):
-    """The question behind most reports is whether it is the file or the person.
-    The reporter stalling while somebody else played it cleanly is the first
-    thing worth knowing, so the row carries it rather than the detail alone."""
+    """The question behind most reports is whether it is the file or the person."""
     from app.services import issues as service
 
     claim(client)
@@ -107,9 +102,7 @@ def test_a_row_says_whose_problem_it_looks_like(client, monkeypatch):
 
 
 def test_a_row_can_shorten_its_title_without_losing_the_episode(client, monkeypatch):
-    """A report keeps one string, "Show - Episode". Cut from the end, a long
-    show name pushes out the episode, which is the part being reported, so the
-    row is given the parts and decides what gives way."""
+    """A report keeps one string, "Show - Episode"."""
     from app.services import issues as service
 
     claim(client)
@@ -164,10 +157,6 @@ def test_a_movie_report_and_one_with_no_match(client, monkeypatch):
 
 
 def test_a_placeholder_row_does_not_put_a_title_back_in_the_library(client, monkeypatch):
-    """Asking Plex for a key it no longer has writes an empty row, so the same
-    question is not asked forever. Drawing the row's artwork asks that
-    question, so a report on a removed film read "Not in the library" until
-    the page was looked at, and then stopped saying so."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import issues as service
@@ -184,8 +173,7 @@ def test_a_placeholder_row_does_not_put_a_title_back_in_the_library(client, monk
 
 
 def test_a_viewer_sees_and_reports_only_their_own(client):
-    """Somebody who watches here can say what went wrong, and sees what they
-    said. Not other people's reports, not who else watched it, not the path."""
+    """Somebody who watches here can say what went wrong, and sees what they said."""
     from app.db import session_scope
     from app.models import History, MediaItem
 
@@ -296,8 +284,7 @@ def test_an_issue_can_be_raised_here_without_seerr(client):
 
 
 def test_an_issue_from_seerr_is_acted_on_here_without_seerr_configured(client, monkeypatch):
-    """Seerr may have been turned off since a report came in. The decision
-    still stands here, and nothing is posted to a service that is not there."""
+    """Seerr may have been turned off since a report came in."""
     from app.services import issues as service
 
     claim(client)
@@ -436,8 +423,7 @@ def test_a_replacement_landing_closes_what_was_reported(client, monkeypatch):
 
 
 def test_a_report_on_something_no_longer_in_plex_still_opens(client, monkeypatch):
-    """Plex loses the item, Seerr stops naming a rating key, and the report
-    stands. The page has to open anyway, with nothing attached."""
+    """Plex loses the item, Seerr stops naming a rating key, and the report stands."""
     from app.services import issues as service
 
     claim(client)
@@ -506,12 +492,7 @@ def test_films_are_found_by_name(client):
 
 
 def fake_notifier(monkeypatch):
-    """Catch what would be sent, without sending it.
-
-    Patched on the class, not the instance: undoing an instance patch leaves
-    the class's own function sitting on the object, and the next test to send
-    anything calls it without its self.
-    """
+    """Catch what would be sent, without sending it."""
     from app.integrations.notify import apprise_notifier
 
     sent: list[tuple[str, str]] = []
@@ -576,10 +557,7 @@ def test_alerts_can_be_switched_off(client, monkeypatch):
 
 
 def test_a_comment_from_seerr_is_signed_by_who_wrote_it(client, monkeypatch):
-    """Seerr's users are Plex logins, but a comment does not always carry the
-    whole user. One with only a Plex id is named from this app's users, one
-    with only a Seerr id is named from wherever else that person appeared, and
-    neither reads as "someone"."""
+    """Seerr's users are Plex logins, but a comment does not always carry the whole user."""
     from app.services import issues as service
 
     claim(client)
@@ -599,9 +577,7 @@ def test_a_comment_from_seerr_is_signed_by_who_wrote_it(client, monkeypatch):
 
 
 def test_a_quiet_sync_does_not_unsay_a_name(client, monkeypatch):
-    """The issue is read in full when it changes and from Seerr's list the rest
-    of the time. The list can carry less, and a sync with nothing new to say
-    was replacing named comments with unnamed ones."""
+    """The issue is read in full when it changes and from Seerr's list the rest of the time."""
     from app.services import issues as service
 
     claim(client)
@@ -647,8 +623,7 @@ def test_an_unsigned_first_comment_is_the_reporters(client):
 
 
 def test_a_film_is_not_a_special(client, monkeypatch):
-    """Seerr sends season 0 and episode 0 for a film. Read as numbers, that is
-    "Special, episode 0" on a film."""
+    """Seerr sends season 0 and episode 0 for a film."""
     from app.services import issues as service
 
     claim(client)

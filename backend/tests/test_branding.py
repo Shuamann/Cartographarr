@@ -1,11 +1,3 @@
-"""Branding uploads.
-
-The interesting part is the split: anyone may read a logo, because the sign-in
-page needs it before there is a session, but only an admin may change one.
-Getting that backwards either breaks the sign-in page or lets a stranger
-replace the branding.
-"""
-
 import struct
 import zlib
 

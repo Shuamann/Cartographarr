@@ -1,6 +1,3 @@
-"""Background tasks: every run recorded, failures kept with their error, and
-the few-second sweep not flooding the history."""
-
 import asyncio
 
 from tests.test_auth import claim

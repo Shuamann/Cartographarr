@@ -1,14 +1,3 @@
-"""Say what has been written down, not nothing until a week of it exists.
-
-Every library read "no history yet this week" while the line underneath said
-four days were written down, which is a page disagreeing with itself. It was
-also withholding a real answer: Movies had gained 1.4 TB and 183 files over
-those four days.
-
-A figure measured over three days is still not a week's, so the page says how
-long it covers rather than quietly calling it one.
-"""
-
 from datetime import date, timedelta
 
 from tests.test_auth import claim
@@ -54,8 +43,7 @@ def test_a_few_days_of_history_is_used_rather_than_withheld(client):
 
 
 def test_a_full_week_is_compared_against_the_week(client):
-    """The fallback must not elbow out the real answer: with both, the one a
-    week old wins."""
+    """The fallback must not elbow out the real answer: with both, the one a week old wins."""
     from app.db import session_scope
 
     claim(client)
@@ -69,9 +57,6 @@ def test_a_full_week_is_compared_against_the_week(client):
 
 
 def test_nothing_written_down_is_still_nothing(client):
-    """"No change" and "nobody wrote down what it was" are different answers,
-    and a library reading as unchanged when the truth is the second is the
-    kind of wrong that gets believed."""
     from app.db import session_scope
 
     claim(client)
@@ -82,8 +67,6 @@ def test_nothing_written_down_is_still_nothing(client):
 
 
 def test_today_against_today_says_nothing(client):
-    """A first run writes one record, and comparing it with itself is a change
-    of zero dressed up as an answer."""
     from app.db import session_scope
 
     claim(client)

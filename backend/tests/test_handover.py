@@ -1,11 +1,3 @@
-"""Is anything missing, and if so what.
-
-Switching where the data comes from is the one change where everything can
-look normal and be wrong: a day nobody fetched looks exactly like a day nobody
-watched anything. The useful half of bringing in Tautulli's history is the
-question, not the copy.
-"""
-
 import asyncio
 from datetime import UTC, datetime
 
@@ -61,8 +53,6 @@ def test_a_day_that_matches_is_not_reported(client):
 
 
 def test_a_day_that_is_short_is_named_with_how_short(client):
-    """A missing week in 2022 and a missing hour last Tuesday are different
-    problems, and only naming the days tells them apart."""
     from app.db import session_scope
     from app.services import handover
 
@@ -76,10 +66,6 @@ def test_a_day_that_is_short_is_named_with_how_short(client):
 
 
 def test_days_with_more_here_are_reported_separately(client):
-    """Not a fault on its own: this app records plays from Plex directly when
-    Tautulli is not connected, so a day it watched and Tautulli did not is
-    expected. Reported because a lot of them, on days Tautulli was running, is
-    what counting something twice looks like."""
     from app.db import session_scope
     from app.services import handover
 
@@ -95,8 +81,7 @@ def test_days_with_more_here_are_reported_separately(client):
 
 
 def test_only_the_short_days_are_fetched(client):
-    """One request for the day that is short, rather than a walk through four
-    years to find it."""
+    """One request for the day that is short, rather than a walk through four years to find it."""
     from app.db import session_scope
     from app.models import History
     from app.services import handover
@@ -120,10 +105,6 @@ def test_only_the_short_days_are_fetched(client):
 
 
 def test_running_it_twice_changes_nothing(client):
-    """History is keyed on Tautulli's own row id and written with an upsert,
-    so a play that is already here arrives with the id it already has. That is
-    checked rather than trusted, because the whole point of this is not
-    importing what is already here."""
     from app.db import session_scope
     from app.models import History
     from app.services import handover
@@ -162,9 +143,7 @@ def test_it_is_a_task_so_it_runs_and_can_be_seen(client):
 
 
 def test_the_check_answers_now_rather_than_starting_a_job(client, monkeypatch):
-    """One request to Tautulli and a count, under a second on a four year
-    library. A question somebody asked deserves an answer rather than a
-    spinner and a task page to go and find."""
+    """One request to Tautulli and a count, under a second on a four year library."""
     from app.routers import admin
 
     claim(client)
@@ -174,8 +153,6 @@ def test_the_check_answers_now_rather_than_starting_a_job(client, monkeypatch):
 
 
 def test_without_tautulli_it_says_so_rather_than_failing(client, monkeypatch):
-    """There is nothing to compare against, which is a plain answer and not an
-    error worth colouring red."""
     from tests.test_setup_plex import no_tautulli
 
     claim(client)
@@ -193,14 +170,6 @@ def test_filling_without_tautulli_is_refused(client, monkeypatch):
 
 
 def test_filling_a_day_does_not_leave_the_play_recorded_twice(client):
-    """An install that ran on Plex alone wrote these plays down itself, under
-    a negative id, and Tautulli has now delivered its own copy.
-
-    The history sync has always dropped ours when that happens. Filling a gap
-    writes to the same table and did not, so a fetched day ended up holding
-    both copies of every play, which is the exact thing this feature exists to
-    notice and would then have reported as extra on the next run.
-    """
     from app.db import session_scope
     from app.models import History
     from app.services import handover

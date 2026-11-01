@@ -1,23 +1,9 @@
-"""A label beside a fact is one word.
-
-The label column in a .spec grid is nine characters wide, so a fact can sit on
-one line beside it. A single word too long for it simply runs on; two words
-break at the space, and the label stands two lines tall beside a one line
-value. The Issues card was written with "Watching on" and "That play", both
-broke, and "Your plays" was written the same way again while fixing them. A
-label that needs two words wants rewording, not a wider column.
-"""
-
 import pathlib
 import re
 
 FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
 
 # The helpers that draw one cell of a .spec grid, by file. Three of these are
-# now one shared component under a local name, so the check is that the name is
-# bound in the file at all rather than that the file declares a function: three
-# copies of the same five lines could not be fixed in one place, which is how
-# the layout drifted apart in the first place.
 CELLS = {
     "routes/Issues.tsx": "Pair",
     "components/StreamDetail.tsx": "Spec",

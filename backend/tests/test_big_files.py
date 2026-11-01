@@ -1,10 +1,3 @@
-"""Files that are large for what they are.
-
-Bitrate alone cannot be compared across a 45 minute cartoon and a three hour
-film, so the list is sorted on size per hour. These check the filters narrow
-the way the page says they do, and that one press cannot tag the library.
-"""
-
 import json
 
 from tests.test_auth import claim

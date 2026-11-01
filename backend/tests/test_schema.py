@@ -1,15 +1,3 @@
-"""The database the app sets up for itself.
-
-Columns and indexes are both added to an existing database by hand, because
-`create_all` only ever creates missing tables and skips an existing one whole.
-The columns have been handled since early on; the indexes were handled for one
-index, by hand, which is what prompted these.
-
-Everything here imports `app.db` inside the test rather than at the top. The
-fixture reloads that module for each test so it binds to that test's database,
-and a module-level import would hold the one from before the reload.
-"""
-
 from sqlalchemy import inspect, text
 
 
@@ -34,12 +22,7 @@ def declared(table_name: str) -> set[str]:
 
 
 def test_every_declared_index_exists(client):
-    """The one that would have been missed, generalised.
-
-    An index added to a model with rows already in it is invisible: nothing
-    creates it and nothing complains, and the only symptom is that a page is
-    slow. So this asks the database rather than trusting the setup code.
-    """
+    """The one that would have been missed, generalised."""
     assert missing_indexes() == []
 
 
@@ -57,8 +40,6 @@ def test_an_index_added_later_is_created(client):
 
 
 def test_the_library_table_is_indexed_for_the_pages_that_read_it(client):
-    """Thirty thousand rows scanned to show sixty was the whole cost of the
-    slowest page in the app."""
     assert declared("media_items") >= {
         "ix_media_section_type", "ix_media_type_size", "ix_media_bitrate",
     }

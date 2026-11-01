@@ -1,9 +1,3 @@
-"""Sharing, without touching a real Plex account.
-
-Plex calls are replaced; what is tested is the part that is ours: reading
-plex.tv's answer, not hanging, and writing every change to the Log.
-"""
-
 from tests.test_auth import claim
 
 SHARED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -95,8 +89,7 @@ def _flag(db, user_id, a, b, when, kind="travel"):
 
 
 def test_a_route_that_keeps_repeating_is_counted(client):
-    """A phone on a mobile network lands in a different city every evening.
-    Flagging that twenty times is not twenty pieces of evidence."""
+    """A phone on a mobile network lands in a different city every evening."""
     from datetime import UTC, datetime
 
     from app.db import session_scope

@@ -1,11 +1,3 @@
-"""First run, with Plex as the recommended connection and Tautulli optional.
-
-Setup is the one screen where a mistake locks somebody out of their own
-install, so the three ways it can be met are each tested: a database with
-nothing in it at all, an environment that already supplies Tautulli and locks
-it, and an install that is already working and must never be sent back here.
-"""
-
 import asyncio
 
 from tests.test_auth import claim
@@ -14,8 +6,7 @@ TOKEN = "linked-token-value"
 
 
 def no_tautulli(monkeypatch):
-    """The fixture supplies Tautulli through the environment, as most tests
-    want. A fresh install has nothing at all."""
+    """The fixture supplies Tautulli through the environment, as most tests want."""
     from app import settings_store
 
     monkeypatch.delenv("TAUTULLI_URL", raising=False)
@@ -24,8 +15,6 @@ def no_tautulli(monkeypatch):
 
 
 class FakePin:
-    """plexapi's PIN login, answering the way plex.tv does: a code first,
-    then nothing until somebody types it in, then a token."""
 
     entered = False
     made: list = []
@@ -105,8 +94,6 @@ def test_a_fresh_install_with_nothing_set_reaches_the_app_through_plex(client, m
     assert shown["plex_token"] != TOKEN and TOKEN not in client.get("/api/settings").text
 
     # The people list and the libraries come from Plex, which is where they
-    # were always going to have to come from on an install with no Tautulli:
-    # otherwise the list holds only those who have pressed play.
     from app.plex import people as plex_people
 
     monkeypatch.setattr(plex_people, "read", lambda machine_identifier=None: [
@@ -128,9 +115,6 @@ def test_a_fresh_install_with_nothing_set_reaches_the_app_through_plex(client, m
 
 
 def test_a_plex_install_scans_reads_tracks_and_watches_without_tautulli(client, monkeypatch):
-    """The background work that matters for a Plex install runs with no
-    Tautulli: neither scan builds a Tautulli client, and the live check is
-    not skipped as unconfigured."""
     from app import main
     from app.plex import activity as plex_activity
     from app.services import enforcer, library_scan
@@ -212,9 +196,6 @@ def test_setup_is_only_for_an_admin(client, monkeypatch):
 
 
 def test_tautulli_from_the_environment_is_configured_and_stays_locked(client, monkeypatch):
-    """The environment already answered the question, so there is no setup to
-    show, and choosing Plex later still works around the locked keys rather
-    than failing on them."""
     from app import settings_store
 
     fake_plex(monkeypatch)
@@ -229,9 +210,7 @@ def test_tautulli_from_the_environment_is_configured_and_stays_locked(client, mo
 
 
 def test_half_of_tautulli_locked_still_lets_plex_finish_setup(client, monkeypatch):
-    """The environment set Tautulli's address and not its key. Choosing Plex
-    must still get somebody into their install, without touching the key the
-    environment half answered."""
+    """The environment set Tautulli's address and not its key."""
     from app import settings_store
 
     monkeypatch.delenv("TAUTULLI_API_KEY", raising=False)
@@ -246,9 +225,6 @@ def test_half_of_tautulli_locked_still_lets_plex_finish_setup(client, monkeypatc
 
 
 def test_a_plex_source_left_half_finished_does_not_send_a_working_install_back_to_setup(client, monkeypatch):
-    """Somebody whose install reads from Tautulli sets live activity to Plex
-    and never adds the token. That is a gap to show in Settings. Sending them
-    back to setup over it would lock them out of everything that still works."""
     from app import settings_store
 
     no_tautulli(monkeypatch)
@@ -269,8 +245,7 @@ def test_an_install_already_on_plex_stays_out_of_setup(client, monkeypatch):
 
 
 def test_a_plex_install_stops_streams_through_plex(client, monkeypatch):
-    """A ban that cannot stop anything is worse than no ban. With no Tautulli,
-    stopping a stream and knowing there is Plex Pass both come from Plex."""
+    """A ban that cannot stop anything is worse than no ban."""
     from app.actions import registry
     from app.plex import control
     from app.services import capabilities
@@ -293,9 +268,6 @@ def test_a_plex_install_stops_streams_through_plex(client, monkeypatch):
 
 
 def test_a_plex_install_gets_its_artwork_from_plex(client, monkeypatch):
-    """Artwork came only through Tautulli's image proxy, so an install without
-    it had no posters anywhere. Plex resizes its own, and the token goes in a
-    header so an error quoting the address cannot carry it."""
     import httpx
 
     from app.routers import data

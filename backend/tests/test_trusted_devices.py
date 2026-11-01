@@ -1,12 +1,3 @@
-"""Trusted devices, and the one thing trusting quiets.
-
-The shared account signal fires when one account plays from two places too far
-apart to be the same person. It catches real sharing and it also catches the
-ordinary life of a household: a phone on mobile data, a laptop carried to
-work, a VPN whose exit moves between cities. Trusting a device is how somebody
-tells it which is which.
-"""
-
 import time
 
 from tests.test_auth import claim
@@ -47,8 +38,7 @@ def test_trusting_a_device_is_recorded_with_who_said_so(client):
 
 
 def test_trusting_is_per_account_not_per_device(client):
-    """A device is one row per account that has used it. Vouching for one
-    person's use of a shared television does not vouch for anybody else's."""
+    """A device is one row per account that has used it."""
     from app.db import session_scope
     from app.models import Device
 
@@ -76,8 +66,6 @@ def test_a_pair_of_trusted_devices_raises_nothing(client, monkeypatch):
 
 
 def test_half_a_trusted_pair_still_raises(client):
-    """The case most worth seeing: a device somebody recognises playing
-    alongside one they do not. Trusting one end must not quiet it."""
     from app.db import session_scope
     from app.services import travel
 
@@ -91,9 +79,6 @@ def test_half_a_trusted_pair_still_raises(client):
 
 
 def test_the_rule_reads_both_ends(client):
-    """Written against the source because the walk itself needs a database of
-    plays with locations behind it, and the condition is the thing that was
-    got wrong on the first attempt."""
     import pathlib
 
     source = (pathlib.Path(__file__).resolve().parents[1] / "app" / "services" / "travel.py").read_text(encoding="utf-8")
@@ -105,8 +90,7 @@ def test_the_rule_reads_both_ends(client):
 
 
 def test_a_device_two_accounts_have_used_is_never_suggested(client):
-    """That is the ambiguous case the signal exists for. No amount of history
-    on one side makes up for it."""
+    """That is the ambiguous case the signal exists for."""
     from app.db import session_scope
     from app.services import trust
 
@@ -172,13 +156,7 @@ def test_a_viewer_cannot_vouch_for_their_own_device(client):
 
 
 def every_route(routes):
-    """Flattened, in the order a request is matched against them.
-
-    app.routes holds a wrapper per included router rather than the routes
-    themselves, so walking it directly checks nothing at all. The first
-    version of the test below did exactly that and passed with the bug it was
-    written for put back on purpose, which is how it was found out.
-    """
+    """Flattened, in the order a request is matched against them."""
     for route in routes:
         inner = getattr(route, "original_router", None)
         if inner is not None:
@@ -188,19 +166,6 @@ def every_route(routes):
 
 
 def test_no_two_handlers_answer_the_same_path():
-    """Two handlers on one method and path: the first wins and the second is
-    dead code that reads as live.
-
-    This happened on /api/library/collections. Two branches each added one,
-    answering different questions, and merging them produced an app where the
-    setting that picks a collection would have been fed by a handler nobody
-    was serving. Nothing failed: the suite passed, the app started, and the
-    route table had two entries where it should have had one.
-
-    The guard below cannot see it, and neither can the one that enumerates
-    from the OpenAPI schema, because the schema has one entry per path by
-    definition. Only the router tree shows it.
-    """
     from app.main import app
 
     seen: dict[tuple[str, str], int] = {}
@@ -216,18 +181,7 @@ def test_no_two_handlers_answer_the_same_path():
 
 
 def test_a_literal_path_is_declared_before_the_one_with_a_placeholder():
-    """A placeholder route swallows a literal one declared after it.
-
-    /devices/{machine_id} caught /devices/trust-suggestions and answered "No
-    such device"; later /history/{row_id} in one router caught /history/check
-    in another, which is worse because no amount of ordering inside a file
-    fixes it. Every router is checked, in the order they are included, so a
-    collision across two files is caught as well as one inside a file.
-
-    Only a route that could actually catch it counts: the same method, the
-    same segments up to the placeholder, and the same number of segments
-    overall. /history/{row_id} was never a threat to /media/search.
-    """
+    """A placeholder route swallows a literal one declared after it."""
     from app.main import app
 
     catchers: dict[tuple, str] = {}

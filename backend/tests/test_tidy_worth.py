@@ -1,14 +1,3 @@
-"""What a tidy would be worth, per step.
-
-The panel said what each step would do and never what it would be worth, so
-somebody deciding whether to tidy two hundred files had no number to decide
-on. It is computable from what is already stored: a track's bitrate and how
-long the file runs. Measured across the library this was written against,
-160 GB sat in audio tracks past the first, in 431 files over two gigabytes.
-
-Each test here was watched failing against the mistake it names.
-"""
-
 from __future__ import annotations
 
 import json
@@ -41,16 +30,12 @@ def steps(plan):
 
 
 def test_a_track_being_added_is_an_exact_figure(client):
-    """The encoder is told a fixed bitrate, so this is not an estimate. 192
-    kilobits a second over an hour is 86.4 megabytes, and the number on the
-    card has to be the number the file grows by."""
+    """The encoder is told a fixed bitrate, so this is not an estimate."""
     plan = mediafix.plan(item(audio=[track(codec="dca", channels=6, bitrate=1500)]))
     assert steps(plan)["add_aac_track"] == int(192 * 1000 / 8 * 3600)
 
 
 def test_a_surround_file_is_quoted_the_surround_bitrate(client):
-    """AC3 is written at 640k for surround and 192k for stereo, and quoting
-    the stereo figure for a 5.1 file understates it by a factor of three."""
     surround = mediafix.plan(item(audio=[track(codec="dca", channels=6, bitrate=1500)]))
     stereo = mediafix.plan(item(audio=[track(codec="dca", channels=2, bitrate=1500)]))
     assert steps(surround)["no_compatible_audio"] == int(640 * 1000 / 8 * 3600)
@@ -58,8 +43,6 @@ def test_a_surround_file_is_quoted_the_surround_bitrate(client):
 
 
 def test_dropping_a_track_makes_the_file_smaller(client, monkeypatch):
-    """One sign throughout, so the card adds the steps up rather than working
-    out per step which way each one goes."""
     # Patched on mediafix, not on settings_store: the module binds the name at
     # import, so patching the source leaves the copy it already holds.
     monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
@@ -73,9 +56,6 @@ def test_dropping_a_track_makes_the_file_smaller(client, monkeypatch):
 
 
 def test_a_track_with_no_bitrate_is_not_counted_as_nothing(client, monkeypatch):
-    """A picture subtitle often carries no bitrate, and some muxers write none
-    for audio either: about one file in ten. Zero reads as "this step frees
-    nothing", which is an answer, and the truth is that nobody knows."""
     # Patched on mediafix, not on settings_store: the module binds the name at
     # import, so patching the source leaves the copy it already holds.
     monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
@@ -92,8 +72,6 @@ def test_a_track_with_no_bitrate_is_not_counted_as_nothing(client, monkeypatch):
 
 
 def test_one_unknown_track_makes_the_whole_step_unknown(client, monkeypatch):
-    """A total missing a term is not a total, and printing it as one
-    understates what is there while reading like a complete answer."""
     # Patched on mediafix, not on settings_store: the module binds the name at
     # import, so patching the source leaves the copy it already holds.
     monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
@@ -108,8 +86,6 @@ def test_one_unknown_track_makes_the_whole_step_unknown(client, monkeypatch):
 
 
 def test_a_step_that_only_reorders_says_so(client, monkeypatch):
-    """Zero is a real answer here and must not be confused with not knowing:
-    putting a track first changes nothing about the size."""
     # Patched on mediafix, not on settings_store: the module binds the name at
     # import, so patching the source leaves the copy it already holds.
     monkeypatch.setattr(mediafix, "current", lambda: SimpleNamespace(
@@ -128,8 +104,7 @@ def test_rewrapping_a_container_changes_nothing(client):
 
 
 def test_a_file_of_unknown_length_can_say_nothing_about_size(client):
-    """Without a duration a bitrate is not a number of bytes. Treating a
-    missing duration as zero would quote every step as freeing nothing."""
+    """Without a duration a bitrate is not a number of bytes."""
     plan = mediafix.plan(item(audio=[track(codec="dca", channels=6, bitrate=1500)], duration=None))
     assert steps(plan)["add_aac_track"] is None
 
@@ -139,8 +114,7 @@ def test_the_plan_carries_how_long_the_file_runs(client):
 
 
 def test_a_whole_list_totals_what_it_would_come_to(client, monkeypatch):
-    """A dry run that says "two hundred files" answers how many and not
-    whether it is worth it."""
+    """A dry run that says "two hundred files" answers how many and not whether it is worth it."""
     from app.db import session_scope
     from app.models import MediaItem
     from app.services import cleanup
@@ -170,9 +144,6 @@ def test_a_whole_list_totals_what_it_would_come_to(client, monkeypatch):
     assert out["queued"] == 2
     assert out["size_unknown"] == 0
     # Both dubs dropped, 1500 and 900 kbps over an hour, less the AAC stereo
-    # track each one is offered because neither has one, at 192 kbps. Adds and
-    # drops net off against each other, which is the point of one sign: the
-    # answer is what the disk ends up with, not what was taken away.
     assert out["size_change"] == -int((1500 + 900 - 192 * 2) * 1000 / 8 * 3600)
 
 
@@ -203,12 +174,7 @@ def test_a_file_whose_tracks_state_no_size_is_counted_apart(client, monkeypatch)
 
 
 def test_a_tidy_that_grows_a_file_records_the_growth_as_a_loss(client):
-    """What the file lost, so a negative number means it grew. Adding a track
-    every television can play costs a few hundred megabytes and is the point
-    of the step, so this is a normal outcome and not an error. It is written
-    down here because the column is read in two places and a negative read as
-    a saving prints "350 MB smaller" about a file that got bigger.
-    """
+    """What the file lost, so a negative number means it grew."""
     from app.db import session_scope
     from app.models import MediaJob
     from app.services import mediafix

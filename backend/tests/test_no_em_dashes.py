@@ -1,10 +1,3 @@
-"""House style: no em dashes, anywhere.
-
-Cheaper to enforce than to re-audit. Covers the backend, the frontend and the
-docs, so a stray one in UI copy fails the same way a stray one in a comment
-does. Use a comma, colon, period or parentheses instead.
-"""
-
 import pathlib
 
 EM_DASH = chr(0x2014)  # written as a codepoint so this file never contains one

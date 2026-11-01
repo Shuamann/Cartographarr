@@ -1,15 +1,3 @@
-"""Tidying waits for the house to go quiet.
-
-Tidying reads and rewrites a whole film: minutes of the array's attention for a
-file nobody is waiting on. Doing that at eight in the evening while four people
-stream from the same disks is the one piece of work this app does that somebody
-else can feel.
-
-The case that matters most is the one where it must *not* wait: if the check
-itself cannot be made, a job that never runs is worse than one that runs at a
-bad moment.
-"""
-
 import asyncio
 
 import pytest
@@ -61,8 +49,7 @@ def test_switched_off_never_waits(client, activity):
 
 
 def test_a_tautulli_that_cannot_be_reached_does_not_stop_everything(client, activity):
-    """The important one. A job held for ever because the thing it asks is
-    down is worse than a job that runs while somebody is watching."""
+    """The important one."""
     activity["raise"] = RuntimeError("Tautulli is not answering")
     with trial({"tidy_when_quiet": True}):
         assert quiet() is True
@@ -77,8 +64,6 @@ def test_nothing_set_up_yet_does_not_wait(client, activity):
 # ---- the queue keeps its place ----------------------------------------------
 
 def test_a_waiting_job_still_reads_as_queued(client):
-    """It is not taken off the queue while it waits, so it never looks like a
-    job that stalled halfway through."""
     import json
 
     from app.db import session_scope
